@@ -1,22 +1,12 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { signInWithPassword } from "./actions";
-import { LoginForm } from "./login-form";
+import { requestPasswordReset } from "./actions";
+import { ForgotPasswordForm } from "./forgot-form";
 
-export default async function LoginPage({
+export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string; reset?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const params = await searchParams;
-  if (user) {
-    redirect(params.next ?? "/inspections");
-  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-6 dark:bg-black">
@@ -26,18 +16,17 @@ export default async function LoginPage({
             Samektra
           </span>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Compliance Lens v2
+            Forgot your password?
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Sign in to continue.
+            Enter your email and we&apos;ll send you a reset link.
           </p>
         </div>
 
-        <LoginForm
-          action={signInWithPassword}
-          next={params.next}
+        <ForgotPasswordForm
+          action={requestPasswordReset}
           error={params.error}
-          reset={params.reset === "1"}
+          sent={params.sent === "1"}
         />
       </div>
     </div>

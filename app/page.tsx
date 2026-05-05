@@ -31,8 +31,14 @@ export default async function Home() {
 
         <div className="flex flex-col gap-4 sm:flex-row">
           <Link
-            href="/login"
+            href="/signup"
             className="flex h-11 items-center justify-center rounded-md bg-zinc-900 px-6 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            Create account
+          </Link>
+          <Link
+            href="/login"
+            className="flex h-11 items-center justify-center rounded-md border border-zinc-200 bg-white px-6 text-sm font-medium text-zinc-900 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
             Sign in
           </Link>

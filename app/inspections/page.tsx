@@ -11,6 +11,16 @@ export default async function InspectionsPage() {
     redirect("/login");
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, organization")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    redirect("/onboarding");
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
       <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
@@ -23,9 +33,20 @@ export default async function InspectionsPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-            {user.email}
-          </span>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              {profile.full_name}
+            </span>
+            {profile.organization ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {profile.organization}
+              </span>
+            ) : (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {user.email}
+              </span>
+            )}
+          </div>
           <form action="/auth/sign-out" method="post">
             <button
               type="submit"
@@ -43,8 +64,7 @@ export default async function InspectionsPage() {
             No inspections yet
           </h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            The inspection flow is coming next. Auth and database foundation are
-            ready.
+            The inspection flow is coming next. Auth and profile are ready.
           </p>
         </div>
       </main>

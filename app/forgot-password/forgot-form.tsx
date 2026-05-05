@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
-import { PasswordInput } from "@/components/password-input";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
-  next?: string;
   error?: string;
-  reset?: boolean;
+  sent?: boolean;
 };
 
 function SubmitButton() {
@@ -19,22 +17,31 @@ function SubmitButton() {
       disabled={pending}
       className="flex h-11 w-full items-center justify-center rounded-md bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
     >
-      {pending ? "Signing in..." : "Sign in"}
+      {pending ? "Sending..." : "Send reset link"}
     </button>
   );
 }
 
-export function LoginForm({ action, next, error, reset }: Props) {
+export function ForgotPasswordForm({ action, error, sent }: Props) {
+  if (sent) {
+    return (
+      <div className="rounded-md border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+        <p className="font-medium">Check your email.</p>
+        <p className="mt-1">
+          If an account exists for that address, we&apos;ve sent a reset link. The link expires in 1 hour.
+        </p>
+        <Link
+          href="/login"
+          className="mt-3 inline-block font-medium underline underline-offset-4"
+        >
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form action={action} className="flex flex-col gap-4">
-      <input type="hidden" name="next" value={next ?? ""} />
-
-      {reset ? (
-        <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-          Password updated. Sign in with your new password.
-        </p>
-      ) : null}
-
       <div className="flex flex-col gap-2">
         <label
           htmlFor="email"
@@ -53,22 +60,6 @@ export function LoginForm({ action, next, error, reset }: Props) {
         />
       </div>
 
-      <PasswordInput
-        label="Password"
-        name="password"
-        autoComplete="current-password"
-        required
-      />
-
-      <div className="flex justify-end">
-        <Link
-          href="/forgot-password"
-          className="text-sm font-medium text-zinc-700 underline-offset-4 hover:underline dark:text-zinc-300"
-        >
-          Forgot password?
-        </Link>
-      </div>
-
       {error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : null}
@@ -76,12 +67,12 @@ export function LoginForm({ action, next, error, reset }: Props) {
       <SubmitButton />
 
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-        New here?{" "}
+        Remembered it?{" "}
         <Link
-          href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+          href="/login"
           className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-50"
         >
-          Create an account
+          Sign in
         </Link>
       </p>
     </form>
