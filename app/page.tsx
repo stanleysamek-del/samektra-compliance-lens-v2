@@ -1,4 +1,17 @@
-export default function Home() {
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/inspections");
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex w-full max-w-3xl flex-col gap-8 px-8 py-24">
@@ -14,6 +27,15 @@ export default function Home() {
             Commission, ADA, ANSI, Georgia Title 25. Walk through the building, snap photos,
             generate the full inspection deliverable: CAP, LSRA, ILSM, and a signed PDF report.
           </p>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <Link
+            href="/login"
+            className="flex h-11 items-center justify-center rounded-md bg-zinc-900 px-6 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            Sign in
+          </Link>
         </div>
 
         <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
