@@ -87,7 +87,7 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
           className="absolute inset-0 h-full w-full object-contain"
         />
 
-        {/* SVG layer: filled bboxes + pulse halos */}
+        {/* SVG layer: outline-only bboxes + pulse halos for High */}
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full"
           viewBox="0 0 1 1"
@@ -251,4 +251,51 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
                 style={{
                   background: severityFill(s),
                   color: severityColor(s),
-   
+                  border: `1px solid ${severityColor(s)}55`,
+                }}
+              >
+                {allSeverityCounts[s]} {s.toLowerCase()}
+              </span>
+            ) : null,
+          )}
+          <span className="text-[var(--fg-subtle)]">
+            {visibleBboxes.length > 0
+              ? "· Tap a number on the photo to jump to that finding"
+              : "· Low-severity advisories listed below — none drawn on photo"}
+          </span>
+        </div>
+      ) : null}
+
+      <style>{`
+        @keyframes cl-bbox-pulse {
+          0%, 100% { opacity: 0.2; }
+          50%      { opacity: 0.7; }
+        }
+        @keyframes cl-legend-fade {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/**
+ * Box colors:
+ *   - Red   = deficiency (Medium + High severity) — drawn on the photo
+ *   - Green = advisory / "look at this" (Low) — listed below, not drawn
+ * High severity also gets a pulsing outline halo so critical items still
+ * stand out among the rest of the red boxes.
+ */
+function severityColor(s: "Low" | "Medium" | "High") {
+  if (s === "High") return "#f87171";    // red
+  if (s === "Medium") return "#f87171";  // red
+  return "#34d399";                      // green (advisory pill)
+}
+
+/** Used only for the severity-summary pills below the photo — boxes themselves are outline-only. */
+function severityFill(s: "Low" | "Medium" | "High") {
+  if (s === "High") return "rgba(248, 113, 113, 0.20)";
+  if (s === "Medium") return "rgba(248, 113, 113, 0.14)";
+  return "rgba(52, 211, 153, 0.16)";
+}
