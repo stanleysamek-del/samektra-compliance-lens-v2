@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoWithBoxes } from "@/components/photo-with-bboxes";
-import { ReanalyzeButton } from "@/components/reanalyze-button";
+import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
 import { deletePhoto } from "./actions";
 
 export default async function PhotoDetailPage({
@@ -140,20 +140,23 @@ export default async function PhotoDetailPage({
           </Card>
         )}
 
-        {/* Re-analyze with deeper model */}
+        {/* Deep re-analyze (Sonnet, with optional clarifying questions) */}
         <Card variant="tinted-teal">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3">
             <div>
               <p className="font-medium text-[var(--fg)]">
                 Not seeing what you expected?
               </p>
               <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                Re-examine this photo with our deeper model — recommended
-                if no deficiencies were detected, if the call feels off, or if
-                a subtle gauge / partial obstruction may have been missed.
+                Run a deeper analysis with Sonnet 4.5. &ldquo;Deep analyze&rdquo;
+                first asks you a few clarifying questions (occupancy, sprinkler
+                status, fire-rated doors, egress role) so the AI can apply the
+                right code section — recommended when the call could swing on
+                context. &ldquo;Skip questions&rdquo; just re-runs Sonnet against
+                the photo alone.
               </p>
             </div>
-            <ReanalyzeButton photoId={photo.id} tier="deep" />
+            <DeepReanalyzeFlow photoId={photo.id} />
           </div>
         </Card>
 

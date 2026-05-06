@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeImage, type Tier } from "@/lib/ai/client";
+import type { ContextAnswer } from "@/lib/prompts/compliance";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export const runtime = "nodejs";
@@ -24,8 +25,17 @@ export async function POST(
 
   const body = (await request.json().catch(() => ({}))) as {
     tier?: Tier;
+    answers?: ContextAnswer[];
   };
   const tier: Tier = body.tier === "default" ? "default" : "deep";
+  const answers: ContextAnswer[] = Array.isArray(body.answers)
+    ? body.answers
+        .map((a) => ({
+          question: String((a as ContextAnswer)?.question ?? "").trim(),
+          answer: String((a as ContextAnswer)?.answer ?? "").trim(),
+        }))
+        .filter((a) => a.question && a.answer)
+    : [];
 
   const supabase = await createClient();
   const {
@@ -85,7 +95,7 @@ export async function POST(
   let aiDurationMs = 0;
 
   try {
-    const result = await analyzeImage(base64, mimeType, tier);
+    const result = await analyzeImage(base64, mimeType, tier, answers);
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
@@ -160,11 +170,15 @@ export async function POST(
     );
   }
 
-  // Update raw_analysis on the photo
+  // Update raw_analysis on the photo, including any inspector-provided
+  // context answers so the UI can surface what was clarified.
+  const enrichedAnalysis = answers.length > 0
+    ? { ...analysis, contextAnswers: answers }
+    : analysis;
   await supabase
     .from("photos")
     .update({
-      raw_analysis: analysis,
+      raw_analysis: enrichedAnalysis,
       analyzed_at: new Date().toISOString(),
     })
     .eq("id", photo.id);
@@ -188,5 +202,6 @@ export async function POST(
     model: aiModel,
     cost: aiCostUsd,
     findingsCount: analysis.violations.length,
+    contextUsed: answers.length,
   });
 }

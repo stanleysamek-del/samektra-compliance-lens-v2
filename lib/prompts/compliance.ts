@@ -150,9 +150,13 @@ DECORATIONS / WALL & DOOR COVERINGS — NFPA 101 (occupancy-specific) + NFPA 80 
 - Decorations must NOT block, cover, or obstruct: exit signs (§7.10.1.8), exit doors/hardware (§7.1.10.1, §7.5.2), fire alarm pull stations (§9.6), portable extinguishers/cabinets (NFPA 10 §6.1.3.3), sprinkler heads (NFPA 13/25 §5.2.1.2.1 — 18-in clearance below deflector), smoke detectors, or door closers.
 
 WHEN you see substantial decoration on walls, doors, or ceilings:
-1. Estimate the visible decorated PERCENTAGE of the surface in frame and call it out in the description.
+1. AGGREGATE COVERAGE — this is the metric that triggers NFPA 101 occupancy caps. Compute the decorated portion of the ENTIRE visible wall/ceiling surface as ONE surface, with doors counted as part of the wall they are built into. A wall whose body is 70% striped tape AND whose two built-in doors are 100% wrapped reads as ~100% aggregate coverage of that wall, NOT as "70% wall plus separate door findings". Always state the aggregate % in the description (e.g., "Aggregate decoration coverage of the visible north wall (including the two built-in doors) is approximately 95%."). Even if one specific door is the worst offender, the wall-as-a-whole percentage is what NFPA 101 occupancy chapters cap.
+   Per-object findings (one per door, one per wall section) still apply for visual annotation per the one-finding-per-object rule, BUT the description on each finding should reference the aggregate wall-level coverage that drives the severity, not just the local % on that one object.
+2. Estimate the visible decorated PERCENTAGE of the surface in frame and call it out in the description.
 2. State your OCCUPANCY assumption explicitly (e.g., "Assuming Business / Health Care / Educational occupancy based on visible context — fire station, hospital corridor, school hallway"). The allowable percentage varies dramatically by occupancy, and many photos cannot definitively establish occupancy from a single frame. Add whatToLookFor: "Confirm occupancy classification — decoration limits range from prohibited (Detention) to 50% in sprinklered patient rooms (Health Care) to 50% in sprinklered Educational. Verify against the correct NFPA 101 chapter."
 3. Specific calls (apply the most restrictive that fits):
+   - AGGREGATE wall-surface coverage exceeds the occupancy cap by a clear margin (e.g., 70%+ aggregate when cap is 30%): the WALL itself is the primary finding → Medium or High, Fire, NFPA 101 (cite the occupancy chapter you're assuming). Title approximately: "Excessive aggregate wall decoration — exceeds NFPA 101 occupancy cap". This is INDEPENDENT of any per-door call below — both can apply, and per the one-finding-per-object rule both should be emitted (one for the wall as a whole, one for each visibly-decorated door).
+   - AGGREGATE coverage >90% of any wall in any occupancy → High regardless, since flame propagation risk dominates and the wall reads visually as a continuous combustible surface.
    - Decorations covering >50% of any door face → Medium, Fire, NFPA 80 §4.1.4. Title approximately: "Excessive door decoration — exceeds NFPA 80 5% limit if door is fire-rated".
    - Vision panels covered/blacked out → Medium, Fire, NFPA 80. Title: "Door vision panel obstructed by decoration".
    - Decorations covering or obstructing fire alarm pull stations, exit signs, exit hardware, extinguisher cabinets, sprinkler heads, or smoke detectors → High, Fire, NFPA 101 / NFPA 80 / NFPA 10. Title names the specific obstructed device.
@@ -187,3 +191,54 @@ OUTPUT EXPECTATIONS:
 - ONE FINDING = ONE BOUNDING BOX = ONE PHYSICAL OBJECT. If two distinct objects in the same photo share the same defect (e.g., upper AND lower gauge both lack legible dates; two extinguishers both blocked; multiple sprinkler heads obstructed), DO NOT lump them into a single finding. Emit a SEPARATE finding for each object, each with its own tight bbox, even if the title and remediation read similarly. The user needs every defective object visually marked on the photo. Use distinguishing language in the title (e.g., "Upper (AIR) gauge — date not legible" vs "Lower (WATER/supply) gauge — date not legible") so the cards aren't ambiguous. The only exception: if the objects are part of a single contiguous assembly that visually reads as one item (e.g., one continuous obstruction in front of an electrical panel), one finding is fine.
 
 Return only the JSON object (no markdown).`;
+
+
+/* =====================================================================
+ * Deep-analysis pass 1: contextual clarifying questions.
+ *
+ * Asked of Sonnet BEFORE final analysis. The model examines the photo
+ * and identifies the highest-leverage clarifying questions whose answers
+ * would change the compliance call (occupancy class, sprinkler status,
+ * fire-rating of doors, egress role of the space, NFPA 701 cert, etc.).
+ * Inspector answers are then fed back into the final analysis.
+ * ===================================================================== */
+
+export const CONTEXT_QUESTIONS_SYSTEM = `You are "Compliance Lens by Samektra" preparing for a deep code-compliance analysis of a single inspection photograph. You will NOT produce findings yet. Instead, examine the photograph carefully and identify the clarifying questions whose answers would materially change your analysis (severity, code citation, occupancy-specific allowable percentages, fire-rating assumptions, and similar).
+
+Output rules:
+- Return a single JSON object: { "questions": [ { "id": "q1", "question": "...", "rationale": "...", "options": ["..."], "type": "single" | "free" } ] }
+- Each question has a stable id ("q1", "q2", ...).
+- "rationale" is one short sentence explaining how the answer changes the call.
+- Provide "options" with 2-5 specific choices when the answer space is constrained (occupancy types, yes/no/unsure, etc.). Use type "single". Otherwise use type "free" and omit options.
+- ALWAYS include an "Unsure" or "Not visible from this angle" option when type is "single" — the inspector should not be forced to guess.
+- Do NOT ask questions whose answer is plainly visible in the photo. Ask only what would change the analysis.
+- Maximum 6 questions. Prefer 3-4. Ask the highest-leverage ones first.
+
+Common topics worth asking (only when relevant to what is visible):
+- OCCUPANCY classification — Health Care / Ambulatory Health Care / Educational / Day-care / Assembly / Business / Mercantile / Detention/Correctional / Industrial / Residential. Decoration percentages, egress widths, door rules, sprinkler trigger, and many other rules vary by occupancy.
+- SPRINKLER PROTECTION of the smoke compartment (sprinklered / non-sprinklered / unknown). Drives the 20%-vs-30%-vs-50% decoration split, and many other thresholds.
+- Whether visible doors are FIRE-RATED (look for rating label, smoke seal, self-closer — but the on-site inspector can confirm definitively).
+- Whether the area is in an EGRESS PATH (corridor / stairwell / exit access) versus a private room.
+- NEW vs EXISTING construction (different chapters apply).
+- Whether visible decorative material is NFPA 701 flame-retardant LABELED.
+- For healthcare: whether the smoke compartment contains PATIENT SLEEPING ROOMS (≤ 4 occupants drives 50% decoration allowance).
+- Building HEIGHT/STORIES/area when relevant to occupancy classification or sprinkler trigger.
+
+Return only the JSON object (no markdown, no prose).`;
+
+export const CONTEXT_QUESTIONS_USER = `Examine the attached photograph. Identify the highest-leverage clarifying questions whose answers would let you produce a confident, code-correct compliance analysis. Return JSON only.`;
+
+export type ContextAnswer = { question: string; answer: string };
+
+/**
+ * Format inspector-provided answers as a prefix block for the final
+ * analysis prompt. The model is told to treat these as authoritative.
+ */
+export function formatUserContext(answers: ContextAnswer[]): string {
+  const valid = answers.filter((a) => a.answer && a.answer.trim().length > 0);
+  if (valid.length === 0) return "";
+  const lines = valid
+    .map((a, i) => `${i + 1}. Q: ${a.question}\n   A: ${a.answer}`)
+    .join("\n");
+  return `\n\nINSPECTOR-PROVIDED CONTEXT (treat as authoritative ground truth — override any assumption you would otherwise make from the photo alone):\n${lines}\n`;
+}

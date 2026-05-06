@@ -12,7 +12,14 @@
  * back to OpenAI GPT-4o so a single hiccup doesn't break the whole upload.
  */
 
-import { SYSTEM_PROMPT, USER_QUERY } from "@/lib/prompts/compliance";
+import {
+  SYSTEM_PROMPT,
+  USER_QUERY,
+  CONTEXT_QUESTIONS_SYSTEM,
+  CONTEXT_QUESTIONS_USER,
+  formatUserContext,
+  type ContextAnswer,
+} from "@/lib/prompts/compliance";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export type Tier = "default" | "deep";
@@ -62,9 +69,11 @@ export async function analyzeImage(
   imageBase64: string,
   mimeType: string,
   tier: Tier = "default",
+  userContext: ContextAnswer[] = [],
 ): Promise<AnalyzeResult> {
   const start = Date.now();
   const claudeModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
+  const userPrompt = USER_QUERY + formatUserContext(userContext);
 
   if (process.env.ANTHROPIC_API_KEY) {
     try {
@@ -72,6 +81,7 @@ export async function analyzeImage(
         imageBase64,
         mimeType,
         claudeModel,
+        userPrompt,
       );
       return {
         analysis,
@@ -88,7 +98,7 @@ export async function analyzeImage(
 
   if (process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY) {
     try {
-      const { analysis, usage } = await callOpenAI(imageBase64, mimeType);
+      const { analysis, usage } = await callOpenAI(imageBase64, mimeType, userPrompt);
       return {
         analysis,
         provider: "openai",
@@ -114,6 +124,7 @@ async function callAnthropic(
   imageBase64: string,
   mimeType: string,
   model: string,
+  userPrompt: string,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -138,7 +149,7 @@ async function callAnthropic(
                 type: "image",
                 source: { type: "base64", media_type: mimeType, data: imageBase64 },
               },
-              { type: "text", text: USER_QUERY },
+              { type: "text", text: userPrompt },
             ],
           },
         ],
@@ -179,6 +190,7 @@ async function callAnthropic(
 async function callOpenAI(
   imageBase64: string,
   mimeType: string,
+  userPrompt: string,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.OpenAI_API_KEY ?? "";
   const controller = new AbortController();
@@ -200,7 +212,7 @@ async function callOpenAI(
           {
             role: "user",
             content: [
-              { type: "text", text: USER_QUERY },
+              { type: "text", text: userPrompt },
               {
                 type: "image_url",
                 image_url: {
@@ -353,4 +365,151 @@ function normalizeNotVisible(n: unknown): ComplianceAnalysis["notVisible"][numbe
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));
+}
+
+/* =====================================================================
+ * Context-questions pass (deep analyze, step 1).
+ *
+ * Sends the photo to Sonnet 4.5 with a different system prompt that
+ * asks the model to produce 3-6 highest-leverage clarifying questions
+ * for the on-site inspector. The answers later feed back into the final
+ * analyzeImage() call as `userContext`.
+ *
+ * Sonnet only — this pass is the premium/deep upgrade path.
+ * ===================================================================== */
+
+export type ContextQuestion = {
+  id: string;
+  question: string;
+  rationale?: string;
+  options?: string[];
+  type: "single" | "free";
+};
+
+export type QuestionsResult = {
+  questions: ContextQuestion[];
+  provider: Provider;
+  model: string;
+  durationMs: number;
+  usage: Usage;
+};
+
+export async function generateContextQuestions(
+  imageBase64: string,
+  mimeType: string,
+): Promise<QuestionsResult> {
+  const start = Date.now();
+  const model = SONNET_MODEL;
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new AnalyzeError(
+      "ANTHROPIC_API_KEY required for deep analysis (context questions).",
+    );
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        max_tokens: 1024,
+        system: CONTEXT_QUESTIONS_SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mimeType, data: imageBase64 },
+              },
+              { type: "text", text: CONTEXT_QUESTIONS_USER },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new AnalyzeError(
+        `Anthropic ${res.status}: ${body.slice(0, 500)}`,
+        "anthropic",
+      );
+    }
+
+    const data = (await res.json()) as {
+      content: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+
+    const text = data.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n");
+
+    const inputTokens = data.usage?.input_tokens ?? 0;
+    const outputTokens = data.usage?.output_tokens ?? 0;
+    const costUsd = computeCost(model, inputTokens, outputTokens);
+
+    return {
+      questions: parseQuestions(text),
+      provider: "anthropic",
+      model,
+      durationMs: Date.now() - start,
+      usage: { inputTokens, outputTokens, costUsd },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseQuestions(raw: string): ContextQuestion[] {
+  const trimmed = raw.trim();
+  // Strip code fences if model added them despite instructions.
+  const cleaned = trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    // Try to find a JSON object inside the text.
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) throw new AnalyzeError("Could not parse questions JSON");
+    parsed = JSON.parse(m[0]);
+  }
+
+  const obj = parsed as { questions?: unknown };
+  const arr = Array.isArray(obj.questions) ? obj.questions : [];
+
+  const out: ContextQuestion[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const r = arr[i] as Record<string, unknown>;
+    const id = String(r.id ?? `q${i + 1}`);
+    const question = String(r.question ?? "").trim();
+    if (!question) continue;
+    const type = r.type === "free" ? "free" : "single";
+    const options = Array.isArray(r.options)
+      ? r.options.map((o) => String(o)).filter(Boolean)
+      : undefined;
+    out.push({
+      id,
+      question,
+      rationale: r.rationale ? String(r.rationale) : undefined,
+      type,
+      options: options && options.length > 0 ? options : undefined,
+    });
+  }
+  return out.slice(0, 6);
 }
