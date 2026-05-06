@@ -5,12 +5,30 @@
 alter table public.profiles
   add column if not exists is_admin boolean not null default false;
 
+-- Helper function. Uses security definer so it bypasses RLS during the
+-- lookup, otherwise an RLS policy that calls SELECT on profiles from a
+-- policy on profiles would recurse infinitely.
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select coalesce(
+    (select is_admin from public.profiles where user_id = auth.uid()),
+    false
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
 -- Per-call ledger of every analyzeImage() invocation.
--- Captures provider, tokens, computed cost, latency, and error if any.
 create table if not exists public.ai_calls (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  inspection_id  uuid references public.inspections(id) on delete set null,
+  inspection_id   uuid references public.inspections(id) on delete set null,
   photo_id        uuid references public.photos(id) on delete set null,
   provider        text not null check (provider in ('anthropic','openai')),
   model           text not null,
@@ -29,32 +47,24 @@ create index if not exists ai_calls_provider_idx on public.ai_calls(provider);
 
 alter table public.ai_calls enable row level security;
 
--- A regular user can read THEIR OWN calls.
+-- A user can read their OWN calls.
 drop policy if exists "ai_calls_owner_select" on public.ai_calls;
 create policy "ai_calls_owner_select" on public.ai_calls
   for select using (auth.uid() = user_id);
 
--- Admins can read EVERYONE's calls.
+-- Admins can read EVERYONE's calls. Uses public.is_admin() to avoid RLS
+-- recursion against profiles.
 drop policy if exists "ai_calls_admin_select" on public.ai_calls;
 create policy "ai_calls_admin_select" on public.ai_calls
-  for select using (
-    exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid() and p.is_admin = true
-    )
-  );
+  for select using (public.is_admin());
 
--- Inserts: any authenticated user can insert their own call.
+-- Insert: any authenticated user can insert a row for themselves.
 drop policy if exists "ai_calls_owner_insert" on public.ai_calls;
 create policy "ai_calls_owner_insert" on public.ai_calls
   for insert with check (auth.uid() = user_id);
 
--- Profiles: allow admins to read all profiles (so the dashboard can show "spend by user")
+-- Profiles: admins can read everyone's profile (so dashboards can show
+-- "spend by user" with names instead of UUIDs).
 drop policy if exists "profiles_admin_select" on public.profiles;
 create policy "profiles_admin_select" on public.profiles
-  for select using (
-    exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid() and p.is_admin = true
-    )
-  );
+  for select using (public.is_admin());
