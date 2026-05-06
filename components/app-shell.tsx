@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { SamektraMark } from "@/components/logo";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 /* =====================================================================
  * AppShell
@@ -99,6 +100,9 @@ export function AppShell({ user, children }: Props) {
 
       {/* ===== Bottom tab bar (mobile + tablet) ===== */}
       <BottomTabBar />
+
+      {/* ===== Floating scroll-to-top (appears after ~400px scroll) ===== */}
+      <ScrollToTop />
     </div>
   );
 }

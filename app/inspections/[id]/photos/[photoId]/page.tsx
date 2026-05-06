@@ -145,12 +145,12 @@ export default async function PhotoDetailPage({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium text-[var(--fg)]">
-                Want a deeper review?
+                Not seeing what you expected?
               </p>
               <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                Default analysis uses Claude Haiku 4.5 for speed and cost. Re-run
-                with Sonnet 4.5 for better judgment on subtle calls (small
-                advisories, partial obstructions, ambiguous gauges).
+                Re-examine this photo with our deeper model — recommended
+                if no deficiencies were detected, if the call feels off, or if
+                a subtle gauge / partial obstruction may have been missed.
               </p>
             </div>
             <ReanalyzeButton photoId={photo.id} tier="deep" />

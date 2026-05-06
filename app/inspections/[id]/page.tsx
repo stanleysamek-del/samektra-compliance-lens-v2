@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PhotoUploader } from "@/components/photo-uploader";
+import {
+  PhotoCardFindings,
+  type CompactFinding,
+} from "@/components/photo-card-findings";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -64,20 +68,29 @@ export default async function InspectionDetailPage({
 
     stage = "findings-counts";
     const photoIds = photosList.map((p) => p.id);
-    let findingsByPhoto: Record<string, { total: number; high: number }> = {};
+    let findingsByPhoto: Record<
+      string,
+      { total: number; high: number; items: CompactFinding[] }
+    > = {};
     if (photoIds.length > 0) {
       try {
         const { data: findings } = await supabase
           .from("findings")
-          .select("photo_id, severity")
-          .in("photo_id", photoIds);
+          .select("id, photo_id, title, severity, created_at")
+          .in("photo_id", photoIds)
+          .order("created_at", { ascending: true });
         findingsByPhoto = (findings ?? []).reduce<typeof findingsByPhoto>(
           (acc, f) => {
             const pid = f.photo_id as string | null;
             if (!pid) return acc;
-            const bucket = (acc[pid] ??= { total: 0, high: 0 });
+            const bucket = (acc[pid] ??= { total: 0, high: 0, items: [] });
             bucket.total += 1;
             if (f.severity === "High") bucket.high += 1;
+            bucket.items.push({
+              id: f.id as string,
+              title: (f.title as string) ?? "Untitled finding",
+              severity: f.severity as "Low" | "Medium" | "High",
+            });
             return acc;
           },
           {},
@@ -159,15 +172,20 @@ export default async function InspectionDetailPage({
             ) : (
               <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {photosList.map((p) => {
-                  const counts = findingsByPhoto[p.id] ?? { total: 0, high: 0 };
+                  const counts =
+                    findingsByPhoto[p.id] ?? { total: 0, high: 0, items: [] };
                   const url = photoUrls[p.id];
                   return (
                     <li key={p.id}>
-                      <Link
-                        href={`/inspections/${inspection.id}/photos/${p.id}`}
-                        className="block"
-                      >
-                        <Card padded={false} className="overflow-hidden">
+                      <Card padded={false} className="overflow-hidden">
+                        {/* Thumbnail + summary header is the click target. The
+                            findings list below has its own per-row controls
+                            (kebab menu) so it must NOT be wrapped in the same
+                            Link. */}
+                        <Link
+                          href={`/inspections/${inspection.id}/photos/${p.id}`}
+                          className="block"
+                        >
                           <div
                             className="relative aspect-video w-full"
                             style={{ background: "#0a0d12" }}
@@ -181,7 +199,7 @@ export default async function InspectionDetailPage({
                               </div>
                             )}
                           </div>
-                          <div className="p-4">
+                          <div className="px-4 pb-3 pt-3">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-sm font-medium text-[var(--fg)]">
                                 {counts.total} finding{counts.total === 1 ? "" : "s"}
@@ -201,8 +219,15 @@ export default async function InspectionDetailPage({
                               </p>
                             ) : null}
                           </div>
-                        </Card>
-                      </Link>
+                        </Link>
+
+                        {/* Concise per-finding list with edit/delete menu. */}
+                        <PhotoCardFindings
+                          inspectionId={inspection.id}
+                          photoId={p.id}
+                          findings={counts.items}
+                        />
+                      </Card>
                     </li>
                   );
                 })}
