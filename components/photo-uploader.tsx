@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/card";
+import { resizeImageForUpload } from "@/lib/resize-image";
 
 type Props = {
   inspectionId: string;
@@ -10,19 +11,28 @@ type Props = {
 
 type Status =
   | { kind: "idle" }
-  | { kind: "uploading"; filename: string }
-  | { kind: "analyzing"; filename: string }
+  | { kind: "uploading"; filename: string; previewUrl: string }
+  | { kind: "analyzing"; filename: string; previewUrl: string }
   | { kind: "error"; message: string };
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
-/**
- * Camera + library + drag-and-drop uploader. Posts to /api/photos/upload —
- * an HTTP API route, not a server action. We deliberately avoided server
- * actions here because Next.js 16's allowedOrigins check intermittently
- * rejected the action invocation with 400 in this Vercel deployment.
- */
+// Rotating "thinking" messages shown while AI analysis is in flight.
+// Calibrated to feel like an experienced inspector talking through their checks.
+const THINKING_MESSAGES = [
+  "Recognizing objects in the frame…",
+  "Reading the pressure gauge…",
+  "Checking mounting height & accessibility…",
+  "Looking for tampering or damage…",
+  "Verifying inspection tag and dates…",
+  "Scanning for fire, electrical, and egress hazards…",
+  "Cross-checking NFPA 10 / 13 / 80 / 101…",
+  "Measuring clearances and obstructions…",
+  "Drafting findings with code citations…",
+  "Tightening bounding boxes…",
+];
+
 export function PhotoUploader({ inspectionId }: Props) {
   const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -30,11 +40,24 @@ export function PhotoUploader({ inspectionId }: Props) {
   const [photoLocation, setPhotoLocation] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [isDragging, setIsDragging] = useState(false);
+  const [thinkingIdx, setThinkingIdx] = useState(0);
 
-  const busy =
-    status.kind === "uploading" || status.kind === "analyzing";
+  // Rotate the thinking message every 2.2s while analyzing.
+  useEffect(() => {
+    if (status.kind !== "analyzing") return;
+    setThinkingIdx(0);
+    const interval = setInterval(() => {
+      setThinkingIdx((i) => (i + 1) % THINKING_MESSAGES.length);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, [status.kind]);
+
+  const busy = status.kind === "uploading" || status.kind === "analyzing";
 
   function reset() {
+    if (status.kind !== "idle" && "previewUrl" in status) {
+      URL.revokeObjectURL(status.previewUrl);
+    }
     setStatus({ kind: "idle" });
   }
 
@@ -54,14 +77,19 @@ export function PhotoUploader({ inspectionId }: Props) {
       return;
     }
 
-    setStatus({ kind: "uploading", filename: file.name });
+    const previewUrl = URL.createObjectURL(file);
+    setStatus({ kind: "uploading", filename: file.name, previewUrl });
+
+    // Resize before upload to cut bandwidth + AI input-token cost.
+    // Falls back to original if the browser can't decode the file.
+    const resized = await resizeImageForUpload(file, 1024);
 
     const formData = new FormData();
     formData.append("inspection_id", inspectionId);
-    formData.append("image", file, file.name);
+    formData.append("image", resized, resized.name);
     if (photoLocation) formData.append("photo_location", photoLocation);
 
-    setStatus({ kind: "analyzing", filename: file.name });
+    setStatus({ kind: "analyzing", filename: file.name, previewUrl });
 
     try {
       const res = await fetch("/api/photos/upload", {
@@ -75,6 +103,7 @@ export function PhotoUploader({ inspectionId }: Props) {
       };
 
       if (!res.ok || !json.ok || !json.photoId) {
+        URL.revokeObjectURL(previewUrl);
         setStatus({
           kind: "error",
           message: json.error ?? `Upload failed (HTTP ${res.status}).`,
@@ -82,10 +111,12 @@ export function PhotoUploader({ inspectionId }: Props) {
         return;
       }
 
+      URL.revokeObjectURL(previewUrl);
       setStatus({ kind: "idle" });
       router.refresh();
       router.push(`/inspections/${inspectionId}/photos/${json.photoId}`);
     } catch (err) {
+      URL.revokeObjectURL(previewUrl);
       const message = err instanceof Error ? err.message : "Upload failed";
       setStatus({ kind: "error", message });
     }
@@ -187,44 +218,72 @@ export function PhotoUploader({ inspectionId }: Props) {
         onChange={onPick}
       />
 
-      {status.kind !== "idle" ? (
-        <div className="mt-4">
-          {status.kind === "uploading" || status.kind === "analyzing" ? (
-            <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-4 py-3 text-sm">
-              <Spinner />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-[var(--fg)]">
-                  {status.kind === "uploading"
-                    ? "Uploading…"
-                    : "Analyzing with AI…"}
-                </p>
-                <p className="truncate text-xs text-[var(--fg-muted)]">
-                  {status.filename}
-                </p>
+      {/* In-flight status with photo preview + rotating "thinking" message */}
+      {status.kind === "uploading" || status.kind === "analyzing" ? (
+        <div className="mt-4 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-input)]">
+          <div className="relative aspect-video w-full" style={{ background: "#0a0d12" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={status.previewUrl}
+              alt="Uploading preview"
+              className="h-full w-full object-contain"
+            />
+            {/* Scanning beam animation */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div
+                className="absolute left-0 right-0 h-[2px]"
+                style={{
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.85), transparent)",
+                  boxShadow: "0 0 16px 4px rgba(20, 184, 166, 0.55)",
+                  animation: "cl-scan 2.4s ease-in-out infinite",
+                }}
+              />
+            </div>
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--primary)]">
+                <Spinner small />
+                {status.kind === "uploading" ? (
+                  <span>Uploading {status.filename}…</span>
+                ) : (
+                  <span className="truncate">
+                    {THINKING_MESSAGES[thinkingIdx]}
+                  </span>
+                )}
               </div>
             </div>
-          ) : null}
-          {status.kind === "error" ? (
-            <div
-              className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-              style={{
-                borderColor: "rgba(239,68,68,0.3)",
-                background: "rgba(239,68,68,0.08)",
-                color: "#fca5a5",
-              }}
-            >
-              <span className="min-w-0">{status.message}</span>
-              <button
-                type="button"
-                onClick={reset}
-                className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
+
+      {status.kind === "error" ? (
+        <div
+          className="mt-4 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: "rgba(239,68,68,0.3)",
+            background: "rgba(239,68,68,0.08)",
+            color: "#fca5a5",
+          }}
+        >
+          <span className="min-w-0">{status.message}</span>
+          <button
+            type="button"
+            onClick={reset}
+            className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      <style>{`
+        @keyframes cl-scan {
+          0%   { top: 0%; opacity: 0; }
+          15%  { opacity: 1; }
+          85%  { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+      `}</style>
     </Card>
   );
 }
@@ -246,9 +305,10 @@ function LibraryIcon() {
     </svg>
   );
 }
-function Spinner() {
+function Spinner({ small = false }: { small?: boolean }) {
+  const size = small ? 14 : 22;
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden className="animate-spin">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className="animate-spin">
       <circle cx="12" cy="12" r="9" stroke="rgba(148,163,184,0.25)" strokeWidth="2.4"/>
       <path d="M21 12a9 9 0 0 0-9-9" stroke="var(--primary)" strokeWidth="2.4" strokeLinecap="round"/>
     </svg>

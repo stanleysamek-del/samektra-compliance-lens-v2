@@ -1,26 +1,31 @@
 /**
- * Compliance Lens vision analysis — Anthropic primary, OpenAI fallback.
+ * Compliance Lens vision analysis.
  *
- * Both providers receive the exact same prompts (lib/prompts/compliance.ts)
- * and return a JSON object matching ComplianceAnalysis. We never run the
- * two providers in parallel — Claude first, OpenAI only if Claude times
- * out, 5xxs, or returns malformed JSON.
+ * Tier system:
+ *   - "default" — Claude Haiku 4.5: fast, cheap (~$0.005-0.010/photo).
+ *                 Used for every uploaded photo. Catches obvious violations.
+ *   - "deep"    — Claude Sonnet 4.5: stronger reasoning (~$0.020-0.040/photo).
+ *                 Triggered by the "Re-analyze deeply" button on the photo
+ *                 detail page. Best for advisories and subtle judgment calls.
  *
- * Each call is metered: token counts and computed USD cost come back in
- * the AnalyzeResult so the caller can persist a row to public.ai_calls.
+ * If the chosen Anthropic tier fails (5xx, timeout, malformed JSON), we fall
+ * back to OpenAI GPT-4o so a single hiccup doesn't break the whole upload.
  */
 
 import { SYSTEM_PROMPT, USER_QUERY } from "@/lib/prompts/compliance";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
-const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+export type Tier = "default" | "deep";
+
+const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const SONNET_MODEL = "claude-sonnet-4-5-20250929";
 const OPENAI_MODEL = "gpt-4o";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
-// Per-million-token pricing in USD. Keep this colocated with the model
-// strings so cost numbers always match the model that actually ran.
+// Per-million-token pricing in USD.
 const PRICING = {
+  "claude-haiku-4-5-20251001":  { input: 1.0, output: 5.0 },
   "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0 },
   "gpt-4o":                      { input: 2.5, output: 10.0 },
 } as const;
@@ -30,7 +35,6 @@ type Provider = "anthropic" | "openai";
 export type Usage = {
   inputTokens: number;
   outputTokens: number;
-  /** Computed at call time so historical costs don't shift if pricing changes. */
   costUsd: number;
 };
 
@@ -40,6 +44,7 @@ export type AnalyzeResult = {
   model: string;
   durationMs: number;
   usage: Usage;
+  tier: Tier;
 };
 
 export class AnalyzeError extends Error {
@@ -56,21 +61,28 @@ export class AnalyzeError extends Error {
 export async function analyzeImage(
   imageBase64: string,
   mimeType: string,
+  tier: Tier = "default",
 ): Promise<AnalyzeResult> {
   const start = Date.now();
+  const claudeModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
 
   if (process.env.ANTHROPIC_API_KEY) {
     try {
-      const { analysis, usage } = await callAnthropic(imageBase64, mimeType);
+      const { analysis, usage } = await callAnthropic(
+        imageBase64,
+        mimeType,
+        claudeModel,
+      );
       return {
         analysis,
         provider: "anthropic",
-        model: CLAUDE_MODEL,
+        model: claudeModel,
         durationMs: Date.now() - start,
         usage,
+        tier,
       };
     } catch (err) {
-      console.warn("[ai] Claude failed, falling back to OpenAI:", err);
+      console.warn(`[ai] Claude (${claudeModel}) failed, falling back to OpenAI:`, err);
     }
   }
 
@@ -83,6 +95,7 @@ export async function analyzeImage(
         model: OPENAI_MODEL,
         durationMs: Date.now() - start,
         usage,
+        tier,
       };
     } catch (err) {
       console.error("[ai] OpenAI also failed:", err);
@@ -100,6 +113,7 @@ export async function analyzeImage(
 async function callAnthropic(
   imageBase64: string,
   mimeType: string,
+  model: string,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -113,7 +127,7 @@ async function callAnthropic(
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
+        model,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [
@@ -151,7 +165,7 @@ async function callAnthropic(
 
     const inputTokens = data.usage?.input_tokens ?? 0;
     const outputTokens = data.usage?.output_tokens ?? 0;
-    const costUsd = computeCost(CLAUDE_MODEL, inputTokens, outputTokens);
+    const costUsd = computeCost(model, inputTokens, outputTokens);
 
     return {
       analysis: parseAnalysis(text),
@@ -161,8 +175,6 @@ async function callAnthropic(
     clearTimeout(timer);
   }
 }
-
-/* --------------------------------------------------------------------- */
 
 async function callOpenAI(
   imageBase64: string,
@@ -216,7 +228,6 @@ async function callOpenAI(
     };
 
     const text = data.choices?.[0]?.message?.content ?? "";
-
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
     const costUsd = computeCost(OPENAI_MODEL, inputTokens, outputTokens);
@@ -271,7 +282,6 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
     throw new AnalyzeError("Analysis is not an object");
   }
   const o = input as Record<string, unknown>;
-
   const summary = (o.summary ?? {}) as Record<string, unknown>;
   const image = (o.image ?? {}) as Record<string, unknown>;
 
@@ -280,7 +290,9 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
     summary: {
       text: String(summary.text ?? ""),
       confidence: clamp01(Number(summary.confidence ?? 0)),
-      imageQuality: (summary.imageQuality as ComplianceAnalysis["summary"]["imageQuality"]) ?? "clear",
+      imageQuality:
+        (summary.imageQuality as ComplianceAnalysis["summary"]["imageQuality"]) ??
+        "clear",
     },
     image: {
       width: Math.max(1, Math.floor(Number(image.width ?? 0))),
@@ -298,15 +310,22 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
   };
 }
 
-function normalizeViolation(v: unknown, idx: number): ComplianceAnalysis["violations"][number] {
+function normalizeViolation(
+  v: unknown,
+  idx: number,
+): ComplianceAnalysis["violations"][number] {
   const r = (v ?? {}) as Record<string, unknown>;
   const c = (r.coordinates ?? {}) as Record<string, unknown>;
   return {
     id: String(r.id ?? `v_${idx + 1}`),
     title: String(r.title ?? "Unnamed finding"),
-    category: (r.category as ComplianceAnalysis["violations"][number]["category"]) ?? "Other",
+    category:
+      (r.category as ComplianceAnalysis["violations"][number]["category"]) ??
+      "Other",
     code: String(r.code ?? ""),
-    severity: (r.severity as ComplianceAnalysis["violations"][number]["severity"]) ?? "Medium",
+    severity:
+      (r.severity as ComplianceAnalysis["violations"][number]["severity"]) ??
+      "Medium",
     description: String(r.description ?? ""),
     location: String(r.location ?? ""),
     coordinates: {

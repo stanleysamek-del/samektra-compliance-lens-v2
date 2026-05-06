@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoWithBoxes } from "@/components/photo-with-bboxes";
+import { ReanalyzeButton } from "@/components/reanalyze-button";
 import { deletePhoto } from "./actions";
 
 export default async function PhotoDetailPage({
@@ -85,6 +86,7 @@ export default async function PhotoDetailPage({
       y2: Number(f.bbox_y2),
       index: idx,
       severity: f.severity as "Low" | "Medium" | "High",
+      title: f.title,
     }));
 
   return (
@@ -137,6 +139,23 @@ export default async function PhotoDetailPage({
             </p>
           </Card>
         )}
+
+        {/* Re-analyze with deeper model */}
+        <Card variant="tinted-teal">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-[var(--fg)]">
+                Want a deeper review?
+              </p>
+              <p className="mt-1 text-xs text-[var(--fg-muted)]">
+                Default analysis uses Claude Haiku 4.5 for speed and cost. Re-run
+                with Sonnet 4.5 for better judgment on subtle calls (small
+                advisories, partial obstructions, ambiguous gauges).
+              </p>
+            </div>
+            <ReanalyzeButton photoId={photo.id} tier="deep" />
+          </div>
+        </Card>
 
         {/* Findings */}
         <section className="flex flex-col gap-3">
