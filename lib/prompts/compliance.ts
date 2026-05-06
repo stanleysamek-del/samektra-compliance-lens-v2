@@ -11,7 +11,18 @@ Critical output rules:
 - Coordinates MUST be tight bounding boxes expressed as NORMALIZED floats in [0.0, 1.0] relative to the image's visible dimensions, not raw pixels. Top-left is (0,0); bottom-right is (1,1).
 - Cite specific code sections in "references" ONLY when you are confident in the exact citation. If unsure of the section number, edition year, or chapter, leave "references" as an empty array. Never fabricate citations.
 - If image quality degrades certainty (blur, darkness, occlusion, glare), reduce "confidence" and reflect it in "summary.imageQuality".
-- Use the SPECIAL INSTRUCTIONS exactly as written when applicable.`;
+- Use the SPECIAL INSTRUCTIONS exactly as written when applicable.
+
+SEVERITY GUIDANCE:
+- High = immediate life-safety risk, hard violation, must remediate now (e.g., blocked egress, propped fire door, missing extinguisher, panel obstruction)
+- Medium = clear non-conformance with measurable defect (e.g., 18-in. sprinkler clearance violation, missing exit-sign illumination, expired tag)
+- Low = advisory / consideration / "worth noting" — NOT a hard violation but the inspector should be aware. Includes:
+    * Pressure gauge slightly past green band (not in red recharge or red overcharge zones, but trending)
+    * Minor cosmetic damage to a label that does not affect rating
+    * Mounting height marginally above ADA reach but within NFPA tolerance
+    * Storage near (but not within) the 18-in. sprinkler clearance zone
+    * Any condition that "an experienced inspector would mention but not write up"
+  When using Low for an advisory, START the description with "Advisory:" so it's unambiguous.`;
 
 export const USER_QUERY = `Analyze the attached image. Ground your findings ONLY in what is visible.
 
@@ -32,7 +43,7 @@ Your response MUST be a single JSON object that conforms to this schema:
         "imageQuality": {
           "type": "string",
           "enum": ["clear", "blurry", "dark", "overexposed", "occluded"],
-          "description": "Overall usability of the photo. If not 'clear', degrade confidence and surface follow-up items in notVisible."
+          "description": "Overall usability of the photo."
         }
       }
     },
@@ -56,10 +67,9 @@ Your response MUST be a single JSON object that conforms to this schema:
           "title": { "type": "string" },
           "category": {
             "type": "string",
-            "enum": ["Fire", "Electrical", "Egress", "ADA", "Hazmat", "InfectionControl", "Structural", "Other"],
-            "description": "High-level grouping used by CAP / LSRA / ILSM exports."
+            "enum": ["Fire", "Electrical", "Egress", "ADA", "Hazmat", "InfectionControl", "Structural", "Other"]
           },
-          "code": { "type": "string", "description": "e.g., 'NFPA 10', 'NFPA 13', 'NFPA 72', 'NFPA 80', 'NFPA 101', 'NEC', 'IBC', 'IFC', 'ADA', 'ANSI'." },
+          "code": { "type": "string" },
           "severity": { "type": "string", "enum": ["Low", "Medium", "High"] },
           "description": { "type": "string" },
           "location": { "type": "string" },
@@ -71,16 +81,11 @@ Your response MUST be a single JSON object that conforms to this schema:
               "y1": { "type": "number", "minimum": 0, "maximum": 1 },
               "x2": { "type": "number", "minimum": 0, "maximum": 1 },
               "y2": { "type": "number", "minimum": 0, "maximum": 1 }
-            },
-            "description": "NORMALIZED tight bbox in [0.0, 1.0]: top-left (x1,y1), bottom-right (x2,y2). Survives image resize and EXIF rotation."
+            }
           },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "remediation": { "type": "string" },
-          "references": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Cite specific code sections ONLY when certain. Leave empty if unsure — do not invent citations."
-          }
+          "references": { "type": "array", "items": { "type": "string" } }
         }
       }
     },
@@ -99,13 +104,12 @@ Your response MUST be a single JSON object that conforms to this schema:
 
     "notVisible": {
       "type": "array",
-      "description": "Items the inspector should verify but that could not be assessed from this photo (out of frame, occluded, wrong angle, glare). Drives follow-up photo prompts in the UI.",
       "items": {
         "type": "object",
         "required": ["item", "reason"],
         "properties": {
           "item": { "type": "string" },
-          "reason": { "type": "string", "description": "Why it could not be assessed (e.g., 'top of door obscured', 'panel cover closed', 'glare on label')." }
+          "reason": { "type": "string" }
         }
       }
     }
@@ -113,30 +117,54 @@ Your response MUST be a single JSON object that conforms to this schema:
 }
 
 SPECIAL INSTRUCTIONS FOR COMMON DEFICIENCIES (apply when visible):
-- Unsecured Fire Extinguisher: If an extinguisher is not in a bracket/cabinet, add a High severity Fire violation under NFPA 10. Description MUST mention Section 6.1.3.8.1 and why unsecured is hazardous.
-- Improper Use of Extension Cords: If an extension cord passes through a wall/ceiling/floor penetration, add High under NEC, category Electrical. Explain flexible cords are not permanent wiring and cannot route through holes; fire hazard risk.
-- Damaged Devices: If a smoke detector or other fire-safety device appears damaged, describe the damage and the functional risk (Fire category).
-- Sprinkler Heads — Condition: Note corrosion, paint, heavy loading (dust/debris), or obstructed spray pattern by fixed objects. NFPA 13.
-- Sprinkler Heads — Storage Clearance: If stored items appear within 18 inches of a sprinkler deflector, add Medium under NFPA 13, category Fire. Explain the 18 in. clearance rule and impact on spray pattern.
-- Infection Control Risks: In healthcare context, flag discarded bottles, spills, or unknown substances with hygiene rationale (InfectionControl).
-- Fire Door Labels: If a fire door/frame label is visible, add an entry with code NFPA 80, category Fire, severity Low stating:
-  "A fire rating label is visible. This indicates the component is part of a fire-rated assembly. It is not a deficiency, but its rating and appropriateness for the location must be verified against the facility's Life Safety plans. Minor scrapes on the label are not a deficiency."
-  Also add related "whatToLookFor" checks for the full door assembly.
-- Hazardous Room Doors: If door indicates a hazardous area (e.g., biohazard / Soiled Utility) and latch looks disengaged, add High (category Fire or Hazmat as appropriate). Explain containment risk; doors must be self-closing and positively latching. Add "Room Pressure Verification" and "Self-Closing Mechanism" items to whatToLookFor.
-- Fire Extinguisher Height: If extinguisher is mounted, add a verification note: top to 60 in. OK per NFPA 10 but ADA reach often <= 48 in. to handle. Add a "measure height to handle" item.
-- Blocked or Obstructed Egress: If exit doors, corridors, stairwells, or paths of egress are blocked by furniture, equipment, storage, or non-compliant locking hardware, add High under IBC/IFC, category Egress.
-- Missing or Damaged Exit Signs: If an exit sign appears non-illuminated, missing, obstructed, or damaged, add Medium under NFPA 101, category Egress.
-- Electrical Panel Working Clearance: If items are stored or placed within the 36 in. working space in front of an electrical panel, add High under NEC 110.26, category Electrical. Explain working clearance requirement and access for de-energization.
-- Penetrations in Fire/Smoke Barriers: If unsealed cable, conduit, or pipe penetrations are visible through a rated wall or ceiling, add High under NFPA 101, category Fire. Explain through-penetration firestopping requirement.
-- Self-Closing / Self-Latching Doors: If a fire or smoke door is propped open with a wedge, kick-down, cord, or other unapproved hold-open, add High under NFPA 80, category Fire.
 
-MANDATORY "whatToLookFor" for Fire Door Labels:
-- Proper Gaps & Clearances
-- Positive Latching Hardware
-- Functioning Self-Closing Device
-- Intact Seals (Smoke/Intumescent)
-- No Unapproved Hardware or Modifications
+FIRE EXTINGUISHERS — NFPA 10:
+- Unsecured Extinguisher: Not in a bracket/cabinet → High, Fire, NFPA 10. Reference Section 6.1.3.8.1. Explain hazard.
+- Pressure Gauge — Critical: Needle in the LEFT/red "RECHARGE" zone → High, Fire, NFPA 10 §7.3. The extinguisher is unusable. Remediate immediately.
+- Pressure Gauge — Critical: Needle in the RIGHT/red "OVERCHARGED" zone, deep into the band → Medium, Fire, NFPA 10 §7.3. The cylinder seals can fail; service or replace.
+- Pressure Gauge — Advisory: Needle slightly past the green band but only marginally into the recharge/overcharge zones, OR sitting right at an edge of green → Low, Fire, NFPA 10 §7.3. Description must START with "Advisory:" and explain that the reading is not yet a hard violation but service should be scheduled and the gauge re-checked. Tighter bbox on the gauge face is required so the inspector can see exactly what triggered it.
+- Pressure Gauge — Normal: Needle clearly inside the green band → no violation, but add a "Pressure gauge reading" entry to whatToLookFor describing where in the green band it sits.
+- Damaged Pin/Tamper Seal: Missing pull pin or broken tamper seal → High, Fire, NFPA 10. Indicates discharge or tampering.
+- Inspection Tag: If a tag is visible but date is unreadable → add to whatToLookFor "Verify monthly inspection tag is current". If tag is clearly expired (>1 year) → Medium, Fire, NFPA 10 §7.2.
+- Mounting Height: If extinguisher is mounted, add a verification note: top to 60 in. OK per NFPA 10 but ADA reach often <= 48 in. to handle. Add a "measure height to handle" item to whatToLookFor.
+- Hose/Nozzle Condition: Visible cracks, kinks, blockages → Medium, Fire, NFPA 10.
 
-If nothing is clearly noncompliant, set violations to [] but still provide 4-8 relevant "whatToLookFor" items based on context, plus any "notVisible" entries the inspector should re-photograph.
+EXTENSION CORDS — NEC:
+- Improper Use: Extension cord through wall/ceiling/floor penetration → High, Electrical, NEC. Flexible cords are not permanent wiring; fire hazard.
+- Daisy-chained or under carpet → High, Electrical, NEC.
+
+SPRINKLER HEADS — NFPA 13:
+- Storage Clearance: Items within 18 in. of sprinkler deflector → Medium, Fire, NFPA 13. Storage near (but not within) → Low advisory.
+- Condition: Corrosion, paint, dust loading, obstructed spray → Medium/High depending on severity, Fire, NFPA 13.
+
+FIRE DOORS — NFPA 80:
+- Propped open with wedge/kick-down/cord/unapproved hold-open → High, Fire, NFPA 80.
+- Self-closing failure (won't latch) → High, Fire, NFPA 80.
+- Fire rating label visible → Low informational entry: "A fire rating label is visible. This indicates the component is part of a fire-rated assembly. Verify rating and appropriateness against Life Safety plans. Minor scrapes on the label are not a deficiency." Also add whatToLookFor: Proper Gaps & Clearances; Positive Latching Hardware; Functioning Self-Closing Device; Intact Smoke/Intumescent Seals; No Unapproved Hardware.
+
+EGRESS — IBC/IFC:
+- Blocked or Obstructed Egress: Furniture/equipment/storage/non-compliant locking blocking exits, corridors, stairs → High, Egress.
+- Missing/Damaged/Non-illuminated Exit Signs → Medium, Egress, NFPA 101.
+
+ELECTRICAL PANELS — NEC 110.26:
+- Storage within 36-in. working space in front of panel → High, Electrical, NEC 110.26.
+
+PENETRATIONS — NFPA 101:
+- Unsealed cable/conduit/pipe penetrations through rated wall/ceiling → High, Fire, NFPA 101.
+
+SMOKE DETECTORS / FIRE-SAFETY DEVICES:
+- Damaged device → describe damage + functional risk, Fire category, severity by impact.
+
+INFECTION CONTROL (healthcare):
+- Discarded bottles, spills, unknown substances → flag with hygiene rationale.
+
+HAZARDOUS ROOM DOORS:
+- Door indicates hazardous area (biohazard, Soiled Utility, etc.) and latch looks disengaged → High, Fire or Hazmat. Containment risk; doors must be self-closing and positively latching. Add "Room Pressure Verification" and "Self-Closing Mechanism" to whatToLookFor.
+
+OUTPUT EXPECTATIONS:
+- If nothing is clearly noncompliant, set violations to [] but still provide 4-8 relevant whatToLookFor items based on context, plus any notVisible entries the inspector should re-photograph.
+- For close-up object photos (e.g., a pressure gauge filling the frame), prioritize advisories over generic checklist items.
+- ALWAYS read pressure gauges if visible — never skip them.
+- Bounding boxes should be tight on the SPECIFIC defect (e.g., the gauge face, not the entire extinguisher).
 
 Return only the JSON object (no markdown).`;
