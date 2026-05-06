@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { Card } from "@/components/card";
-import { uploadAndAnalyzePhoto } from "@/app/inspections/[id]/upload-action";
 
 type Props = {
   inspectionId: string;
@@ -11,7 +10,6 @@ type Props = {
 
 type Status =
   | { kind: "idle" }
-  | { kind: "preparing" }
   | { kind: "uploading"; filename: string }
   | { kind: "analyzing"; filename: string }
   | { kind: "error"; message: string };
@@ -20,8 +18,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
 /**
- * Camera + library picker + drag-and-drop. Mobile-first: the big
- * primary buttons are the two iOS-style capture options.
+ * Camera + library + drag-and-drop uploader. Posts to /api/photos/upload —
+ * an HTTP API route, not a server action. We deliberately avoided server
+ * actions here because Next.js 16's allowedOrigins check intermittently
+ * rejected the action invocation with 400 in this Vercel deployment.
  */
 export function PhotoUploader({ inspectionId }: Props) {
   const router = useRouter();
@@ -30,13 +30,9 @@ export function PhotoUploader({ inspectionId }: Props) {
   const [photoLocation, setPhotoLocation] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [isDragging, setIsDragging] = useState(false);
-  const [isPending, startTransition] = useTransition();
 
   const busy =
-    status.kind === "preparing" ||
-    status.kind === "uploading" ||
-    status.kind === "analyzing" ||
-    isPending;
+    status.kind === "uploading" || status.kind === "analyzing";
 
   function reset() {
     setStatus({ kind: "idle" });
@@ -61,27 +57,43 @@ export function PhotoUploader({ inspectionId }: Props) {
     setStatus({ kind: "uploading", filename: file.name });
 
     const formData = new FormData();
+    formData.append("inspection_id", inspectionId);
     formData.append("image", file, file.name);
     if (photoLocation) formData.append("photo_location", photoLocation);
 
-    startTransition(async () => {
-      // Tiny tick so the UI shows the "uploading" state before the action blocks.
-      setStatus({ kind: "analyzing", filename: file.name });
-      const result = await uploadAndAnalyzePhoto(inspectionId, formData);
-      if (result.ok) {
-        setStatus({ kind: "idle" });
-        // Refresh the photo list and jump to the new photo.
-        router.refresh();
-        router.push(`/inspections/${inspectionId}/photos/${result.photoId}`);
-      } else {
-        setStatus({ kind: "error", message: result.error });
+    setStatus({ kind: "analyzing", filename: file.name });
+
+    try {
+      const res = await fetch("/api/photos/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        photoId?: string;
+        error?: string;
+      };
+
+      if (!res.ok || !json.ok || !json.photoId) {
+        setStatus({
+          kind: "error",
+          message: json.error ?? `Upload failed (HTTP ${res.status}).`,
+        });
+        return;
       }
-    });
+
+      setStatus({ kind: "idle" });
+      router.refresh();
+      router.push(`/inspections/${inspectionId}/photos/${json.photoId}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setStatus({ kind: "error", message });
+    }
   }
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking the same file
+    e.target.value = "";
     if (file) handleFile(file);
   }
 
@@ -113,7 +125,6 @@ export function PhotoUploader({ inspectionId }: Props) {
         disabled={busy}
       />
 
-      {/* Mobile-first capture row */}
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <button
           type="button"
@@ -133,7 +144,6 @@ export function PhotoUploader({ inspectionId }: Props) {
         </button>
       </div>
 
-      {/* Desktop drag-drop area */}
       <div
         onDragEnter={(e) => {
           e.preventDefault();
@@ -161,7 +171,6 @@ export function PhotoUploader({ inspectionId }: Props) {
         </span>
       </div>
 
-      {/* Hidden file inputs */}
       <input
         ref={cameraInputRef}
         type="file"
@@ -178,7 +187,6 @@ export function PhotoUploader({ inspectionId }: Props) {
         onChange={onPick}
       />
 
-      {/* Status banner */}
       {status.kind !== "idle" ? (
         <div className="mt-4">
           {status.kind === "uploading" || status.kind === "analyzing" ? (
@@ -186,7 +194,9 @@ export function PhotoUploader({ inspectionId }: Props) {
               <Spinner />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-[var(--fg)]">
-                  {status.kind === "uploading" ? "Uploading…" : "Analyzing with AI…"}
+                  {status.kind === "uploading"
+                    ? "Uploading…"
+                    : "Analyzing with AI…"}
                 </p>
                 <p className="truncate text-xs text-[var(--fg-muted)]">
                   {status.filename}
