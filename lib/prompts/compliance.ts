@@ -95,7 +95,31 @@ Your response MUST be a single JSON object that conforms to this schema:
 
 SPECIAL INSTRUCTIONS FOR COMMON DEFICIENCIES (apply when visible):
 
+EQUIPMENT IDENTIFICATION FIRST — APPLY ONLY THE RELEVANT STANDARD:
+Before citing any code, classify the primary equipment in the photo and apply ONLY the standard that governs that equipment. Cross-citing standards is a serious error.
+
+Common equipment → applicable standard mapping:
+- PORTABLE FIRE EXTINGUISHER (red/silver canister, handle/lever, hose+nozzle, gauge with RECHARGE/GREEN/OVERCHARGED zones, monthly inspection tag) → NFPA 10. DO NOT cite NFPA 25.
+- AUTOMATIC SPRINKLER SYSTEM components (sprinkler heads, riser, control valves, water-flow alarms) → NFPA 13 (installation), NFPA 25 (inspection/testing/maintenance).
+- DRY-PIPE / DELUGE / PREACTION VALVE assembly (red cast-iron valve body, two gauges showing AIR + WATER pressure) → NFPA 13 + NFPA 25 §13.4.
+- STANDPIPE / HOSE STATION → NFPA 14 (installation), NFPA 25 (testing — including 5-year hydrostatic per §6.3.2).
+- FIRE PUMP → NFPA 20 (installation), NFPA 25 (testing).
+- FIRE ALARM PULL STATION / SMOKE DETECTOR / NOTIFICATION APPLIANCE → NFPA 72.
+- FIRE-RATED DOOR ASSEMBLY → NFPA 80 (and NFPA 105 for smoke doors).
+- EMERGENCY/EXIT LIGHTING → NFPA 101 §7.10 + NFPA 70 (NEC).
+- ELECTRICAL PANEL / DISCONNECT → NEC (NFPA 70), especially §110.26.
+- DECORATIONS / WALL & DOOR COVERINGS → NFPA 101 occupancy chapter + NFPA 80 (rated doors only) + NFPA 701.
+- KITCHEN HOOD / SUPPRESSION SYSTEM → NFPA 96 + NFPA 17/17A.
+- MEDICAL GAS / OXYGEN STORAGE → NFPA 99.
+
+GAUGE RULES — different standards, do NOT mix:
+- Fire-extinguisher gauge (NFPA 10): the gauge just needs to indicate adequate pressure. There is NO calibration-date or 5-year-replacement requirement for a portable extinguisher gauge — extinguishers themselves get hydrostatic testing on a schedule (NFPA 10 §8.3 — typically 5 yr or 12 yr depending on type), and that test is recorded on a sticker on the cylinder, NOT on the gauge face. Severity calls are based on NEEDLE POSITION ONLY: deep in RECHARGE → High, deep in OVERCHARGED → Medium, slightly past green but not deep in red → Low advisory, clearly green → no violation.
+- Water-based-system gauge (NFPA 25 §5.2.4): MUST show manufacture/calibration date and be replaced or tested every 5 years. This rule applies ONLY to gauges on sprinkler systems, standpipes, fire pumps, and dry/wet/preaction/deluge valve assemblies — NEVER to portable fire extinguishers.
+
+If you are unsure which equipment class applies, state the assumption in the description and add a whatToLookFor item to confirm. Never default to NFPA 25 for a portable extinguisher.
+
 FIRE EXTINGUISHERS — NFPA 10:
+- IMPORTANT: do NOT cite NFPA 25 §5.2.4 (5-year gauge replacement/testing) for a portable extinguisher — that section applies to water-based-system gauges only. Extinguisher gauges have no calibration-date requirement; the cylinder gets hydrostatic testing per NFPA 10 §8.3 and the test date is recorded on a sticker on the BODY of the extinguisher, not the gauge.
 - Unsecured Extinguisher: Not in a bracket/cabinet → High, Fire, NFPA 10 §6.1.3.8.1.
 - Pressure Gauge Critical (RECHARGE zone): needle deep in left/red zone → High, Fire, NFPA 10 §7.3. Unusable extinguisher.
 - Pressure Gauge Critical (OVERCHARGED): needle deep in right/red zone → Medium, Fire, NFPA 10 §7.3. Seal failure risk.
@@ -114,8 +138,9 @@ DRY PIPE / WATER-BASED SPRINKLER SYSTEM — NFPA 25 (CRITICAL — many photos co
 - BOTH gauges read zero → High, Fire, NFPA 25. System is fully drained / out of service.
 - TRIP TEST INTERVALS (NFPA 25 §13.4.4.2): Partial-flow trip test annually (§13.4.4.2.1); FULL-FLOW trip test every 3 years (§13.4.4.2.2). When a dry valve appears in the photo, ALWAYS add a Low advisory finding: "Advisory: Verify the most recent trip-test record. NFPA 25 §13.4.4.2 requires a partial-flow trip test annually and a full-flow trip test every 3 years. Look for tag(s) on or near the valve documenting the last test." Bbox the dry-valve assembly.
 
-PRESSURE GAUGES — 5-YEAR RULE (NFPA 25 §5.2.4 / §13.2.7):
-- Every gauge on a fire-protection water-based system must show a manufacture or calibration DATE. Gauges shall be replaced every 5 years OR tested every 5 years by comparison with a calibrated gauge.
+PRESSURE GAUGES ON WATER-BASED FIRE-PROTECTION SYSTEMS — 5-YEAR RULE (NFPA 25 §5.2.4 / §13.2.7):
+APPLIES ONLY to gauges on sprinkler systems, standpipes, fire pumps, and dry/wet/preaction/deluge valve assemblies. DOES NOT apply to portable fire-extinguisher gauges (NFPA 10 — handled in the FIRE EXTINGUISHERS section). If the photo is a fire extinguisher, SKIP this section entirely.
+- Every gauge on a water-based fire-protection SYSTEM (not extinguishers) must show a manufacture or calibration DATE. Gauges shall be replaced every 5 years OR tested every 5 years by comparison with a calibrated gauge.
 - If gauge face shows a date that is OLDER than 5 years from today (calculate from year stamped on gauge) → Medium, Fire, NFPA 25 §5.2.4. Description: "Gauge dated [observed year] exceeds 5-year replacement window. Replace or have tested against a calibrated reference."
 - If gauge face shows NO visible date / no manufacturer plate / unreadable date → Medium, Fire, NFPA 25 §5.2.4. Description: "Gauge does not display a legible manufacture or calibration date; cannot verify 5-year compliance."
 - If gauge dated within last 5 years → no violation, but add whatToLookFor "Gauge dated [year]; replace by [year+5]".
