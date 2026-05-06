@@ -15,7 +15,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex h-11 w-full items-center justify-center rounded-md bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      className="cl-btn-primary w-full"
     >
       {pending ? "Sending..." : "Send reset link"}
     </button>
@@ -25,14 +25,22 @@ function SubmitButton() {
 export function ForgotPasswordForm({ action, error, sent }: Props) {
   if (sent) {
     return (
-      <div className="rounded-md border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-        <p className="font-medium">Check your email.</p>
-        <p className="mt-1">
-          If an account exists for that address, we&apos;ve sent a reset link. The link expires in 1 hour.
+      <div
+        className="rounded-lg border px-4 py-4 text-sm"
+        style={{
+          borderColor: "rgba(34,197,94,0.3)",
+          background: "rgba(34,197,94,0.08)",
+          color: "#bbf7d0",
+        }}
+      >
+        <p className="font-medium text-[var(--fg)]">Check your email.</p>
+        <p className="mt-1.5 text-[var(--fg-muted)]">
+          If an account exists for that address, we&apos;ve sent a reset link.
+          The link expires in 1 hour.
         </p>
         <Link
           href="/login"
-          className="mt-3 inline-block font-medium underline underline-offset-4"
+          className="mt-3 inline-block font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
         >
           Back to sign in
         </Link>
@@ -42,11 +50,8 @@ export function ForgotPasswordForm({ action, error, sent }: Props) {
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <label
-          htmlFor="email"
-          className="text-sm font-medium text-zinc-900 dark:text-zinc-50"
-        >
+      <div className="flex flex-col">
+        <label htmlFor="email" className="cl-label">
           Email address
         </label>
         <input
@@ -56,21 +61,30 @@ export function ForgotPasswordForm({ action, error, sent }: Props) {
           autoComplete="email"
           required
           placeholder="you@example.com"
-          className="h-11 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-600"
+          className="cl-input"
         />
       </div>
 
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p
+          className="rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: "rgba(239,68,68,0.3)",
+            background: "rgba(239,68,68,0.08)",
+            color: "#fca5a5",
+          }}
+        >
+          {error}
+        </p>
       ) : null}
 
       <SubmitButton />
 
-      <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-center text-sm text-[var(--fg-muted)]">
         Remembered it?{" "}
         <Link
           href="/login"
-          className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-50"
+          className="font-medium text-[var(--fg)] transition hover:text-[var(--primary)]"
         >
           Sign in
         </Link>

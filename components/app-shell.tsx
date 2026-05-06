@@ -1,0 +1,305 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { PropsWithChildren, ReactNode } from "react";
+import { SamektraMark } from "@/components/logo";
+
+/* =====================================================================
+ * AppShell
+ *
+ * Mobile/tablet first. Renders a sticky header at the top, a centered
+ * content column, and a bottom tab bar for primary navigation. On
+ * desktop (≥ lg, 1024px) a left sidebar appears alongside, the bottom
+ * tab bar hides, and content is constrained to a comfortable column.
+ * ===================================================================== */
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  /** Renders the centered raised orange button on mobile / accented in sidebar. */
+  accent?: boolean;
+};
+
+const NAV: NavItem[] = [
+  { href: "/inspections", label: "Home", icon: <HomeIcon /> },
+  { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
+  {
+    href: "/inspections/new",
+    label: "Upload",
+    icon: <UploadIcon />,
+    accent: true,
+  },
+  { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
+];
+
+type Props = PropsWithChildren<{
+  user: {
+    fullName: string;
+    organization?: string | null;
+    email?: string | null;
+  };
+}>;
+
+export function AppShell({ user, children }: Props) {
+  return (
+    <div className="min-h-dvh">
+      {/* ===== Header ===== */}
+      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg-raised)]/80 backdrop-blur supports-[backdrop-filter]:bg-[var(--bg-raised)]/70">
+        <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4 sm:px-6 lg:pl-72">
+          <Link href="/inspections" className="flex items-center gap-2">
+            <SamektraMark size={28} />
+            <div className="flex flex-col leading-none">
+              <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+                Samektra
+              </span>
+              <span className="text-sm font-semibold tracking-tight text-[var(--fg)]">
+                Compliance Lens
+              </span>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden flex-col items-end leading-tight sm:flex">
+              <span className="text-sm font-medium text-[var(--fg)]">
+                {user.fullName}
+              </span>
+              <span className="text-xs text-[var(--fg-muted)]">
+                {user.organization || user.email || ""}
+              </span>
+            </div>
+            <UserAvatar name={user.fullName} />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto flex max-w-screen-2xl">
+        {/* ===== Sidebar (desktop only) ===== */}
+        <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-64 shrink-0 border-r border-[var(--border)] px-4 py-6 lg:block">
+          <SidebarNav />
+          <div className="mt-6 border-t border-[var(--border)] pt-4">
+            <form action="/auth/sign-out" method="post">
+              <button
+                type="submit"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-[var(--fg-muted)] transition hover:bg-white/[0.03] hover:text-[var(--fg)]"
+              >
+                <SignOutIcon />
+                <span>Sign out</span>
+              </button>
+            </form>
+          </div>
+        </aside>
+
+        {/* ===== Main content ===== */}
+        <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:pb-10 lg:pl-8">
+          <div className="mx-auto w-full max-w-3xl">{children}</div>
+        </main>
+      </div>
+
+      {/* ===== Bottom tab bar (mobile + tablet) ===== */}
+      <BottomTabBar />
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------- */
+
+function SidebarNav() {
+  const pathname = usePathname();
+  return (
+    <nav className="flex flex-col gap-1">
+      {NAV.map((item) => {
+        const active =
+          pathname === item.href ||
+          (item.href !== "/inspections" && pathname.startsWith(item.href));
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={[
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
+              active
+                ? "bg-white/[0.04] text-[var(--fg)]"
+                : "text-[var(--fg-muted)] hover:bg-white/[0.03] hover:text-[var(--fg)]",
+              item.accent && !active ? "text-[var(--accent)]" : "",
+            ].join(" ")}
+          >
+            <span
+              className={
+                item.accent
+                  ? "text-[var(--accent)]"
+                  : active
+                    ? "text-[var(--primary)]"
+                    : "text-current"
+              }
+            >
+              {item.icon}
+            </span>
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function BottomTabBar() {
+  const pathname = usePathname();
+  return (
+    <nav
+      aria-label="Primary"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--bg-raised)]/90 backdrop-blur lg:hidden"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
+    >
+      <div className="mx-auto grid max-w-screen-sm grid-cols-4">
+        {NAV.map((item) => {
+          const active =
+            pathname === item.href ||
+            (item.href !== "/inspections" && pathname.startsWith(item.href));
+
+          if (item.accent) {
+            // Raised orange Upload button — middle slot
+            return (
+              <div key={item.href} className="flex justify-center">
+                <Link
+                  href={item.href}
+                  aria-label={item.label}
+                  className="-mt-5 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg transition active:translate-y-px"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, #fb923c 0%, #ea580c 100%)",
+                    boxShadow:
+                      "0 12px 30px -10px rgba(249,115,22,0.55), 0 0 0 1px rgba(249,115,22,0.35)",
+                  }}
+                >
+                  {item.icon}
+                </Link>
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              className={[
+                "flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition",
+                active
+                  ? "text-[var(--primary)]"
+                  : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+              ].join(" ")}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function UserAvatar({ name }: { name: string }) {
+  const initials =
+    name
+      .split(/\s+/)
+      .map((p) => p[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "·";
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-elevated)] text-xs font-semibold text-[var(--fg)]">
+      {initials}
+    </div>
+  );
+}
+
+/* ===== Icons (inline SVG, 22px) ===== */
+
+function HomeIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-8.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function HistoryIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 7v5l3 2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function UploadIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 16V4m0 0L7 9m5-5 5 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ProfileIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M4.5 20a7.5 7.5 0 0 1 15 0"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function SignOutIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="m15 8 4 4-4 4M19 12H9"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

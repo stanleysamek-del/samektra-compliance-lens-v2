@@ -25,11 +25,8 @@ export function PasswordInput({
   const id = useId();
 
   return (
-    <div className="flex flex-col gap-2">
-      <label
-        htmlFor={id}
-        className="text-sm font-medium text-zinc-900 dark:text-zinc-50"
-      >
+    <div className="flex flex-col">
+      <label htmlFor={id} className="cl-label">
         {label}
       </label>
       <div className="relative">
@@ -41,7 +38,7 @@ export function PasswordInput({
           required={required}
           minLength={minLength}
           defaultValue={defaultValue}
-          className="h-11 w-full rounded-md border border-zinc-200 bg-white px-3 pr-11 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-600"
+          className="cl-input pr-12"
         />
         <button
           type="button"
@@ -49,7 +46,7 @@ export function PasswordInput({
           aria-label={show ? "Hide password" : "Show password"}
           aria-pressed={show}
           tabIndex={-1}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--fg-muted)] transition hover:text-[var(--fg)]"
         >
           {show ? (
             <svg
@@ -58,7 +55,7 @@ export function PasswordInput({
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"
@@ -75,7 +72,7 @@ export function PasswordInput({
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"
@@ -87,7 +84,7 @@ export function PasswordInput({
         </button>
       </div>
       {hint ? (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>
+        <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">{hint}</p>
       ) : null}
     </div>
   );
