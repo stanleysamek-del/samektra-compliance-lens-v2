@@ -2,9 +2,12 @@
  * Compliance Lens vision analysis — Anthropic primary, OpenAI fallback.
  *
  * Both providers receive the exact same prompts (lib/prompts/compliance.ts)
- * and are expected to return a single JSON object matching ComplianceAnalysis.
- * We never run prompts in parallel — Claude first, OpenAI only if Claude
- * times out, 5xxs, or returns malformed JSON.
+ * and return a JSON object matching ComplianceAnalysis. We never run the
+ * two providers in parallel — Claude first, OpenAI only if Claude times
+ * out, 5xxs, or returns malformed JSON.
+ *
+ * Each call is metered: token counts and computed USD cost come back in
+ * the AnalyzeResult so the caller can persist a row to public.ai_calls.
  */
 
 import { SYSTEM_PROMPT, USER_QUERY } from "@/lib/prompts/compliance";
@@ -15,13 +18,28 @@ const OPENAI_MODEL = "gpt-4o";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
+// Per-million-token pricing in USD. Keep this colocated with the model
+// strings so cost numbers always match the model that actually ran.
+const PRICING = {
+  "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0 },
+  "gpt-4o":                      { input: 2.5, output: 10.0 },
+} as const;
+
 type Provider = "anthropic" | "openai";
+
+export type Usage = {
+  inputTokens: number;
+  outputTokens: number;
+  /** Computed at call time so historical costs don't shift if pricing changes. */
+  costUsd: number;
+};
 
 export type AnalyzeResult = {
   analysis: ComplianceAnalysis;
   provider: Provider;
   model: string;
   durationMs: number;
+  usage: Usage;
 };
 
 export class AnalyzeError extends Error {
@@ -35,49 +53,40 @@ export class AnalyzeError extends Error {
   }
 }
 
-/**
- * Run analysis with primary → fallback strategy.
- * `imageBase64` should be raw base64 (no data: URI prefix).
- * `mimeType` is the image MIME type (image/jpeg, image/png, image/webp).
- */
 export async function analyzeImage(
   imageBase64: string,
   mimeType: string,
 ): Promise<AnalyzeResult> {
   const start = Date.now();
 
-  // 1. Anthropic primary
   if (process.env.ANTHROPIC_API_KEY) {
     try {
-      const analysis = await callAnthropic(imageBase64, mimeType);
+      const { analysis, usage } = await callAnthropic(imageBase64, mimeType);
       return {
         analysis,
         provider: "anthropic",
         model: CLAUDE_MODEL,
         durationMs: Date.now() - start,
+        usage,
       };
     } catch (err) {
       console.warn("[ai] Claude failed, falling back to OpenAI:", err);
     }
   }
 
-  // 2. OpenAI fallback
   if (process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY) {
     try {
-      const analysis = await callOpenAI(imageBase64, mimeType);
+      const { analysis, usage } = await callOpenAI(imageBase64, mimeType);
       return {
         analysis,
         provider: "openai",
         model: OPENAI_MODEL,
         durationMs: Date.now() - start,
+        usage,
       };
     } catch (err) {
       console.error("[ai] OpenAI also failed:", err);
-      throw new AnalyzeError(
-        "Both providers failed",
-        "openai",
-        err,
-      );
+      throw new AnalyzeError("Both providers failed", "openai", err);
     }
   }
 
@@ -87,16 +96,13 @@ export async function analyzeImage(
 }
 
 /* --------------------------------------------------------------------- */
-/* Anthropic                                                              */
-/* --------------------------------------------------------------------- */
 
 async function callAnthropic(
   imageBase64: string,
   mimeType: string,
-): Promise<ComplianceAnalysis> {
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -116,11 +122,7 @@ async function callAnthropic(
             content: [
               {
                 type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mimeType,
-                  data: imageBase64,
-                },
+                source: { type: "base64", media_type: mimeType, data: imageBase64 },
               },
               { type: "text", text: USER_QUERY },
             ],
@@ -139,6 +141,7 @@ async function callAnthropic(
 
     const data = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
     };
 
     const text = data.content
@@ -146,26 +149,28 @@ async function callAnthropic(
       .map((b) => b.text ?? "")
       .join("\n");
 
-    return parseAnalysis(text);
+    const inputTokens = data.usage?.input_tokens ?? 0;
+    const outputTokens = data.usage?.output_tokens ?? 0;
+    const costUsd = computeCost(CLAUDE_MODEL, inputTokens, outputTokens);
+
+    return {
+      analysis: parseAnalysis(text),
+      usage: { inputTokens, outputTokens, costUsd },
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
 /* --------------------------------------------------------------------- */
-/* OpenAI                                                                 */
-/* --------------------------------------------------------------------- */
 
 async function callOpenAI(
   imageBase64: string,
   mimeType: string,
-): Promise<ComplianceAnalysis> {
-  const apiKey =
-    process.env.OPENAI_API_KEY ?? process.env.OpenAI_API_KEY ?? "";
-
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OpenAI_API_KEY ?? "";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -207,24 +212,35 @@ async function callOpenAI(
 
     const data = (await res.json()) as {
       choices: Array<{ message: { content: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
     const text = data.choices?.[0]?.message?.content ?? "";
-    return parseAnalysis(text);
+
+    const inputTokens = data.usage?.prompt_tokens ?? 0;
+    const outputTokens = data.usage?.completion_tokens ?? 0;
+    const costUsd = computeCost(OPENAI_MODEL, inputTokens, outputTokens);
+
+    return {
+      analysis: parseAnalysis(text),
+      usage: { inputTokens, outputTokens, costUsd },
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
 /* --------------------------------------------------------------------- */
-/* Parsing & validation                                                   */
-/* --------------------------------------------------------------------- */
 
-/**
- * Extract JSON from the model output. Both providers occasionally wrap their
- * answer in markdown code fences despite our instructions, so we strip those
- * before parsing.
- */
+function computeCost(model: string, inputTokens: number, outputTokens: number): number {
+  const p = (PRICING as Record<string, { input: number; output: number }>)[model];
+  if (!p) return 0;
+  return (
+    (inputTokens / 1_000_000) * p.input +
+    (outputTokens / 1_000_000) * p.output
+  );
+}
+
 function parseAnalysis(raw: string): ComplianceAnalysis {
   const trimmed = raw.trim();
   const stripped = trimmed
@@ -236,7 +252,6 @@ function parseAnalysis(raw: string): ComplianceAnalysis {
   try {
     json = JSON.parse(stripped);
   } catch (err) {
-    // Last-ditch: extract first {...} block.
     const match = stripped.match(/\{[\s\S]*\}/);
     if (!match) {
       throw new AnalyzeError(
@@ -251,10 +266,6 @@ function parseAnalysis(raw: string): ComplianceAnalysis {
   return validateAnalysis(json);
 }
 
-/**
- * Light validation — we don't run a full JSON-schema validator, just check
- * the shape we depend on downstream and coerce sensible defaults.
- */
 function validateAnalysis(input: unknown): ComplianceAnalysis {
   if (!input || typeof input !== "object") {
     throw new AnalyzeError("Analysis is not an object");
@@ -264,7 +275,7 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
   const summary = (o.summary ?? {}) as Record<string, unknown>;
   const image = (o.image ?? {}) as Record<string, unknown>;
 
-  const out: ComplianceAnalysis = {
+  return {
     schemaVersion: "1.1",
     summary: {
       text: String(summary.text ?? ""),
@@ -285,8 +296,6 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
       ? o.notVisible.map((n) => normalizeNotVisible(n))
       : [],
   };
-
-  return out;
 }
 
 function normalizeViolation(v: unknown, idx: number): ComplianceAnalysis["violations"][number] {
@@ -314,18 +323,12 @@ function normalizeViolation(v: unknown, idx: number): ComplianceAnalysis["violat
 
 function normalizeWhatToLookFor(w: unknown): ComplianceAnalysis["whatToLookFor"][number] {
   const r = (w ?? {}) as Record<string, unknown>;
-  return {
-    item: String(r.item ?? ""),
-    details: String(r.details ?? ""),
-  };
+  return { item: String(r.item ?? ""), details: String(r.details ?? "") };
 }
 
 function normalizeNotVisible(n: unknown): ComplianceAnalysis["notVisible"][number] {
   const r = (n ?? {}) as Record<string, unknown>;
-  return {
-    item: String(r.item ?? ""),
-    reason: String(r.reason ?? ""),
-  };
+  return { item: String(r.item ?? ""), reason: String(r.reason ?? "") };
 }
 
 function clamp01(n: number): number {

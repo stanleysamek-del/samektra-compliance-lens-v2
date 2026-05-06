@@ -9,14 +9,6 @@ export type UploadResult =
   | { ok: true; photoId: string }
   | { ok: false; error: string };
 
-/**
- * Server action invoked by the client uploader.
- * 1. Verifies auth + inspection ownership
- * 2. Uploads the file to Supabase Storage (bucket: photos)
- * 3. Calls the AI analyzer
- * 4. Persists photo + findings + whatToLookFor + notVisible
- * 5. Returns the new photo id
- */
 export async function uploadAndAnalyzePhoto(
   inspectionId: string,
   formData: FormData,
@@ -27,7 +19,6 @@ export async function uploadAndAnalyzePhoto(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
-  // Verify the inspection belongs to this user (RLS will also enforce)
   const { data: inspection } = await supabase
     .from("inspections")
     .select("id, status")
@@ -54,7 +45,6 @@ export async function uploadAndAnalyzePhoto(
       ? (formData.get("photo_location") as string).trim() || null
       : null;
 
-  // ---- Storage upload ----
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const filename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const storagePath = `${user.id}/${inspectionId}/${filename}`;
@@ -64,28 +54,53 @@ export async function uploadAndAnalyzePhoto(
 
   const { error: uploadErr } = await supabase.storage
     .from("photos")
-    .upload(storagePath, bytes, {
-      contentType: file.type,
-      upsert: false,
-    });
+    .upload(storagePath, bytes, { contentType: file.type, upsert: false });
   if (uploadErr) {
     console.error("[upload] storage", uploadErr);
     return { ok: false, error: `Storage upload failed: ${uploadErr.message}` };
   }
 
-  // ---- AI analysis ----
+  // ---- AI analysis with cost tracking ----
   let analysis: ComplianceAnalysis;
+  let aiProvider: "anthropic" | "openai" = "anthropic";
+  let aiModel = "";
+  let aiInputTokens = 0;
+  let aiOutputTokens = 0;
+  let aiCostUsd = 0;
+  let aiDurationMs = 0;
+  let aiStatus: "success" | "error" = "success";
+  let aiErrorMessage: string | null = null;
+
   try {
     const base64 = Buffer.from(bytes).toString("base64");
     const result = await analyzeImage(base64, file.type);
     analysis = result.analysis;
+    aiProvider = result.provider;
+    aiModel = result.model;
+    aiInputTokens = result.usage.inputTokens;
+    aiOutputTokens = result.usage.outputTokens;
+    aiCostUsd = result.usage.costUsd;
+    aiDurationMs = result.durationMs;
   } catch (err) {
     console.error("[upload] analyze", err);
-    // Roll back storage if analysis failed so the user can retry cleanly.
+    aiStatus = "error";
+    aiErrorMessage = err instanceof Error ? err.message : "AI analysis failed";
+
+    // Log the failed call so we still see it in the admin dashboard.
+    await supabase.from("ai_calls").insert({
+      inspection_id: inspectionId,
+      provider: aiProvider,
+      model: aiModel || "unknown",
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      duration_ms: 0,
+      status: "error",
+      error_message: aiErrorMessage,
+    });
+
     await supabase.storage.from("photos").remove([storagePath]);
-    const message =
-      err instanceof Error ? err.message : "AI analysis failed";
-    return { ok: false, error: message };
+    return { ok: false, error: aiErrorMessage };
   }
 
   // ---- Persist photo ----
@@ -111,7 +126,20 @@ export async function uploadAndAnalyzePhoto(
     };
   }
 
-  // ---- Persist findings ----
+  // ---- Persist successful AI call (now that we have photo_id) ----
+  await supabase.from("ai_calls").insert({
+    inspection_id: inspectionId,
+    photo_id: photo.id,
+    provider: aiProvider,
+    model: aiModel,
+    input_tokens: aiInputTokens,
+    output_tokens: aiOutputTokens,
+    cost_usd: aiCostUsd,
+    duration_ms: aiDurationMs,
+    status: aiStatus,
+  });
+
+  // ---- Findings ----
   if (analysis.violations.length > 0) {
     const findingsRows = analysis.violations.map((v) => ({
       inspection_id: inspectionId,
@@ -135,11 +163,9 @@ export async function uploadAndAnalyzePhoto(
       .insert(findingsRows);
     if (findingsErr) {
       console.error("[upload] findings insert", findingsErr);
-      // Soft-fail — keep the photo, drop findings.
     }
   }
 
-  // ---- Persist what-to-look-for + not-visible ----
   if (analysis.whatToLookFor.length > 0) {
     await supabase.from("what_to_look_for").insert(
       analysis.whatToLookFor.map((w) => ({

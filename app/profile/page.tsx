@@ -13,7 +13,7 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, phone, title, organization")
+    .select("full_name, phone, title, organization, is_admin")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!profile) redirect("/onboarding");
@@ -65,6 +65,22 @@ export default async function ProfilePage() {
             </form>
           </div>
         </Card>
+
+        {profile.is_admin ? (
+          <Card variant="tinted-orange">
+            <CardTitle>Admin tools</CardTitle>
+            <CardDescription className="mt-1.5">
+              You have admin access. Cost dashboards and per-user usage are
+              available below.
+            </CardDescription>
+            <Link
+              href="/admin/stats"
+              className="cl-btn-accent mt-4 w-full sm:w-auto"
+            >
+              Open AI cost dashboard
+            </Link>
+          </Card>
+        ) : null}
 
         <Card>
           <CardTitle>About Compliance Lens v2</CardTitle>
