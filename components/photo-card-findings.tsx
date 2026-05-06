@@ -16,6 +16,8 @@ type Props = {
   findings: CompactFinding[];
 };
 
+const ADVISORY_KEY = "cl-include-advisories";
+
 /**
  * Concise findings list shown directly on the photo card on the inspection
  * detail page. Each row has its own kebab menu so the user can edit or
@@ -24,8 +26,53 @@ type Props = {
  *   - Edit  → jumps to /inspections/<id>/photos/<photoId>#finding-<fid>
  *             which scrolls to the matching FindingCard (which has full edit UI)
  *   - Delete → confirm() prompt + server action
+ *
+ * The "Show advisories" toggle (persisted in localStorage) lets the user
+ * include or exclude Low-severity advisory entries from the report list.
+ * Setting is global per browser — applies to every photo card.
  */
 export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
+  const [includeAdvisories, setIncludeAdvisories] = useState(true);
+
+  // Read persisted preference on mount.
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(ADVISORY_KEY);
+      if (v === "0") setIncludeAdvisories(false);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  // Persist whenever the user toggles.
+  const toggle = () => {
+    setIncludeAdvisories((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(ADVISORY_KEY, next ? "1" : "0");
+        // Notify any other PhotoCardFindings on the page to re-read the value.
+        window.dispatchEvent(new CustomEvent("cl-advisories-changed"));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  // Listen for changes from other instances of this component.
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const v = window.localStorage.getItem(ADVISORY_KEY);
+        setIncludeAdvisories(v !== "0");
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("cl-advisories-changed", handler);
+    return () => window.removeEventListener("cl-advisories-changed", handler);
+  }, []);
+
   if (findings.length === 0) {
     return (
       <p className="px-4 pb-3 text-xs text-[var(--fg-subtle)]">
@@ -34,32 +81,79 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
     );
   }
 
-  // Sort High → Medium → Low for the inline view.
+  // Sort High → Medium → Low. We keep ALL findings in the array but apply the
+  // visibility filter at render time so deficiencies retain their numbering
+  // (#1, #2, …) which matches the badges drawn on the photo.
   const order = { High: 0, Medium: 1, Low: 2 } as const;
   const sorted = [...findings].sort(
     (a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3),
   );
+  const visible = includeAdvisories
+    ? sorted
+    : sorted.filter((f) => f.severity !== "Low");
+
+  const advisoryCount = sorted.filter((f) => f.severity === "Low").length;
 
   return (
-    <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-      {sorted.map((f, idx) => (
-        <li
-          key={f.id}
-          className="flex items-center gap-2 px-4 py-2 transition hover:bg-white/[0.02]"
-        >
-          <SeverityPill severity={f.severity} />
-          <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg)]">
-            <span className="text-[var(--fg-subtle)]">#{idx + 1}</span>{" "}
-            {f.title}
+    <div className="border-t border-[var(--border)]">
+      {/* Toggle row */}
+      {advisoryCount > 0 ? (
+        <div className="flex items-center justify-between gap-2 px-4 pb-1.5 pt-2 text-[11px]">
+          <span className="text-[var(--fg-subtle)]">
+            {includeAdvisories
+              ? `Showing all · ${advisoryCount} advisor${advisoryCount === 1 ? "y" : "ies"}`
+              : `Hiding ${advisoryCount} advisor${advisoryCount === 1 ? "y" : "ies"}`}
           </span>
-          <FindingRowMenu
-            findingId={f.id}
-            inspectionId={inspectionId}
-            photoId={photoId}
-          />
-        </li>
-      ))}
-    </ul>
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium text-[var(--fg-muted)] transition hover:bg-white/5 hover:text-[var(--fg)]"
+            aria-pressed={includeAdvisories}
+          >
+            <span
+              className={[
+                "relative inline-block h-3.5 w-6 rounded-full transition",
+                includeAdvisories ? "bg-[var(--primary)]" : "bg-white/15",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition",
+                  includeAdvisories ? "left-3" : "left-0.5",
+                ].join(" ")}
+              />
+            </span>
+            Advisories
+          </button>
+        </div>
+      ) : null}
+
+      {/* Findings list */}
+      <ul className="divide-y divide-[var(--border)]">
+        {visible.map((f) => {
+          // Index uses the original sorted order so numbering stays stable
+          // (deficiencies always #1..#N regardless of advisory toggle).
+          const idx = sorted.indexOf(f);
+          return (
+            <li
+              key={f.id}
+              className="flex items-center gap-2 px-4 py-2 transition hover:bg-white/[0.02]"
+            >
+              <SeverityPill severity={f.severity} />
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg)]">
+                <span className="text-[var(--fg-subtle)]">#{idx + 1}</span>{" "}
+                {f.title}
+              </span>
+              <FindingRowMenu
+                findingId={f.id}
+                inspectionId={inspectionId}
+                photoId={photoId}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -94,7 +188,6 @@ function FindingRowMenu({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on click-outside / Escape.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
