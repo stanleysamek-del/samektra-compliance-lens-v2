@@ -257,14 +257,22 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
   );
 }
 
+/**
+ * Box colors split deficiencies (red) from advisories/suggestions (green),
+ * matching how an inspector reads the photo:
+ *   - Red   = definitive deficiency, fix it (Medium + High severity)
+ *   - Green = advisory / "look at this" / further verification needed (Low)
+ * High severity also gets a pulsing halo so critical items still stand out
+ * against the rest of the red boxes.
+ */
 function severityColor(s: "Low" | "Medium" | "High") {
-  if (s === "High") return "#f87171";
-  if (s === "Medium") return "#fbbf24";
-  return "#cbd5e1";
+  if (s === "High") return "#f87171";    // red
+  if (s === "Medium") return "#f87171";  // red
+  return "#34d399";                      // green (advisory)
 }
 
 function severityFill(s: "Low" | "Medium" | "High") {
-  if (s === "High") return "rgba(248, 113, 113, 0.18)";
-  if (s === "Medium") return "rgba(251, 191, 36, 0.16)";
-  return "rgba(203, 213, 225, 0.10)";
+  if (s === "High") return "rgba(248, 113, 113, 0.20)";
+  if (s === "Medium") return "rgba(248, 113, 113, 0.14)";
+  return "rgba(52, 211, 153, 0.16)";
 }
