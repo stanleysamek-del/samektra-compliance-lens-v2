@@ -42,7 +42,7 @@ export default async function PhotoDetailPage({
       "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2",
     )
     .eq("photo_id", photoId)
-    .order("severity", { ascending: false }) // High → Medium → Low alphabetically — we'll re-sort below
+    .order("severity", { ascending: false })
     .order("created_at", { ascending: true });
 
   const sortedFindings = (findings ?? []).slice().sort((a, b) => {

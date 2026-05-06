@@ -23,29 +23,50 @@ type Props = {
 /**
  * Photo with overlaid finding indicators.
  *
- * Each bbox renders:
- *   - semi-transparent fill in severity color
- *   - solid stroke with vector-effect non-scaling-stroke (consistent thickness)
- *   - pulsing halo on High-severity boxes
- *   - numbered, severity-colored badge floating just above the box
+ * Only Medium / High severity findings are drawn on the photo (in red,
+ * outline-only). Low-severity advisories appear in the findings list below
+ * but are NOT drawn on the photo — keeps the image readable.
+ *
+ * Each visible bbox renders:
+ *   - red outline-only rectangle (no fill) with non-scaling-stroke
+ *   - pulsing halo on High-severity boxes (animated stroke opacity)
+ *   - numbered, red badge floating just above the box
  *   - hover tooltip with the finding title
  *   - click jumps to the matching finding card below
  *
- * A severity legend in the top-right corner indicates what the colors mean.
+ * The severity-summary pill row underneath the photo still shows Low
+ * counts so the user knows there are advisories to review.
  */
 export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [legendVisible, setLegendVisible] = useState(true);
   const aspect = width && height ? `${width} / ${height}` : "16 / 9";
 
+  // Only render boxes for real deficiencies (Medium / High).
+  // Low-severity advisories still appear in the findings list below the photo
+  // but we don't draw them on the image — keeps the photo readable.
+  const visibleBboxes = bboxes.filter(
+    (b) => b.severity === "Medium" || b.severity === "High",
+  );
+
   // Hide legend after 5s if there are findings (let the photo breathe).
   useEffect(() => {
-    if (bboxes.length === 0) return;
+    if (visibleBboxes.length === 0) return;
     const t = setTimeout(() => setLegendVisible(false), 5000);
     return () => clearTimeout(t);
-  }, [bboxes.length]);
+  }, [visibleBboxes.length]);
 
-  const severityCounts = bboxes.reduce(
+  const severityCounts = visibleBboxes.reduce(
+    (acc, b) => {
+      acc[b.severity] = (acc[b.severity] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<"Low" | "Medium" | "High", number>,
+  );
+
+  // Full counts (incl. Low) used for the summary pill row below the photo,
+  // since Low advisories still appear in the findings list.
+  const allSeverityCounts = bboxes.reduce(
     (acc, b) => {
       acc[b.severity] = (acc[b.severity] ?? 0) + 1;
       return acc;
@@ -73,7 +94,7 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
           preserveAspectRatio="none"
         >
           <defs>
-            {bboxes.map((b) => (
+            {visibleBboxes.map((b) => (
               <filter
                 key={`glow-${b.id}`}
                 id={`glow-${b.id}`}
@@ -86,15 +107,14 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
               </filter>
             ))}
           </defs>
-          {bboxes.map((b) => {
+          {visibleBboxes.map((b) => {
             const stroke = severityColor(b.severity);
-            const fill = severityFill(b.severity);
             const isHover = hoverId === b.id;
             const w = Math.max(0, b.x2 - b.x1);
             const h = Math.max(0, b.y2 - b.y1);
             return (
               <g key={b.id}>
-                {/* Pulse halo for High */}
+                {/* Pulse halo for High — outline only, animated stroke */}
                 {b.severity === "High" ? (
                   <rect
                     x={b.x1}
@@ -103,21 +123,21 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
                     height={h}
                     fill="none"
                     stroke={stroke}
-                    strokeWidth={isHover ? 0.012 : 0.008}
+                    strokeWidth={isHover ? 0.014 : 0.010}
                     vectorEffect="non-scaling-stroke"
-                    opacity={0.4}
+                    opacity={0.5}
                     style={{ animation: "cl-bbox-pulse 1.6s ease-in-out infinite" }}
                   />
                 ) : null}
-                {/* Fill */}
+                {/* Outline-only box */}
                 <rect
                   x={b.x1}
                   y={b.y1}
                   width={w}
                   height={h}
-                  fill={fill}
+                  fill="none"
                   stroke={stroke}
-                  strokeWidth={isHover ? 0.006 : 0.004}
+                  strokeWidth={isHover ? 0.007 : 0.005}
                   vectorEffect="non-scaling-stroke"
                 />
               </g>
@@ -126,7 +146,7 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
         </svg>
 
         {/* HTML layer: numbered badges + hover tooltips */}
-        {bboxes.map((b) => {
+        {visibleBboxes.map((b) => {
           const stroke = severityColor(b.severity);
           const left = `${b.x1 * 100}%`;
           const top = `${b.y1 * 100}%`;
@@ -189,13 +209,13 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
           );
         })}
 
-        {/* Severity legend (auto-fades) */}
-        {bboxes.length > 0 && legendVisible ? (
+        {/* Severity legend (auto-fades) — only High/Medium since those are the only boxes drawn */}
+        {visibleBboxes.length > 0 && legendVisible ? (
           <div
             className="absolute right-2 top-2 flex flex-col gap-1 rounded-md border border-white/10 bg-black/70 px-2 py-1.5 text-[10px] backdrop-blur"
             style={{ animation: "cl-legend-fade 0.4s ease" }}
           >
-            {(["High", "Medium", "Low"] as const).map((s) =>
+            {(["High", "Medium"] as const).map((s) =>
               severityCounts[s] ? (
                 <div key={s} className="flex items-center gap-1.5">
                   <span
@@ -219,60 +239,16 @@ export function PhotoWithBoxes({ src, width, height, bboxes }: Props) {
         ) : null}
       </div>
 
-      {/* Quick severity summary (always visible) */}
+      {/* Quick severity summary (always visible) — surfaces Low advisories
+          here even though they don't get drawn on the photo. */}
       {bboxes.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
           {(["High", "Medium", "Low"] as const).map((s) =>
-            severityCounts[s] ? (
+            allSeverityCounts[s] ? (
               <span
                 key={s}
                 className="rounded-full px-2 py-0.5 text-[11px] font-medium"
                 style={{
                   background: severityFill(s),
                   color: severityColor(s),
-                  border: `1px solid ${severityColor(s)}55`,
-                }}
-              >
-                {severityCounts[s]} {s.toLowerCase()}
-              </span>
-            ) : null,
-          )}
-          <span className="text-[var(--fg-subtle)]">
-            · Tap a number on the photo to jump to that finding
-          </span>
-        </div>
-      ) : null}
-
-      <style>{`
-        @keyframes cl-bbox-pulse {
-          0%, 100% { opacity: 0.2; }
-          50%      { opacity: 0.7; }
-        }
-        @keyframes cl-legend-fade {
-          from { opacity: 0; transform: translateY(-4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-/**
- * Box colors split deficiencies (red) from advisories/suggestions (green),
- * matching how an inspector reads the photo:
- *   - Red   = definitive deficiency, fix it (Medium + High severity)
- *   - Green = advisory / "look at this" / further verification needed (Low)
- * High severity also gets a pulsing halo so critical items still stand out
- * against the rest of the red boxes.
- */
-function severityColor(s: "Low" | "Medium" | "High") {
-  if (s === "High") return "#f87171";    // red
-  if (s === "Medium") return "#f87171";  // red
-  return "#34d399";                      // green (advisory)
-}
-
-function severityFill(s: "Low" | "Medium" | "High") {
-  if (s === "High") return "rgba(248, 113, 113, 0.20)";
-  if (s === "Medium") return "rgba(248, 113, 113, 0.14)";
-  return "rgba(52, 211, 153, 0.16)";
-}
+   
