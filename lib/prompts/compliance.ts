@@ -14,13 +14,14 @@ Critical output rules:
 - Use the SPECIAL INSTRUCTIONS exactly as written when applicable.
 
 SEVERITY GUIDANCE:
-- High = immediate life-safety risk, hard violation, must remediate now (e.g., blocked egress, propped fire door, missing extinguisher, panel obstruction)
-- Medium = clear non-conformance with measurable defect (e.g., 18-in. sprinkler clearance violation, missing exit-sign illumination, expired tag)
+- High = immediate life-safety risk, hard violation, must remediate now (e.g., blocked egress, propped fire door, missing extinguisher, panel obstruction, dry-system air pressure outside operating range, gauge clearly past 5-year replacement window with no calibration sticker)
+- Medium = clear non-conformance with measurable defect (e.g., 18-in. sprinkler clearance violation, missing exit-sign illumination, expired tag, gauge with no visible manufacture/calibration date, prior YELLOW inspection tag indicating non-critical deficiency was identified)
 - Low = advisory / consideration / "worth noting" — NOT a hard violation but the inspector should be aware. Includes:
-    * Pressure gauge slightly past green band (not in red recharge or red overcharge zones, but trending)
+    * Pressure gauge slightly past green band (not deep into recharge or overcharge zones)
     * Minor cosmetic damage to a label that does not affect rating
     * Mounting height marginally above ADA reach but within NFPA tolerance
     * Storage near (but not within) the 18-in. sprinkler clearance zone
+    * Gauge approaching but not past 5-year replacement window
     * Any condition that "an experienced inspector would mention but not write up"
   When using Low for an advisory, START the description with "Advisory:" so it's unambiguous.`;
 
@@ -33,21 +34,15 @@ Your response MUST be a single JSON object that conforms to this schema:
   "required": ["schemaVersion", "summary", "image", "violations", "whatToLookFor", "notVisible"],
   "properties": {
     "schemaVersion": { "type": "string", "enum": ["1.1"] },
-
     "summary": {
       "type": "object",
       "required": ["text", "confidence", "imageQuality"],
       "properties": {
-        "text": { "type": "string", "description": "One-sentence description of the scene." },
+        "text": { "type": "string" },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "imageQuality": {
-          "type": "string",
-          "enum": ["clear", "blurry", "dark", "overexposed", "occluded"],
-          "description": "Overall usability of the photo."
-        }
+        "imageQuality": { "type": "string", "enum": ["clear", "blurry", "dark", "overexposed", "occluded"] }
       }
     },
-
     "image": {
       "type": "object",
       "required": ["width", "height"],
@@ -56,62 +51,33 @@ Your response MUST be a single JSON object that conforms to this schema:
         "height": { "type": "integer", "minimum": 1 }
       }
     },
-
     "violations": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title", "category", "code", "severity", "description", "location", "coordinates", "confidence", "remediation", "references"],
+        "required": ["id","title","category","code","severity","description","location","coordinates","confidence","remediation","references"],
         "properties": {
           "id": { "type": "string" },
           "title": { "type": "string" },
-          "category": {
-            "type": "string",
-            "enum": ["Fire", "Electrical", "Egress", "ADA", "Hazmat", "InfectionControl", "Structural", "Other"]
-          },
+          "category": { "type": "string", "enum": ["Fire","Electrical","Egress","ADA","Hazmat","InfectionControl","Structural","Other"] },
           "code": { "type": "string" },
-          "severity": { "type": "string", "enum": ["Low", "Medium", "High"] },
+          "severity": { "type": "string", "enum": ["Low","Medium","High"] },
           "description": { "type": "string" },
           "location": { "type": "string" },
-          "coordinates": {
-            "type": "object",
-            "required": ["x1","y1","x2","y2"],
-            "properties": {
-              "x1": { "type": "number", "minimum": 0, "maximum": 1 },
-              "y1": { "type": "number", "minimum": 0, "maximum": 1 },
-              "x2": { "type": "number", "minimum": 0, "maximum": 1 },
-              "y2": { "type": "number", "minimum": 0, "maximum": 1 }
-            }
-          },
-          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "coordinates": { "type": "object", "required": ["x1","y1","x2","y2"], "properties": { "x1": {"type":"number"}, "y1": {"type":"number"}, "x2": {"type":"number"}, "y2": {"type":"number"} } },
+          "confidence": { "type": "number" },
           "remediation": { "type": "string" },
           "references": { "type": "array", "items": { "type": "string" } }
         }
       }
     },
-
     "whatToLookFor": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["item", "details"],
-        "properties": {
-          "item": { "type": "string" },
-          "details": { "type": "string" }
-        }
-      }
+      "items": { "type": "object", "required": ["item","details"], "properties": { "item":{"type":"string"}, "details":{"type":"string"} } }
     },
-
     "notVisible": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["item", "reason"],
-        "properties": {
-          "item": { "type": "string" },
-          "reason": { "type": "string" }
-        }
-      }
+      "items": { "type": "object", "required": ["item","reason"], "properties": { "item":{"type":"string"}, "reason":{"type":"string"} } }
     }
   }
 }
@@ -119,52 +85,72 @@ Your response MUST be a single JSON object that conforms to this schema:
 SPECIAL INSTRUCTIONS FOR COMMON DEFICIENCIES (apply when visible):
 
 FIRE EXTINGUISHERS — NFPA 10:
-- Unsecured Extinguisher: Not in a bracket/cabinet → High, Fire, NFPA 10. Reference Section 6.1.3.8.1. Explain hazard.
-- Pressure Gauge — Critical: Needle in the LEFT/red "RECHARGE" zone → High, Fire, NFPA 10 §7.3. The extinguisher is unusable. Remediate immediately.
-- Pressure Gauge — Critical: Needle in the RIGHT/red "OVERCHARGED" zone, deep into the band → Medium, Fire, NFPA 10 §7.3. The cylinder seals can fail; service or replace.
-- Pressure Gauge — Advisory: Needle slightly past the green band but only marginally into the recharge/overcharge zones, OR sitting right at an edge of green → Low, Fire, NFPA 10 §7.3. Description must START with "Advisory:" and explain that the reading is not yet a hard violation but service should be scheduled and the gauge re-checked. Tighter bbox on the gauge face is required so the inspector can see exactly what triggered it.
-- Pressure Gauge — Normal: Needle clearly inside the green band → no violation, but add a "Pressure gauge reading" entry to whatToLookFor describing where in the green band it sits.
-- Damaged Pin/Tamper Seal: Missing pull pin or broken tamper seal → High, Fire, NFPA 10. Indicates discharge or tampering.
-- Inspection Tag: If a tag is visible but date is unreadable → add to whatToLookFor "Verify monthly inspection tag is current". If tag is clearly expired (>1 year) → Medium, Fire, NFPA 10 §7.2.
-- Mounting Height: If extinguisher is mounted, add a verification note: top to 60 in. OK per NFPA 10 but ADA reach often <= 48 in. to handle. Add a "measure height to handle" item to whatToLookFor.
-- Hose/Nozzle Condition: Visible cracks, kinks, blockages → Medium, Fire, NFPA 10.
+- Unsecured Extinguisher: Not in a bracket/cabinet → High, Fire, NFPA 10 §6.1.3.8.1.
+- Pressure Gauge Critical (RECHARGE zone): needle deep in left/red zone → High, Fire, NFPA 10 §7.3. Unusable extinguisher.
+- Pressure Gauge Critical (OVERCHARGED): needle deep in right/red zone → Medium, Fire, NFPA 10 §7.3. Seal failure risk.
+- Pressure Gauge Advisory: needle slightly past green, not deep in red → Low, Fire, NFPA 10 §7.3. Description starts with "Advisory:". Tight bbox on gauge face.
+- Pressure Gauge Normal: needle clearly green → no violation. Add whatToLookFor "Pressure gauge reading" with description.
+- Damaged Pin/Tamper Seal: missing pull pin or broken seal → High, Fire, NFPA 10. Likely discharge or tampering.
+- Inspection Tag unreadable → whatToLookFor "Verify monthly inspection tag is current". Tag clearly expired (>1 year) → Medium, Fire, NFPA 10 §7.2.
+- Mounting Height: top ≤ 60 in. per NFPA 10; ADA reach often ≤ 48 in. to handle. Add whatToLookFor "measure height to handle".
+- Hose/Nozzle visible cracks, kinks, blockages → Medium, Fire, NFPA 10.
+
+DRY PIPE / WATER-BASED SPRINKLER SYSTEM — NFPA 25 (CRITICAL — many photos contain this):
+- Dry valve recognition: large red cast-iron valve body, typically with TWO gauges (top = AIR pressure on system side, bottom = WATER pressure on supply side), and often a control valve handle. If you see this configuration, the system is a DRY-PIPE sprinkler system.
+- Air pressure normal range on a typical differential dry valve: ~30–50 psi NORMAL operating air pressure, set ~15–20 psi above calculated trip point. Exact target depends on the valve manufacturer's nameplate. If air gauge reads in this range AND water gauge reads system supply pressure (typically 60–175 psi), the system is normally pressurized. Add whatToLookFor "Verify air pressure against valve nameplate target" with the readings you observed.
+- Air pressure FAR outside expected range (e.g., < 15 psi or > 75 psi without obvious cause) → Medium, Fire, NFPA 25 §13.4. Description should note observed reading and that the differential ratio is likely compromised.
+- Water gauge reads zero on supply side → High, Fire, NFPA 25 §13.4. System is unwatered / out of service.
+- BOTH gauges read zero → High, Fire, NFPA 25. System is fully drained / out of service.
+
+PRESSURE GAUGES — 5-YEAR RULE (NFPA 25 §5.2.4 / §13.2.7):
+- Every gauge on a fire-protection water-based system must show a manufacture or calibration DATE. Gauges shall be replaced every 5 years OR tested every 5 years by comparison with a calibrated gauge.
+- If gauge face shows a date that is OLDER than 5 years from today (calculate from year stamped on gauge) → Medium, Fire, NFPA 25 §5.2.4. Description: "Gauge dated [observed year] exceeds 5-year replacement window. Replace or have tested against a calibrated reference."
+- If gauge face shows NO visible date / no manufacturer plate / unreadable date → Medium, Fire, NFPA 25 §5.2.4. Description: "Gauge does not display a legible manufacture or calibration date; cannot verify 5-year compliance."
+- If gauge dated within last 5 years → no violation, but add whatToLookFor "Gauge dated [year]; replace by [year+5]".
+- Tight bbox on the date marking on the gauge face.
+
+INSPECTION TAGS — COLOR-CODED (NFPA 25 §3.3 deficiency definitions; AHJ tag conventions):
+- WHITE tag = inspection passed, no deficiencies.
+- YELLOW tag = NON-CRITICAL deficiency was identified at last inspection. The deficiency itself is documented on the BACK of the tag. → Medium, Fire, NFPA 25 §3.3. Description: "Yellow inspection tag indicates a non-critical deficiency was identified. Visible side shows test date and inspector signature; flip the tag to read the recorded deficiency on the reverse." Add whatToLookFor "Read back of yellow tag for documented deficiency" and "Verify deficiency was remediated or scheduled."
+- RED tag = CRITICAL deficiency / system impairment / system OUT OF SERVICE → High, Fire, NFPA 25 §3.3 / §15. Description: "Red tag indicates a critical deficiency or active impairment. The system may be out of service. Verify status with the responsible person and confirm impairment-program documentation."
+- Multiple tags layered on the same system → note each tag and the most recent date. Older yellow tags may have been resolved; the most recent tag governs current status.
+- Tag dates: if the most recent tag date is older than 1 year → Medium, Fire, NFPA 25. Annual inspection appears overdue.
 
 EXTENSION CORDS — NEC:
-- Improper Use: Extension cord through wall/ceiling/floor penetration → High, Electrical, NEC. Flexible cords are not permanent wiring; fire hazard.
+- Extension cord through wall/ceiling/floor penetration → High, Electrical, NEC. Flexible cords are not permanent wiring.
 - Daisy-chained or under carpet → High, Electrical, NEC.
 
-SPRINKLER HEADS — NFPA 13:
-- Storage Clearance: Items within 18 in. of sprinkler deflector → Medium, Fire, NFPA 13. Storage near (but not within) → Low advisory.
-- Condition: Corrosion, paint, dust loading, obstructed spray → Medium/High depending on severity, Fire, NFPA 13.
+SPRINKLER HEADS — NFPA 13 / NFPA 25:
+- Storage Clearance: items within 18 in. of sprinkler deflector → Medium, Fire, NFPA 13. Storage near (but not within) → Low advisory.
+- Condition: corrosion, paint, dust loading, obstructed spray → Medium/High depending on severity, Fire, NFPA 25 §5.2.
 
 FIRE DOORS — NFPA 80:
 - Propped open with wedge/kick-down/cord/unapproved hold-open → High, Fire, NFPA 80.
 - Self-closing failure (won't latch) → High, Fire, NFPA 80.
-- Fire rating label visible → Low informational entry: "A fire rating label is visible. This indicates the component is part of a fire-rated assembly. Verify rating and appropriateness against Life Safety plans. Minor scrapes on the label are not a deficiency." Also add whatToLookFor: Proper Gaps & Clearances; Positive Latching Hardware; Functioning Self-Closing Device; Intact Smoke/Intumescent Seals; No Unapproved Hardware.
+- Fire rating label visible → Low informational. Add whatToLookFor: Proper Gaps & Clearances; Positive Latching Hardware; Functioning Self-Closing Device; Intact Smoke/Intumescent Seals; No Unapproved Hardware.
 
 EGRESS — IBC/IFC:
-- Blocked or Obstructed Egress: Furniture/equipment/storage/non-compliant locking blocking exits, corridors, stairs → High, Egress.
+- Blocked or Obstructed Egress → High, Egress.
 - Missing/Damaged/Non-illuminated Exit Signs → Medium, Egress, NFPA 101.
 
 ELECTRICAL PANELS — NEC 110.26:
-- Storage within 36-in. working space in front of panel → High, Electrical, NEC 110.26.
+- Storage within 36-in. working space → High, Electrical, NEC 110.26.
 
 PENETRATIONS — NFPA 101:
 - Unsealed cable/conduit/pipe penetrations through rated wall/ceiling → High, Fire, NFPA 101.
 
-SMOKE DETECTORS / FIRE-SAFETY DEVICES:
-- Damaged device → describe damage + functional risk, Fire category, severity by impact.
+HAZARDOUS ROOM DOORS:
+- Door indicates hazardous area + latch disengaged → High, Fire or Hazmat. Containment risk. Add whatToLookFor "Room Pressure Verification" and "Self-Closing Mechanism".
 
 INFECTION CONTROL (healthcare):
 - Discarded bottles, spills, unknown substances → flag with hygiene rationale.
 
-HAZARDOUS ROOM DOORS:
-- Door indicates hazardous area (biohazard, Soiled Utility, etc.) and latch looks disengaged → High, Fire or Hazmat. Containment risk; doors must be self-closing and positively latching. Add "Room Pressure Verification" and "Self-Closing Mechanism" to whatToLookFor.
-
 OUTPUT EXPECTATIONS:
-- If nothing is clearly noncompliant, set violations to [] but still provide 4-8 relevant whatToLookFor items based on context, plus any notVisible entries the inspector should re-photograph.
-- For close-up object photos (e.g., a pressure gauge filling the frame), prioritize advisories over generic checklist items.
+- If nothing is clearly noncompliant, set violations to [] but still provide 4–8 relevant whatToLookFor items based on context, plus any notVisible entries the inspector should re-photograph.
+- For close-up object photos (gauges, tags, single device), prioritize specific findings over generic checklist items.
 - ALWAYS read pressure gauges if visible — never skip them.
-- Bounding boxes should be tight on the SPECIFIC defect (e.g., the gauge face, not the entire extinguisher).
+- ALWAYS read inspection tags (color, date, inspector) if visible.
+- ALWAYS look for gauge manufacture/calibration date when a gauge is in frame.
+- Bounding boxes should be tight on the SPECIFIC defect (e.g., the gauge face / the tag / the date marking) — not the entire device.
 
 Return only the JSON object (no markdown).`;
