@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { InspectionRowMenu } from "@/components/inspection-row-menu";
 
 export default async function InspectionsPage() {
   const supabase = await createClient();
@@ -18,7 +19,6 @@ export default async function InspectionsPage() {
     .maybeSingle();
   if (!profile) redirect("/onboarding");
 
-  // In-progress (resume candidates), most recent first.
   const { data: inProgress } = await supabase
     .from("inspections")
     .select("id, facility_name, location, date_of_inspection, updated_at")
@@ -26,14 +26,12 @@ export default async function InspectionsPage() {
     .order("updated_at", { ascending: false })
     .limit(5);
 
-  // Recent activity (any status, most recent first).
   const { data: recent } = await supabase
     .from("inspections")
     .select("id, facility_name, location, status, date_of_inspection, created_at")
     .order("created_at", { ascending: false })
     .limit(5);
 
-  // Weekly stats — count photos & high-severity findings created in the last 7 days.
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { count: weeklyScans } = await supabase
     .from("photos")
@@ -97,7 +95,7 @@ export default async function InspectionsPage() {
                 In progress · {inProgress.length}
               </h2>
               <Link
-                href="/inspections/history"
+                href="/inspections/history?status=in_progress"
                 className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
               >
                 See all
@@ -106,24 +104,32 @@ export default async function InspectionsPage() {
             <ul className="flex flex-col gap-2">
               {inProgress.map((row) => (
                 <li key={row.id}>
-                  <Link href={`/inspections/${row.id}`}>
-                    <Card padded={false}>
-                      <div className="flex items-center justify-between gap-3 px-5 py-4">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-[var(--fg)]">
-                            {row.facility_name}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">
-                            {row.location ?? "—"} ·{" "}
-                            {row.date_of_inspection ?? "no date"}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-xs font-medium text-[var(--accent)]">
-                          Continue →
-                        </span>
-                      </div>
-                    </Card>
-                  </Link>
+                  <Card padded={false}>
+                    <div className="flex items-center gap-3 px-5 py-4">
+                      <Link
+                        href={`/inspections/${row.id}`}
+                        className="flex min-w-0 flex-1 flex-col gap-1"
+                      >
+                        <p className="truncate font-medium text-[var(--fg)]">
+                          {row.facility_name}
+                        </p>
+                        <p className="truncate text-xs text-[var(--fg-muted)]">
+                          {row.location ?? "—"} ·{" "}
+                          {row.date_of_inspection ?? "no date"}
+                        </p>
+                      </Link>
+                      <Link
+                        href={`/inspections/${row.id}`}
+                        className="hidden shrink-0 text-xs font-medium text-[var(--accent)] sm:inline"
+                      >
+                        Continue →
+                      </Link>
+                      <InspectionRowMenu
+                        inspectionId={row.id}
+                        facilityName={row.facility_name}
+                      />
+                    </div>
+                  </Card>
                 </li>
               ))}
             </ul>
@@ -183,21 +189,26 @@ export default async function InspectionsPage() {
             <ul className="flex flex-col gap-2">
               {recent.map((row) => (
                 <li key={row.id}>
-                  <Link href={`/inspections/${row.id}`}>
-                    <Card padded={false}>
-                      <div className="flex items-center justify-between gap-3 px-5 py-4">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-[var(--fg)]">
-                            {row.facility_name}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">
-                            {row.location ?? "—"}
-                          </p>
-                        </div>
-                        <StatusPill status={row.status} />
-                      </div>
-                    </Card>
-                  </Link>
+                  <Card padded={false}>
+                    <div className="flex items-center gap-3 px-5 py-4">
+                      <Link
+                        href={`/inspections/${row.id}`}
+                        className="flex min-w-0 flex-1 flex-col gap-1"
+                      >
+                        <p className="truncate text-sm font-medium text-[var(--fg)]">
+                          {row.facility_name}
+                        </p>
+                        <p className="truncate text-xs text-[var(--fg-muted)]">
+                          {row.location ?? "—"}
+                        </p>
+                      </Link>
+                      <StatusPill status={row.status} />
+                      <InspectionRowMenu
+                        inspectionId={row.id}
+                        facilityName={row.facility_name}
+                      />
+                    </div>
+                  </Card>
                 </li>
               ))}
             </ul>
@@ -251,7 +262,7 @@ function StatusPill({ status }: { status: string }) {
   const m = map[status] ?? map.archived;
   return (
     <span
-      className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider"
       style={{ background: m.bg, color: m.fg }}
     >
       {m.label}
