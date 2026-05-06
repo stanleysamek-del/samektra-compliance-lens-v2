@@ -137,6 +137,34 @@ EGRESS — IBC/IFC:
 - Blocked or Obstructed Egress → High, Egress.
 - Missing/Damaged/Non-illuminated Exit Signs → Medium, Egress, NFPA 101.
 
+DECORATIONS / WALL & DOOR COVERINGS — NFPA 101 (occupancy-specific) + NFPA 80 + NFPA 701:
+- All combustible decorations must be flame-retardant per NFPA 701 (or have HRR ≤ 100 kW per NFPA 289). Common decorating paper, kraft paper, plastic tablecloths, and crepe streamers are typically NOT flame-retardant unless specifically labeled.
+- ALLOWABLE SURFACE-AREA COVERAGE varies by OCCUPANCY and whether the smoke compartment is sprinklered:
+  * Health Care / Ambulatory Health Care (§18.7.5 / §19.7.5 / §20.7.5 / §21.7.5): 20% of wall/ceiling/door area non-sprinklered; 30% sprinklered. Patient sleeping rooms ≤ 4 occupants in sprinklered smoke compartment may reach 50%.
+  * Educational / Day-care (§14.7.4 / §15.7.4 / §16.7.4 / §17.7.4): 20% non-sprinklered; 50% sprinklered.
+  * Assembly (§12.7.4 / §13.7.4): no fixed wall-area percentage, but ALL decorations must meet NFPA 701; foamed plastic scenery HRR ≤ 100 kW per NFPA 289.
+  * Detention/Correctional (§22.7.5 / §23.7.5): combustible decorations PROHIBITED unless flame-retardant AND specifically approved by AHJ.
+  * Business (Ch. 38/39): NFPA 101 sets no percentage cap, but the NFPA 701 flame-retardant requirement still applies and Ch. 7 egress/visibility rules still apply.
+- FIRE-RATED DOORS — NFPA 80 §4.1.4: attached signs/decorations limited to ≤ 5% of door face area, NEVER on glazing/vision panels, must not impair operation/latching/closing or obscure listing labels. Decorative paper/tape that wraps most of a fire-rated door face violates this regardless of occupancy. Holiday wreaths/garlands/paper decorations on rated doors are generally non-compliant.
+- VISION PANELS (door windows) must NEVER be covered or blacked out — required for life-safety visibility through fire/smoke barriers.
+- Decorations must NOT block, cover, or obstruct: exit signs (§7.10.1.8), exit doors/hardware (§7.1.10.1, §7.5.2), fire alarm pull stations (§9.6), portable extinguishers/cabinets (NFPA 10 §6.1.3.3), sprinkler heads (NFPA 13/25 §5.2.1.2.1 — 18-in clearance below deflector), smoke detectors, or door closers.
+
+WHEN you see substantial decoration on walls, doors, or ceilings:
+1. Estimate the visible decorated PERCENTAGE of the surface in frame and call it out in the description.
+2. State your OCCUPANCY assumption explicitly (e.g., "Assuming Business / Health Care / Educational occupancy based on visible context — fire station, hospital corridor, school hallway"). The allowable percentage varies dramatically by occupancy, and many photos cannot definitively establish occupancy from a single frame. Add whatToLookFor: "Confirm occupancy classification — decoration limits range from prohibited (Detention) to 50% in sprinklered patient rooms (Health Care) to 50% in sprinklered Educational. Verify against the correct NFPA 101 chapter."
+3. Specific calls (apply the most restrictive that fits):
+   - Decorations covering >50% of any door face → Medium, Fire, NFPA 80 §4.1.4. Title approximately: "Excessive door decoration — exceeds NFPA 80 5% limit if door is fire-rated".
+   - Vision panels covered/blacked out → Medium, Fire, NFPA 80. Title: "Door vision panel obstructed by decoration".
+   - Decorations covering or obstructing fire alarm pull stations, exit signs, exit hardware, extinguisher cabinets, sprinkler heads, or smoke detectors → High, Fire, NFPA 101 / NFPA 80 / NFPA 10. Title names the specific obstructed device.
+   - Combustible decoration with no visible flame-retardant labeling → Low advisory, Fire, NFPA 701. Description starts with "Advisory:".
+   - Decoration on a fire-rated door (look for door rating label, intumescent seal, self-closer) → Medium, Fire, NFPA 80, regardless of percentage.
+4. ALWAYS add these whatToLookFor entries when decorations are present:
+   - "Confirm occupancy classification — decoration percentage limits vary by NFPA 101 chapter".
+   - "Verify NFPA 701 flame-retardant certification (label or vendor documentation) for the visible decorative material".
+   - "Check for fire-rated door labels — if doors are rated, decoration must comply with NFPA 80 §4.1.4 (≤ 5% of door face, not on glazing)".
+   - "Measure decorated surface area against occupancy-specific cap and verify sprinkler protection in the smoke compartment".
+5. Bbox EACH decorated surface separately per the one-finding-per-object rule below — e.g., two decorated doors = two findings = two boxes.
+
 ELECTRICAL PANELS — NEC 110.26:
 - Storage within 36-in. working space → High, Electrical, NEC 110.26.
 
