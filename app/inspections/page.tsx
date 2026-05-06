@@ -9,20 +9,41 @@ export default async function InspectionsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, organization")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (!profile) redirect("/onboarding");
 
-  if (!profile) {
-    redirect("/onboarding");
-  }
+  // In-progress (resume candidates), most recent first.
+  const { data: inProgress } = await supabase
+    .from("inspections")
+    .select("id, facility_name, location, date_of_inspection, updated_at")
+    .eq("status", "in_progress")
+    .order("updated_at", { ascending: false })
+    .limit(5);
+
+  // Recent activity (any status, most recent first).
+  const { data: recent } = await supabase
+    .from("inspections")
+    .select("id, facility_name, location, status, date_of_inspection, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  // Weekly stats — count photos & high-severity findings created in the last 7 days.
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { count: weeklyScans } = await supabase
+    .from("photos")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", sevenDaysAgo);
+  const { count: weeklyHighFindings } = await supabase
+    .from("findings")
+    .select("id", { count: "exact", head: true })
+    .eq("severity", "High")
+    .gte("created_at", sevenDaysAgo);
 
   const insight = pickDailyInsight();
 
@@ -35,6 +56,7 @@ export default async function InspectionsPage() {
       }}
     >
       <div className="flex flex-col gap-5">
+        {/* Hero card */}
         <Card variant="tinted-orange">
           <div className="flex items-start gap-4">
             <div
@@ -67,12 +89,63 @@ export default async function InspectionsPage() {
           </div>
         </Card>
 
+        {/* Resume in-progress */}
+        {inProgress && inProgress.length > 0 ? (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between px-1">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                In progress · {inProgress.length}
+              </h2>
+              <Link
+                href="/inspections/history"
+                className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
+              >
+                See all
+              </Link>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {inProgress.map((row) => (
+                <li key={row.id}>
+                  <Link href={`/inspections/${row.id}`}>
+                    <Card padded={false}>
+                      <div className="flex items-center justify-between gap-3 px-5 py-4">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-[var(--fg)]">
+                            {row.facility_name}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">
+                            {row.location ?? "—"} ·{" "}
+                            {row.date_of_inspection ?? "no date"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-medium text-[var(--accent)]">
+                          Continue →
+                        </span>
+                      </div>
+                    </Card>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* Stats grid */}
         <section className="grid grid-cols-3 gap-3">
-          <StatCard label="Weekly Scans" value="0" />
-          <StatCard label="Risks Found" value="0" tone="warning" />
-          <StatCard label="Compliance" value="100%" tone="primary" />
+          <StatCard label="Weekly Scans" value={String(weeklyScans ?? 0)} />
+          <StatCard
+            label="Risks Found"
+            value={String(weeklyHighFindings ?? 0)}
+            tone="warning"
+          />
+          <StatCard
+            label="Compliance"
+            value={(weeklyScans ?? 0) === 0 ? "—" : `${Math.max(0, 100 - Math.min(100, (weeklyHighFindings ?? 0) * 5))}%`}
+            tone="primary"
+          />
         </section>
 
+        {/* Daily Code Insight */}
         <Card variant="tinted-orange">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -91,15 +164,13 @@ export default async function InspectionsPage() {
           <p className="mt-3 text-sm leading-relaxed text-[var(--fg-muted)]">
             {insight.body}
           </p>
-          <div className="mt-4 flex items-center justify-between text-xs text-[var(--fg-subtle)]">
-            <span>Updates daily · Works offline</span>
-          </div>
         </Card>
 
+        {/* Recent activity */}
         <section className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between px-1">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-              Recent Activity
+              Recent activity
             </h2>
             <Link
               href="/inspections/history"
@@ -108,28 +179,41 @@ export default async function InspectionsPage() {
               See all
             </Link>
           </div>
-          <Card padded={false}>
-            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-              <div
-                className="flex h-10 w-10 items-center justify-center rounded-full"
-                style={{ background: "rgba(148, 163, 184, 0.08)", color: "var(--fg-subtle)" }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-                  <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
+          {recent && recent.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {recent.map((row) => (
+                <li key={row.id}>
+                  <Link href={`/inspections/${row.id}`}>
+                    <Card padded={false}>
+                      <div className="flex items-center justify-between gap-3 px-5 py-4">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-[var(--fg)]">
+                            {row.facility_name}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">
+                            {row.location ?? "—"}
+                          </p>
+                        </div>
+                        <StatusPill status={row.status} />
+                      </div>
+                    </Card>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Card padded={false}>
+              <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+                <p className="text-sm font-medium text-[var(--fg-muted)]">
+                  No inspections yet
+                </p>
+                <p className="text-xs text-[var(--fg-subtle)]">
+                  Start your first inspection from the button above.
+                </p>
               </div>
-              <p className="text-sm font-medium text-[var(--fg-muted)]">No recent scans</p>
-              <p className="text-xs text-[var(--fg-subtle)]">
-                Start a new inspection from the Upload tab.
-              </p>
-            </div>
-          </Card>
+            </Card>
+          )}
         </section>
-
-        <p className="px-1 pt-3 text-center text-[11px] text-[var(--fg-subtle)] sm:text-left">
-          Compliance Lens v2 · Inspection flow rolls out incrementally · v1 remains live for production use
-        </p>
       </div>
     </AppShell>
   );
@@ -155,6 +239,23 @@ function StatCard({
         {value}
       </span>
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const map: Record<string, { label: string; bg: string; fg: string }> = {
+    in_progress: { label: "In progress", bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" },
+    completed: { label: "Completed", bg: "rgba(34,197,94,0.12)", fg: "#86efac" },
+    archived: { label: "Archived", bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" },
+  };
+  const m = map[status] ?? map.archived;
+  return (
+    <span
+      className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      style={{ background: m.bg, color: m.fg }}
+    >
+      {m.label}
+    </span>
   );
 }
 
