@@ -5,9 +5,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Finalize/reopen an inspection. Reads inspection_id + status from the
- * submitted form data — using FormData rather than .bind() avoids a Next.js
- * 16 quirk where bound server-action invocations could 400 the page.
+ * Finalize/reopen an inspection. Reads inspection_id + status from form data
+ * (avoiding .bind() — Next.js 16 has been flaky with bound server actions).
  */
 export async function finalizeInspection(formData: FormData) {
   const inspectionId = String(formData.get("inspection_id") ?? "");
@@ -82,6 +81,56 @@ export async function updateInspection(formData: FormData) {
 
   revalidatePath(`/inspections/${inspectionId}`);
   redirect(`/inspections/${inspectionId}`);
+}
+
+/**
+ * Permanently delete an inspection plus its photos, findings, and storage
+ * objects. RLS scoping ensures users can only delete their own inspections.
+ *
+ * Used from the history page row menu and the inspection detail page.
+ */
+export async function deleteInspection(formData: FormData) {
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  const redirectTo = String(formData.get("redirect_to") ?? "/inspections/history");
+  if (!inspectionId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Pull every photo so we can clean up storage objects too.
+  const { data: photos } = await supabase
+    .from("photos")
+    .select("storage_path")
+    .eq("inspection_id", inspectionId);
+
+  const storagePaths = (photos ?? [])
+    .map((p) => p.storage_path)
+    .filter((s): s is string => Boolean(s));
+
+  if (storagePaths.length > 0) {
+    await supabase.storage.from("photos").remove(storagePaths);
+  }
+
+  // CASCADE on the inspections row removes photos, findings, what_to_look_for,
+  // not_visible, drawings (per 0001_init.sql FK definitions).
+  const { error } = await supabase
+    .from("inspections")
+    .delete()
+    .eq("id", inspectionId);
+
+  if (error) {
+    console.error("[deleteInspection]", error);
+    redirect(
+      `/inspections/history?error=${encodeURIComponent(error.message)}`,
+    );
+  }
+
+  revalidatePath("/inspections");
+  revalidatePath("/inspections/history");
+  redirect(redirectTo);
 }
 
 function stringOrNull(v: FormDataEntryValue | null): string | null {
