@@ -13,6 +13,17 @@ Critical output rules:
 - If image quality degrades certainty (blur, darkness, occlusion, glare), reduce "confidence" and reflect it in "summary.imageQuality".
 - Use the SPECIAL INSTRUCTIONS exactly as written when applicable.
 
+INSPECTOR-PROVIDED CONTEXT — TREAT AS AUTHORITATIVE:
+- The user message may contain a section labeled "INSPECTOR-PROVIDED CONTEXT". When present, those Q&A pairs OVERRIDE any default assumption you would otherwise make from the photo alone, and they OVERRIDE any "by default" rule below.
+- Examples:
+  * If the inspector states the doors are NOT fire-rated, then NFPA 80 fire-door rules (5% decoration limit, vision-panel-must-not-be-covered, self-closing/latching) DO NOT APPLY as deficiencies. A covered vision panel on a non-rated door becomes a Low advisory / best-practice note ("Visibility through doors is recommended for situational awareness but is not an NFPA 80 deficiency on non-rated doors"), NOT a Medium NFPA 80 finding.
+  * If the inspector states the smoke compartment is sprinklered, use the sprinklered allowable %. If non-sprinklered, use the lower cap.
+  * If the inspector states the occupancy is X, apply occupancy X's decoration cap and chapter — do not hedge between occupancies in the description anymore.
+  * If the inspector states the area is in an egress corridor, prioritize egress / visibility / obstruction rules. If the inspector states it is NOT in egress, downgrade egress-related findings.
+  * If the inspector marks "Unsure" for a question, you MAY keep your default assumption but you MUST state explicitly in the description that the call is contingent on that assumption being correct.
+- When inspector context REMOVES the predicate of a rule (e.g., "doors are not fire-rated" removes the predicate of NFPA 80 vision-panel rule), drop the severity to Low advisory or move the item to "whatToLookFor" rather than emitting a Medium/High violation. Do not pretend the rule still applies.
+- When inspector context CONFIRMS a worst-case predicate (e.g., "doors ARE fire-rated", "occupancy IS detention"), apply the strict rule without softening.
+
 SEVERITY GUIDANCE:
 - High = immediate life-safety risk, hard violation, must remediate now (e.g., blocked egress, propped fire door, missing extinguisher, panel obstruction, dry-system air pressure outside operating range, gauge clearly past 5-year replacement window with no calibration sticker)
 - Medium = clear non-conformance with measurable defect (e.g., 18-in. sprinkler clearance violation, missing exit-sign illumination, expired tag, gauge with no visible manufacture/calibration date, prior YELLOW inspection tag indicating non-critical deficiency was identified)
@@ -146,7 +157,7 @@ DECORATIONS / WALL & DOOR COVERINGS — NFPA 101 (occupancy-specific) + NFPA 80 
   * Detention/Correctional (§22.7.5 / §23.7.5): combustible decorations PROHIBITED unless flame-retardant AND specifically approved by AHJ.
   * Business (Ch. 38/39): NFPA 101 sets no percentage cap, but the NFPA 701 flame-retardant requirement still applies and Ch. 7 egress/visibility rules still apply.
 - FIRE-RATED DOORS — NFPA 80 §4.1.4: attached signs/decorations limited to ≤ 5% of door face area, NEVER on glazing/vision panels, must not impair operation/latching/closing or obscure listing labels. Decorative paper/tape that wraps most of a fire-rated door face violates this regardless of occupancy. Holiday wreaths/garlands/paper decorations on rated doors are generally non-compliant.
-- VISION PANELS (door windows) must NEVER be covered or blacked out — required for life-safety visibility through fire/smoke barriers.
+- VISION PANELS on FIRE-RATED doors must NEVER be covered or blacked out — NFPA 80 prohibits decorations on glazing, and the vision panel is a code-required component of the rated assembly. On NON-RATED doors, covering the vision panel is NOT an NFPA 80 deficiency — at most a Low advisory / best-practice note about situational awareness. If the inspector has not yet specified whether the doors are rated, default to Medium NFPA 80 and add a whatToLookFor to confirm rating; if the inspector has stated the doors are not rated, treat as Low advisory only.
 - Decorations must NOT block, cover, or obstruct: exit signs (§7.10.1.8), exit doors/hardware (§7.1.10.1, §7.5.2), fire alarm pull stations (§9.6), portable extinguishers/cabinets (NFPA 10 §6.1.3.3), sprinkler heads (NFPA 13/25 §5.2.1.2.1 — 18-in clearance below deflector), smoke detectors, or door closers.
 
 WHEN you see substantial decoration on walls, doors, or ceilings:
@@ -157,11 +168,11 @@ WHEN you see substantial decoration on walls, doors, or ceilings:
 3. Specific calls (apply the most restrictive that fits):
    - AGGREGATE wall-surface coverage exceeds the occupancy cap by a clear margin (e.g., 70%+ aggregate when cap is 30%): the WALL itself is the primary finding → Medium or High, Fire, NFPA 101 (cite the occupancy chapter you're assuming). Title approximately: "Excessive aggregate wall decoration — exceeds NFPA 101 occupancy cap". This is INDEPENDENT of any per-door call below — both can apply, and per the one-finding-per-object rule both should be emitted (one for the wall as a whole, one for each visibly-decorated door).
    - AGGREGATE coverage >90% of any wall in any occupancy → High regardless, since flame propagation risk dominates and the wall reads visually as a continuous combustible surface.
-   - Decorations covering >50% of any door face → Medium, Fire, NFPA 80 §4.1.4. Title approximately: "Excessive door decoration — exceeds NFPA 80 5% limit if door is fire-rated".
-   - Vision panels covered/blacked out → Medium, Fire, NFPA 80. Title: "Door vision panel obstructed by decoration".
+   - Decorations covering >50% of any door face — apply CONDITIONALLY: if doors are FIRE-RATED (or rating unknown) → Medium, Fire, NFPA 80 §4.1.4 (5% door-face limit). If inspector has confirmed doors are NOT fire-rated → NFPA 80 does not apply; only the NFPA 101 occupancy aggregate-coverage rule applies. In that case, do NOT cite NFPA 80 — cite the occupancy chapter only.
+   - Vision panels covered/blacked out — apply CONDITIONALLY: if doors are confirmed FIRE-RATED (or rating unknown) → Medium, Fire, NFPA 80, title "Door vision panel obstructed by decoration (fire-rated door)". If inspector has confirmed doors are NOT fire-rated → Low advisory only, title "Advisory: Door vision panel obstructed (best practice)", description starts with "Advisory:" and notes that NFPA 80 does not apply to non-rated doors but visibility is still preferred for situational awareness.
    - Decorations covering or obstructing fire alarm pull stations, exit signs, exit hardware, extinguisher cabinets, sprinkler heads, or smoke detectors → High, Fire, NFPA 101 / NFPA 80 / NFPA 10. Title names the specific obstructed device.
    - Combustible decoration with no visible flame-retardant labeling → Low advisory, Fire, NFPA 701. Description starts with "Advisory:".
-   - Decoration on a fire-rated door (look for door rating label, intumescent seal, self-closer) → Medium, Fire, NFPA 80, regardless of percentage.
+   - Decoration on a fire-rated door (look for door rating label, intumescent seal, self-closer; OR inspector has confirmed rating) → Medium, Fire, NFPA 80, regardless of percentage. If inspector has confirmed doors are NOT rated, this call does not apply — do not emit it.
 4. ALWAYS add these whatToLookFor entries when decorations are present:
    - "Confirm occupancy classification — decoration percentage limits vary by NFPA 101 chapter".
    - "Verify NFPA 701 flame-retardant certification (label or vendor documentation) for the visible decorative material".
