@@ -26,7 +26,8 @@ export default async function InspectionDetailPage({
     .maybeSingle();
   if (!profile) redirect("/onboarding");
 
-  const { data: inspection } = await supabase
+  // ---- Inspection ----
+  const { data: inspection, error: inspectionErr } = await supabase
     .from("inspections")
     .select(
       "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at",
@@ -34,15 +35,22 @@ export default async function InspectionDetailPage({
     .eq("id", id)
     .maybeSingle();
 
+  if (inspectionErr) {
+    return renderError(profile, user.email ?? null, "Could not load inspection", inspectionErr.message);
+  }
   if (!inspection) notFound();
 
-  const { data: photos } = await supabase
+  // ---- Photos (defensive: don't 500 if storage bucket is missing) ----
+  const { data: photos, error: photosErr } = await supabase
     .from("photos")
     .select("id, storage_path, photo_location, analyzed_at, created_at")
     .eq("inspection_id", id)
     .order("created_at", { ascending: false });
 
-  // Pull finding counts grouped by photo (one round trip).
+  if (photosErr) {
+    return renderError(profile, user.email ?? null, "Could not load photos", photosErr.message);
+  }
+
   const photoIds = (photos ?? []).map((p) => p.id);
   let findingsByPhoto: Record<string, { total: number; high: number }> = {};
   if (photoIds.length > 0) {
@@ -50,7 +58,6 @@ export default async function InspectionDetailPage({
       .from("findings")
       .select("photo_id, severity")
       .in("photo_id", photoIds);
-
     findingsByPhoto = (findings ?? []).reduce<typeof findingsByPhoto>(
       (acc, f) => {
         const pid = f.photo_id as string | null;
@@ -64,16 +71,25 @@ export default async function InspectionDetailPage({
     );
   }
 
-  // Signed URLs for thumbnails (1 hour).
+  // Storage URLs — wrap so missing bucket doesn't kill the page.
   const photoUrls: Record<string, string> = {};
-  await Promise.all(
-    (photos ?? []).map(async (p) => {
-      const { data } = await supabase.storage
-        .from("photos")
-        .createSignedUrl(p.storage_path, 60 * 60);
-      if (data?.signedUrl) photoUrls[p.id] = data.signedUrl;
-    }),
-  );
+  let storageBucketMissing = false;
+  if (photos && photos.length > 0) {
+    try {
+      await Promise.all(
+        photos.map(async (p) => {
+          const { data, error } = await supabase.storage
+            .from("photos")
+            .createSignedUrl(p.storage_path, 60 * 60);
+          if (error) throw error;
+          if (data?.signedUrl) photoUrls[p.id] = data.signedUrl;
+        }),
+      );
+    } catch (err) {
+      console.error("[inspection detail] storage bucket issue:", err);
+      storageBucketMissing = true;
+    }
+  }
 
   const isCompleted = inspection.status === "completed";
 
@@ -115,6 +131,20 @@ export default async function InspectionDetailPage({
             <Field label="Address" value={inspection.facility_address} />
           </dl>
         </Card>
+
+        {storageBucketMissing ? (
+          <Card>
+            <p className="font-medium text-[var(--warning)]">
+              Storage bucket &ldquo;photos&rdquo; not found in Supabase
+            </p>
+            <p className="mt-2 text-sm text-[var(--fg-muted)]">
+              Photo upload won&apos;t work until the bucket is created. In Supabase →
+              Storage, create a private bucket called <code>photos</code>, or run
+              the bucket-creation SQL from <code>supabase/migrations/0001_init.sql</code>{" "}
+              in the SQL editor.
+            </p>
+          </Card>
+        ) : null}
 
         {/* Photo uploader (hidden when completed) */}
         {!isCompleted ? (
@@ -239,6 +269,25 @@ export default async function InspectionDetailPage({
           )}
         </Card>
       </div>
+    </AppShell>
+  );
+}
+
+function renderError(
+  profile: { full_name: string; organization: string | null },
+  email: string | null,
+  title: string,
+  detail: string,
+) {
+  return (
+    <AppShell user={{ fullName: profile.full_name, organization: profile.organization, email }}>
+      <Card>
+        <h2 className="font-semibold text-[var(--danger)]">{title}</h2>
+        <p className="mt-2 text-sm text-[var(--fg-muted)]">{detail}</p>
+        <p className="mt-3 text-xs text-[var(--fg-subtle)]">
+          Did you run the migrations in <code>supabase/migrations/</code>? Open Supabase → SQL editor and execute <code>0001_init.sql</code> and <code>0002_profiles.sql</code>.
+        </p>
+      </Card>
     </AppShell>
   );
 }
