@@ -19,18 +19,21 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
 // Rotating "thinking" messages shown while AI analysis is in flight.
-// Calibrated to feel like an experienced inspector talking through their checks.
+// Generic compliance-inspection language so they read sensibly regardless of
+// what the photo actually contains (extinguisher close-up, sprinkler valve,
+// hallway with decorations, electrical panel, exit sign, etc.). The AI doesn't
+// see these — they're just a friendly progress indicator.
 const THINKING_MESSAGES = [
-  "Recognizing objects in the frame…",
-  "Reading the pressure gauge…",
-  "Checking mounting height & accessibility…",
-  "Looking for tampering or damage…",
-  "Verifying inspection tag and dates…",
-  "Scanning for fire, electrical, and egress hazards…",
-  "Cross-checking NFPA 10 / 13 / 80 / 101…",
-  "Measuring clearances and obstructions…",
-  "Drafting findings with code citations…",
-  "Tightening bounding boxes…",
+  "Identifying objects and code-relevant features in the frame…",
+  "Reading any visible labels, tags, gauges, or signage…",
+  "Estimating clearances, mounting heights, and surface coverage…",
+  "Looking for fire, electrical, life-safety, and egress hazards…",
+  "Checking for obstructions or anything blocking required equipment…",
+  "Cross-checking applicable codes (NFPA, IBC, IFC, NEC, ADA, Title 25)…",
+  "Considering the most likely occupancy classification…",
+  "Drafting findings with code citations and remediation…",
+  "Tightening bounding boxes around any deficiencies…",
+  "Compiling a \"what to look for\" checklist for the on-site inspector…",
 ];
 
 export function PhotoUploader({ inspectionId }: Props) {
