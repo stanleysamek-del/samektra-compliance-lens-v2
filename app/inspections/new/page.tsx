@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardDescription, CardTitle } from "@/components/card";
+import { Card } from "@/components/card";
+import { createInspection } from "./actions";
 
-export default async function NewInspectionPage() {
+export default async function NewInspectionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,10 +17,13 @@ export default async function NewInspectionPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, organization")
+    .select("full_name, organization, phone, title")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!profile) redirect("/onboarding");
+
+  const params = await searchParams;
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <AppShell
@@ -34,51 +42,149 @@ export default async function NewInspectionPage() {
             New inspection
           </h1>
           <p className="mt-1 text-sm text-[var(--fg-muted)]">
-            Set up the facility and inspector details, then start uploading
-            photos.
+            Set up the facility and inspector details, then start uploading photos.
           </p>
         </div>
 
-        <Card variant="tinted-teal">
-          <CardTitle>Coming soon</CardTitle>
-          <CardDescription className="mt-2">
-            The inspection setup form is the next thing we ship: facility name
-            and address, location (department / smoke compartment / suite),
-            inspector name, manager assignment, dates, and signatures. Photo
-            upload &amp; AI analysis follow on the next step.
-          </CardDescription>
+        <Card>
+          <form action={createInspection} className="flex flex-col gap-4">
+            <div className="flex flex-col">
+              <label htmlFor="facility_name" className="cl-label">
+                Facility name <span style={{ color: "var(--danger)" }}>*</span>
+              </label>
+              <input
+                id="facility_name"
+                name="facility_name"
+                type="text"
+                required
+                placeholder="Mercy Health — Atlanta Campus"
+                className="cl-input"
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <label htmlFor="facility_address" className="cl-label">
+                Facility address
+              </label>
+              <input
+                id="facility_address"
+                name="facility_address"
+                type="text"
+                placeholder="123 Compliance Way, Atlanta, GA 30301"
+                className="cl-input"
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <label htmlFor="location" className="cl-label">
+                Location
+              </label>
+              <input
+                id="location"
+                name="location"
+                type="text"
+                placeholder="ED · Smoke Compartment 3 · Wing B"
+                className="cl-input"
+              />
+              <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
+                Department, smoke compartment, suite, or other inspection scope.
+              </p>
+            </div>
+
+            <div className="flex flex-col">
+              <label htmlFor="inspector_name" className="cl-label">
+                Inspector name
+              </label>
+              <input
+                id="inspector_name"
+                name="inspector_name"
+                type="text"
+                defaultValue={profile.full_name ?? ""}
+                className="cl-input"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col">
+                <label htmlFor="manager_assigned" className="cl-label">
+                  Assigned manager
+                </label>
+                <input
+                  id="manager_assigned"
+                  name="manager_assigned"
+                  type="text"
+                  placeholder="Jane Smith"
+                  className="cl-input"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label htmlFor="manager_assigned_email" className="cl-label">
+                  Manager email
+                </label>
+                <input
+                  id="manager_assigned_email"
+                  name="manager_assigned_email"
+                  type="email"
+                  placeholder="jane@facility.com"
+                  className="cl-input"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col">
+                <label htmlFor="date_of_inspection" className="cl-label">
+                  Date of inspection
+                </label>
+                <input
+                  id="date_of_inspection"
+                  name="date_of_inspection"
+                  type="date"
+                  defaultValue={today}
+                  className="cl-input"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label htmlFor="date_assigned" className="cl-label">
+                  Date assigned (manager)
+                </label>
+                <input
+                  id="date_assigned"
+                  name="date_assigned"
+                  type="date"
+                  className="cl-input"
+                />
+              </div>
+            </div>
+
+            {params.error ? (
+              <p
+                className="rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  borderColor: "rgba(239,68,68,0.3)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#fca5a5",
+                }}
+              >
+                {params.error}
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+              <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
+                Create & start uploading
+              </button>
+              <a href="/inspections" className="cl-btn-outline w-full sm:w-auto">
+                Cancel
+              </a>
+            </div>
+          </form>
         </Card>
 
-        <Card>
-          <CardTitle>What you&apos;ll be able to do here</CardTitle>
-          <ul className="mt-3 flex flex-col gap-2.5 text-sm text-[var(--fg-muted)]">
-            <li className="flex items-start gap-2">
-              <Bullet /> Capture or upload photos of any building area
-            </li>
-            <li className="flex items-start gap-2">
-              <Bullet /> Get AI-flagged violations with NFPA, IBC, IFC, NEC
-              citations
-            </li>
-            <li className="flex items-start gap-2">
-              <Bullet /> Edit findings, severity, and remediation before
-              finalization
-            </li>
-            <li className="flex items-start gap-2">
-              <Bullet /> Export CAP, LSRA, ILSM (Excel) and a signed PDF
-              report
-            </li>
-          </ul>
-        </Card>
+        <p className="px-1 text-center text-[11px] text-[var(--fg-subtle)] sm:text-left">
+          You can edit any of these fields later from the inspection detail page.
+        </p>
       </div>
     </AppShell>
-  );
-}
-
-function Bullet() {
-  return (
-    <span
-      className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-      style={{ background: "var(--primary)" }}
-    />
   );
 }
