@@ -14,10 +14,12 @@ export const maxDuration = 60;
  * Uses pdf-lib (pure JS, no native deps, works on Vercel).
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id: inspectionId } = await ctx.params;
+  const debug = new URL(request.url).searchParams.get("debug") === "1";
+  try {
   const supabase = await createClient();
   const {
     data: { user },
@@ -106,7 +108,7 @@ export async function GET(
 
   function drawWrappedText(
     page: import("pdf-lib").PDFPage,
-    text: string,
+    rawText: string,
     x: number,
     y: number,
     maxWidth: number,
@@ -115,6 +117,7 @@ export async function GET(
     color = FG,
     lineHeight = 1.35,
   ): number {
+    const text = safeText(rawText);
     const words = (text ?? "").split(/\s+/);
     let line = "";
     let cy = y;
@@ -122,7 +125,7 @@ export async function GET(
       const test = line ? line + " " + word : word;
       const w = font.widthOfTextAtSize(test, size);
       if (w > maxWidth && line) {
-        page.drawText(line, { x, y: cy, size, font, color });
+        page.drawText(safeText(line), { x, y: cy, size, font, color });
         cy -= size * lineHeight;
         line = word;
       } else {
@@ -130,7 +133,7 @@ export async function GET(
       }
     }
     if (line) {
-      page.drawText(line, { x, y: cy, size, font, color });
+      page.drawText(safeText(line), { x, y: cy, size, font, color });
       cy -= size * lineHeight;
     }
     return cy;
@@ -146,14 +149,14 @@ export async function GET(
     height: 8,
     color: ORANGE,
   });
-  cover.drawText("Compliance Lens by Samektra", {
+  cover.drawText(safeText("Compliance Lens by Samektra"), {
     x: MARGIN,
     y: PAGE_H - 64,
     size: 11,
     font: helv,
     color: MUTED,
   });
-  cover.drawText("Inspection Report", {
+  cover.drawText(safeText("Inspection Report"), {
     x: MARGIN,
     y: PAGE_H - 104,
     size: 28,
@@ -166,7 +169,7 @@ export async function GET(
   const valueSize = 12;
 
   function field(label: string, value: string | null | undefined) {
-    cover.drawText(label.toUpperCase(), {
+    cover.drawText(safeText(label.toUpperCase()), {
       x: MARGIN,
       y: cy,
       size: labelSize,
@@ -174,7 +177,7 @@ export async function GET(
       color: MUTED,
     });
     cy -= 14;
-    cover.drawText(value && value.trim().length > 0 ? value : "—", {
+    cover.drawText(safeText(value && value.trim().length > 0 ? value : "—"), {
       x: MARGIN,
       y: cy,
       size: valueSize,
@@ -208,7 +211,7 @@ export async function GET(
     `${totalFindings} total · ${counts.High} high · ${counts.Medium} medium · ${counts.Low} low`,
   );
 
-  cover.drawText(`Generated ${new Date().toLocaleString()}`, {
+  cover.drawText(safeText(`Generated ${new Date().toLocaleString()}`), {
     x: MARGIN,
     y: 40,
     size: 9,
@@ -228,7 +231,7 @@ export async function GET(
     let py = PAGE_H - MARGIN;
 
     // Header
-    page.drawText(`Photo ${i + 1} of ${photoList.length}`, {
+    page.drawText(safeText(`Photo ${i + 1} of ${photoList.length}`), {
       x: MARGIN,
       y: py,
       size: 9,
@@ -236,9 +239,7 @@ export async function GET(
       color: MUTED,
     });
     py -= 18;
-    page.drawText(
-      ((p.photo_location as string | null) ?? "Photo").toString(),
-      {
+    page.drawText(safeText(((p.photo_location as string | null) ?? "Photo").toString()), {
         x: MARGIN,
         y: py,
         size: 18,
@@ -270,7 +271,7 @@ export async function GET(
       }
     } catch (err) {
       console.error("[pdf] image embed failed", err);
-      page.drawText("(photo unavailable)", {
+      page.drawText(safeText("(photo unavailable)"), {
         x: MARGIN,
         y: py,
         size: 10,
@@ -296,7 +297,7 @@ export async function GET(
     }
 
     // Findings header
-    page.drawText(`Findings · ${findings.length}`, {
+    page.drawText(safeText(`Findings · ${findings.length}`), {
       x: MARGIN,
       y: py,
       size: 11,
@@ -306,7 +307,7 @@ export async function GET(
     py -= 18;
 
     if (findings.length === 0) {
-      page.drawText("No deficiencies detected.", {
+      page.drawText(safeText("No deficiencies detected."), {
         x: MARGIN,
         y: py,
         size: 10,
@@ -349,7 +350,7 @@ export async function GET(
         // Code + category
         const meta = [finding.category, finding.code].filter(Boolean).join(" · ");
         if (meta) {
-          page.drawText(meta, {
+          page.drawText(safeText(meta), {
             x: MARGIN + 18,
             y: py,
             size: 9,
@@ -387,7 +388,7 @@ export async function GET(
 
         if (finding.remediation) {
           py -= 4;
-          page.drawText("Remediation:", {
+          page.drawText(safeText("Remediation:"), {
             x: MARGIN + 18,
             y: py,
             size: 9,
@@ -409,7 +410,7 @@ export async function GET(
 
         if (finding.references && finding.references.length > 0) {
           py -= 2;
-          page.drawText(`References: ${finding.references.join("; ")}`, {
+          page.drawText(safeText(`References: ${finding.references.join("; ")}`), {
             x: MARGIN + 18,
             y: py,
             size: 8,
@@ -427,7 +428,7 @@ export async function GET(
   // ---- Page numbers footer ----
   const pages = pdf.getPages();
   pages.forEach((page, idx) => {
-    page.drawText(`Compliance Lens by Samektra · Page ${idx + 1} of ${pages.length}`, {
+    page.drawText(safeText(`Compliance Lens by Samektra · Page ${idx + 1} of ${pages.length}`), {
       x: MARGIN,
       y: 24,
       size: 8,
@@ -449,6 +450,48 @@ export async function GET(
       "Cache-Control": "private, no-store",
     },
   });
+  } catch (err) {
+    console.error("[pdf-export] failed", err);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    if (debug) {
+      return NextResponse.json(
+        { ok: false, error: message, stack },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "PDF generation failed: " + message,
+        hint: "Append ?debug=1 to the URL for a stack trace.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * pdf-lib's StandardFonts only support WinAnsi encoding, which can't render
+ * em-dashes, curly quotes, the section sign §, or other Unicode characters
+ * the AI emits constantly. Replace them with ASCII equivalents to avoid the
+ * "WinAnsi cannot encode" runtime error that 500s the route.
+ */
+function safeText(s: string | null | undefined): string {
+  if (s == null) return "";
+  return s
+    .replace(/[\u2013\u2014]/g, "-") // en/em dash
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // curly single quotes
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // curly double quotes
+    .replace(/\u2026/g, "...") // ellipsis
+    .replace(/\u00B7/g, "-") // middle dot
+    .replace(/\u00A7/g, "Sec. ") // section sign
+    .replace(/\u00B6/g, "P. ") // pilcrow
+    .replace(/\u00B0/g, "deg ") // degree
+    .replace(/\u00BD/g, "1/2") // 1/2
+    .replace(/\u00BC/g, "1/4")
+    .replace(/\u00BE/g, "3/4")
+    .replace(/[^\x00-\xFF]/g, "?"); // anything else outside Latin-1 -> '?'
 }
 
 function sanitizeFilename(name: string): string {

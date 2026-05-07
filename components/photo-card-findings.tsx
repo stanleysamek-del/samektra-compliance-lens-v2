@@ -186,40 +186,76 @@ function FindingRowMenu({
   photoId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Anchor coordinates for the FIXED-positioned menu. We use fixed positioning
+  // so the dropdown escapes any parent that has overflow:hidden (e.g. the
+  // photo card on the inspection page). Without this, the menu was being
+  // clipped at the card border.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
+  // Recompute position when opening; close on outside click / escape / scroll.
   useEffect(() => {
     if (!open) return;
+
+    const place = () => {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      // Anchor below the button, right-aligned. If too close to bottom of
+      // viewport, anchor above instead.
+      const menuH = 80; // approx height of the 2-item menu
+      const below = r.bottom + 4;
+      const above = r.top - menuH - 4;
+      const useAbove = window.innerHeight - r.bottom < menuH + 16;
+      setPos({
+        top: useAbove ? above : below,
+        right: window.innerWidth - r.right,
+      });
+    };
+    place();
+
     const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (
+        menuRef.current?.contains(t) ||
+        buttonRef.current?.contains(t)
+      ) {
+        return;
+      }
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const onScrollOrResize = () => place();
+
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
     };
   }, [open]);
 
   return (
-    <div
-      ref={ref}
-      className="relative shrink-0"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
       <button
+        ref={buttonRef}
         type="button"
         aria-label="Finding actions"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)]/15 transition hover:bg-[var(--accent)]/30"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)]/15 transition hover:bg-[var(--accent)]/30"
         style={{ color: "#ffffff" }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff" aria-hidden>
@@ -229,10 +265,13 @@ function FindingRowMenu({
         </svg>
       </button>
 
-      {open ? (
+      {open && pos ? (
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 min-w-[140px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-2xl"
+          style={{ top: pos.top, right: pos.right }}
         >
           <Link
             href={`/inspections/${inspectionId}/photos/${photoId}#finding-${findingId}`}
@@ -258,6 +297,6 @@ function FindingRowMenu({
           </button>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
