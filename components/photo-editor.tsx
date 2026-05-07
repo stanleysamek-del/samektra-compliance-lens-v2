@@ -998,3 +998,33 @@ function hexWithOpacity(hex: string, opacity: number): string {
   const aHex = a.toString(16).padStart(2, "0");
   return `#${h}${aHex}`;
 }
+
+/* ---------- shared module-scope helpers ---------- */
+
+function clamp01(n: number): number {
+  if (Number.isNaN(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+function applyResize(
+  start: EditableShape,
+  handle: Handle,
+  p: Pt,
+): EditableShape {
+  let { x1, y1, x2, y2 } = start;
+  if (handle.includes("n")) y1 = p.y;
+  if (handle.includes("s")) y2 = p.y;
+  if (handle.includes("w")) x1 = p.x;
+  if (handle.includes("e")) x2 = p.x;
+  return {
+    ...start,
+    x1: clamp01(x1),
+    y1: clamp01(y1),
+    x2: clamp01(x2),
+    y2: clamp01(y2),
+  };
+}
+
+function makeId(): string {
+  return Math.random().toString(36).slice(2, 12);
+}
