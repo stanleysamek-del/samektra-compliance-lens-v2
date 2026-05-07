@@ -1028,3 +1028,106 @@ function applyResize(
 function makeId(): string {
   return Math.random().toString(36).slice(2, 12);
 }
+
+/* ---------- ToolBtn + ResizeHandlesOverlay + icon components ---------- */
+
+function ToolBtn({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={[
+        "flex h-8 w-8 items-center justify-center rounded-md border transition",
+        active
+          ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+          : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5 hover:text-[var(--fg)]",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ResizeHandlesOverlay({ s }: { s: EditableShape }) {
+  const handles: Array<[Handle, number, number]> = [
+    ["nw", s.x1, s.y1],
+    ["n",  (s.x1 + s.x2) / 2, s.y1],
+    ["ne", s.x2, s.y1],
+    ["e",  s.x2, (s.y1 + s.y2) / 2],
+    ["se", s.x2, s.y2],
+    ["s",  (s.x1 + s.x2) / 2, s.y2],
+    ["sw", s.x1, s.y2],
+    ["w",  s.x1, (s.y1 + s.y2) / 2],
+  ];
+  const color = s.kind === "bbox" ? "#f87171" : (s as Annotation).color;
+  return (
+    <>
+      {handles.map(([name, x, y]) => (
+        <div
+          key={name}
+          className="pointer-events-none absolute"
+          style={{
+            left: `${x * 100}%`,
+            top: `${y * 100}%`,
+            width: 12,
+            height: 12,
+            marginLeft: -6,
+            marginTop: -6,
+            borderRadius: 2,
+            background: "#ffffff",
+            border: `2px solid ${color}`,
+            boxShadow: "0 0 4px rgba(0,0,0,0.55)",
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+function SelectIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="m4 4 6 16 2-6 6-2L4 4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function RectIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+function CircleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+function ArrowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 19 19 5M19 5h-7M19 5v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function TextIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 6h14M12 6v14M9 20h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
