@@ -268,3 +268,84 @@ export async function updatePhotoAnnotations(
 
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
 }
+
+
+/* =====================================================================
+ *  Combined photo-editor save: persists annotations + per-finding bbox
+ *  updates in a single round-trip. Used by the unified PhotoEditor.
+ *
+ *  bboxUpdates entries with bbox=null clear the finding's bbox columns;
+ *  finding-bbox deletion does NOT delete the finding itself — the
+ *  inspector should remove the finding via the FindingCard if intended.
+ * ===================================================================== */
+
+export type FindingBboxPatch = {
+  findingId: string;
+  bbox: { x1: number; y1: number; x2: number; y2: number } | null;
+};
+
+export async function updatePhotoState(
+  photoId: string,
+  inspectionId: string,
+  annotations: Annotation[],
+  bboxUpdates: FindingBboxPatch[],
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Persist annotations (re-uses the cleaning logic from updatePhotoAnnotations).
+  const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
+  const cleanedAnnotations: Annotation[] = (Array.isArray(annotations) ? annotations : [])
+    .slice(0, 200)
+    .map((a) => ({
+      id: String(a.id ?? Math.random().toString(36).slice(2, 10)),
+      type:
+        a.type === "rect" ||
+        a.type === "circle" ||
+        a.type === "arrow" ||
+        a.type === "text"
+          ? a.type
+          : "rect",
+      color: typeof a.color === "string" ? a.color.slice(0, 16) : "#f87171",
+      x1: clamp(a.x1),
+      y1: clamp(a.y1),
+      x2: clamp(a.x2),
+      y2: clamp(a.y2),
+      text:
+        typeof a.text === "string" && a.text.length > 0
+          ? a.text.slice(0, 200)
+          : undefined,
+    }));
+
+  await supabase
+    .from("photos")
+    .update({ annotations: cleanedAnnotations })
+    .eq("id", photoId);
+
+  // Apply bbox updates to each affected finding. We mark edited=true so the
+  // re-analyze flow preserves these adjustments.
+  for (const u of bboxUpdates ?? []) {
+    if (!u || !u.findingId) continue;
+    const update: Record<string, unknown> = { edited: true };
+    if (u.bbox === null) {
+      update.bbox_x1 = null;
+      update.bbox_y1 = null;
+      update.bbox_x2 = null;
+      update.bbox_y2 = null;
+    } else if (u.bbox && typeof u.bbox === "object") {
+      update.bbox_x1 = clamp(u.bbox.x1);
+      update.bbox_y1 = clamp(u.bbox.y1);
+      update.bbox_x2 = clamp(u.bbox.x2);
+      update.bbox_y2 = clamp(u.bbox.y2);
+    } else {
+      continue;
+    }
+    await supabase.from("findings").update(update).eq("id", u.findingId);
+  }
+
+  revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+  revalidatePath(`/inspections/${inspectionId}`, "page");
+}

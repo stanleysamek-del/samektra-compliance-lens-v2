@@ -4,10 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
-import { PhotoWithBoxes } from "@/components/photo-with-bboxes";
+import { PhotoEditor } from "@/components/photo-editor";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
 import { AddFindingForm } from "@/components/add-finding-form";
-import { PhotoAnnotator } from "@/components/photo-annotator";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { deletePhoto } from "./actions";
 
@@ -127,12 +126,16 @@ export default async function PhotoDetailPage({
           ) : null}
         </div>
 
-        {/* Photo with bboxes (read-only view also overlays annotations) */}
+        {/* Unified photo viewer + annotation editor. The "Annotate" button
+            below the photo enters edit mode in place: every shape — AI bboxes
+            and inspector annotations — becomes movable/resizable, and new
+            shapes (rect/circle/arrow/text) can be drawn with the toolbar.
+            Save persists annotations + per-finding bbox updates atomically. */}
         {photoUrl ? (
-          <PhotoWithBoxes
+          <PhotoEditor
             src={photoUrl}
-            width={photo.width ?? 16}
-            height={photo.height ?? 9}
+            inspectionId={inspectionId}
+            photoId={photo.id}
             bboxes={bboxes}
             annotations={(photo.annotations ?? []) as Annotation[]}
           />
@@ -143,34 +146,6 @@ export default async function PhotoDetailPage({
             </p>
           </Card>
         )}
-
-        {/* Annotation editor: rectangles, circles, arrows, text on the photo. */}
-        {photoUrl ? (
-          <details className="group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] open:bg-[var(--bg-elevated)]">
-            <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm">
-              <div>
-                <p className="font-medium text-[var(--fg)]">
-                  Annotate this photo
-                </p>
-                <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                  Add rectangles, circles, arrows, or text to highlight what you
-                  found on site. Saves to the photo and appears in the report.
-                </p>
-              </div>
-              <span className="text-[10px] uppercase tracking-wider text-[var(--fg-subtle)] transition group-open:rotate-180">
-                ▾
-              </span>
-            </summary>
-            <div className="border-t border-[var(--border)] p-4">
-              <PhotoAnnotator
-                src={photoUrl}
-                inspectionId={inspectionId}
-                photoId={photo.id}
-                initial={(photo.annotations ?? []) as Annotation[]}
-              />
-            </div>
-          </details>
-        ) : null}
 
         {/* Deep re-analyze (Sonnet, with optional clarifying questions) */}
         <Card variant="tinted-teal">
