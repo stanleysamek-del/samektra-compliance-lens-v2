@@ -725,6 +725,25 @@ export function PhotoEditor({
           e.preventDefault();
           onDown(e.clientX, e.clientY);
         }}
+        onDoubleClick={(e) => {
+          // Double-click any text shape to edit its content in place.
+          if (!editing) return;
+          const p = pointToNorm(e.clientX, e.clientY);
+          if (!p) return;
+          const hit = topShapeAt(p);
+          if (hit && hit.kind === "annotation" && hit.type === "text") {
+            setSelectedId(hit.id);
+            const next = window.prompt("Text:", hit.text ?? "");
+            if (next == null) return;
+            setShapes((prev) =>
+              prev.map((s) =>
+                s.id === hit.id && s.kind === "annotation"
+                  ? { ...s, text: next }
+                  : s,
+              ),
+            );
+          }
+        }}
         onTouchStart={(e) => {
           if (!editing || e.touches.length === 0) return;
           onDown(e.touches[0].clientX, e.touches[0].clientY);
@@ -999,9 +1018,13 @@ function ShapeSvg({
         fontFamily="system-ui, sans-serif"
         fontWeight={600}
         style={{
+          // Strokes on <text> are in viewBox user units (no non-scaling-stroke
+          // here), so this MUST be tiny in our 0..1 viewBox or it will paint
+          // a huge black halo over the entire photo. 0.004 is ~3px on a
+          // typical render width.
           paintOrder: "stroke",
           stroke: "rgba(0,0,0,0.85)",
-          strokeWidth: 3,
+          strokeWidth: 0.004,
           strokeLinejoin: "round",
         }}
       >
