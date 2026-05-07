@@ -32,6 +32,15 @@ export async function updateFinding(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Read photo_id BEFORE updating so we can revalidate the photo page too —
+  // otherwise the photo detail page renders with stale findings/bboxes/badges.
+  const { data: existing } = await supabase
+    .from("findings")
+    .select("photo_id")
+    .eq("id", findingId)
+    .maybeSingle();
+  const photoId = (existing?.photo_id as string | null) ?? null;
+
   const update: Record<string, unknown> = {
     title: patch.title,
     category: patch.category,
@@ -66,6 +75,12 @@ export async function updateFinding(
   }
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
+  if (photoId) {
+    revalidatePath(
+      `/inspections/${inspectionId}/photos/${photoId}`,
+      "page",
+    );
+  }
 }
 
 export async function deleteFinding(findingId: string, inspectionId: string) {
@@ -74,6 +89,16 @@ export async function deleteFinding(findingId: string, inspectionId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Read photo_id BEFORE deleting so we can revalidate that photo's page,
+  // which is what makes the bbox + numbered badge disappear and remaining
+  // findings re-number from #1 onward.
+  const { data: existing } = await supabase
+    .from("findings")
+    .select("photo_id")
+    .eq("id", findingId)
+    .maybeSingle();
+  const photoId = (existing?.photo_id as string | null) ?? null;
 
   const { error } = await supabase
     .from("findings")
@@ -85,6 +110,12 @@ export async function deleteFinding(findingId: string, inspectionId: string) {
   }
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
+  if (photoId) {
+    revalidatePath(
+      `/inspections/${inspectionId}/photos/${photoId}`,
+      "page",
+    );
+  }
 }
 
 export async function deletePhoto(
