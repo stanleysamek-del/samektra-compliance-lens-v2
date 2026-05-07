@@ -17,13 +17,12 @@ export const maxDuration = 60;
  *
  *  Modeled on the customer's archive format:
  *    1. Cover page — site header, document number, score, metadata grid.
- *    2. Section 1: Flagged Items — High and Medium findings only,
- *       organized by audit sub-section (A1 Fire Doors, A2 Fire-Rated
- *       Walls, A3 Fire Alarm/Sprinkler, A4 Rooms, A5 Corridors, A6
- *       General, B Safety Management, C Security Management).
- *    3. Section 2: Audit (full) — every finding by section with code
- *       numbers like A1.1.1, A2.1.4. Photo references inline.
- *    4. Photos — 4-up gallery, captioned "Photo N".
+ *    2. Audit (full) — every finding organized by audit sub-section
+ *       (A1 Fire Doors, A2 Fire-Rated Walls, A3 Fire Alarm/Sprinkler,
+ *       A4 Rooms, A5 Corridors, A6 General, B Safety Management,
+ *       C Security Management) with code numbers like A1.1.1, A2.1.4.
+ *       Photo references inline.
+ *    3. Photos — 4-up gallery, captioned "Photo N".
  *
  *  Findings are auto-classified into sub-sections by keywords in
  *  lib/exports/audit-sections.ts.
@@ -298,7 +297,10 @@ export async function GET(
       { x: MARGIN, y: 36, size: 8, font: helv, color: SUBTLE },
     );
 
-    /* ============================ SECTION 1 — FLAGGED ITEMS ============================ */
+    /* ============================ FULL AUDIT ============================ */
+    // Note: the previous "Section 1: Flagged Items" overview was removed —
+    // the audit by section below already lists every finding, so the
+    // overview was duplicated content.
     let page = pdf.addPage([PAGE_W, PAGE_H]);
     let py = PAGE_H - MARGIN;
 
@@ -309,73 +311,8 @@ export async function GET(
       }
     }
 
-    page.drawText(safeText("1.  Flagged Items"), {
-      x: MARGIN,
-      y: py,
-      size: 16,
-      font: helvBold,
-      color: FG,
-    });
-    py -= 6;
-    page.drawLine({
-      start: { x: MARGIN, y: py },
-      end: { x: COL_RIGHT, y: py },
-      thickness: 0.6,
-      color: TEAL,
-    });
-    py -= 10;
-    page.drawText(safeText(`${counts.High + counts.Medium} flagged · ${counts.High} High · ${counts.Medium} Medium`), {
-      x: MARGIN,
-      y: py,
-      size: 9,
-      font: helv,
-      color: MUTED,
-    });
-    py -= 22;
-
-    const flaggedGrouped = numbered
-      .map((g) => ({
-        ...g,
-        items: g.items.filter((f) => f.severity === "High" || f.severity === "Medium"),
-      }))
-      .filter((g) => g.items.length > 0);
-
-    if (flaggedGrouped.length === 0) {
-      page.drawText(safeText("No High- or Medium-severity findings."), {
-        x: MARGIN,
-        y: py,
-        size: 11,
-        font: helv,
-        color: MUTED,
-      });
-      py -= 18;
-    } else {
-      for (const g of flaggedGrouped) {
-        newPageIfNeeded(70);
-        py = drawSectionHeader(page, py, "Audit / " + g.section.code + ".  " + g.section.title);
-
-        // One synthetic question line per section; mirrors the customer's
-        // "A2.1. Are penetrations in rated walls properly sealed?  No"
-        const qText = sectionQuestionText(g.section);
-        py = drawQuestionRow(page, py, g.questionCode, qText, "No");
-
-        // Sub-findings (A2.1.1, A2.1.2, …)
-        g.items.forEach((f, idx) => {
-          newPageIfNeeded(60);
-          const code = `${g.questionCode}.${idx + 1}.`;
-          py = drawSubFinding(page, py, code, f);
-        });
-
-        py -= 8;
-      }
-    }
-
-    /* ============================ SECTION 2 — FULL AUDIT ============================ */
-    page = pdf.addPage([PAGE_W, PAGE_H]);
-    py = PAGE_H - MARGIN;
-
     page.drawText(
-      safeText(`2.  Audit  -  ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`),
+      safeText(`Audit  -  ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`),
       { x: MARGIN, y: py, size: 16, font: helvBold, color: FG },
     );
     py -= 6;
@@ -387,9 +324,7 @@ export async function GET(
     });
     py -= 18;
 
-    let auditIdx = 0;
     for (const g of numbered) {
-      auditIdx += 1;
       newPageIfNeeded(80);
       // Sub-section header like "2.3.  A2.  Fire-Rated Walls — N flagged"
       const sectFlagged = g.items.filter(
@@ -400,7 +335,7 @@ export async function GET(
 
       page.drawText(
         safeText(
-          `2.${auditIdx}.  ${g.section.code}.  ${g.section.title}  -  ${sectTotal - sectFlagged}/${sectTotal} (${sectPct.toFixed(1)}%)`,
+          `${g.section.code}.  ${g.section.title}  -  ${sectTotal - sectFlagged}/${sectTotal} (${sectPct.toFixed(1)}%)`,
         ),
         { x: MARGIN, y: py, size: 12, font: helvBold, color: TEAL },
       );
