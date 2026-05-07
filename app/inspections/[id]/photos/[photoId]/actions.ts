@@ -86,3 +86,80 @@ export async function deletePhoto(
   revalidatePath(`/inspections/${inspectionId}`);
   redirect(`/inspections/${inspectionId}`);
 }
+
+
+/**
+ * Insert a manually-entered finding (the inspector saw something the AI
+ * missed, or wants to override / add to the AI's call). Uses FormData per
+ * the project's convention of avoiding .bind() on server actions in
+ * Next.js 16.
+ */
+export async function addCustomFinding(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const photoId = String(formData.get("photo_id") ?? "");
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const severity = String(formData.get("severity") ?? "Medium");
+  const category = String(formData.get("category") ?? "Other");
+  const code = String(formData.get("code") ?? "").trim() || null;
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const location = String(formData.get("location") ?? "").trim() || null;
+  const remediation =
+    String(formData.get("remediation") ?? "").trim() || null;
+  const referencesRaw = String(formData.get("references") ?? "").trim();
+  const references =
+    referencesRaw.length > 0
+      ? referencesRaw
+          .split(/[,;\n]/)
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : null;
+
+  if (!photoId || !inspectionId || !title) {
+    // Bail silently — the form should require these client-side.
+    return;
+  }
+
+  const validSeverity = ["Low", "Medium", "High"].includes(severity)
+    ? severity
+    : "Medium";
+  const validCategory = [
+    "Fire",
+    "Electrical",
+    "Egress",
+    "ADA",
+    "Hazmat",
+    "InfectionControl",
+    "Structural",
+    "Other",
+  ].includes(category)
+    ? category
+    : "Other";
+
+  const { error } = await supabase.from("findings").insert({
+    photo_id: photoId,
+    inspection_id: inspectionId,
+    title,
+    severity: validSeverity,
+    category: validCategory,
+    code,
+    description,
+    location,
+    remediation,
+    references,
+    edited: true,
+    ai_confidence: null,
+  });
+
+  if (error) {
+    console.error("[addCustomFinding]", error);
+  }
+
+  revalidatePath(`/inspections/${inspectionId}`, "page");
+  revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+}

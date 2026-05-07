@@ -6,6 +6,7 @@ import { Card } from "@/components/card";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoWithBoxes } from "@/components/photo-with-bboxes";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
+import { AddFindingForm } from "@/components/add-finding-form";
 import { deletePhoto } from "./actions";
 
 export default async function PhotoDetailPage({
@@ -183,6 +184,15 @@ export default async function PhotoDetailPage({
               ))}
             </ul>
           )}
+
+          {/* Inspector-authored finding (AI missed something, or you want
+              to override the AI's call). */}
+          <div className="mt-1">
+            <AddFindingForm
+              inspectionId={inspectionId}
+              photoId={photo.id}
+            />
+          </div>
         </section>
 
         {/* What to look for */}
