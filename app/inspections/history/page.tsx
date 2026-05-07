@@ -12,6 +12,10 @@ type SearchParams = {
   q?: string;
   sort?: Sort;
   status?: StatusFilter;
+  /** Set by deleteInspection — surfaces a "Deleted X" banner. */
+  deleted?: string;
+  /** Generic error message bubbled up by deleteInspection on failure. */
+  error?: string;
 };
 
 export default async function HistoryPage({
@@ -23,6 +27,8 @@ export default async function HistoryPage({
   const q = (params.q ?? "").trim();
   const sort: Sort = (params.sort as Sort) ?? "newest";
   const status: StatusFilter = (params.status as StatusFilter) ?? "all";
+  const deletedFacility = (params.deleted ?? "").trim();
+  const errorMessage = (params.error ?? "").trim();
 
   const supabase = await createClient();
   const {
@@ -100,6 +106,45 @@ export default async function HistoryPage({
       }}
     >
       <div className="flex flex-col gap-5">
+        {deletedFacility ? (
+          <div
+            className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+            style={{
+              borderColor: "rgba(34,197,94,0.3)",
+              background: "rgba(34,197,94,0.08)",
+              color: "#86efac",
+            }}
+          >
+            <span>
+              Deleted <strong className="font-semibold">{deletedFacility}</strong>{" "}
+              and all of its photos and findings.
+            </span>
+            <Link
+              href="/inspections/history"
+              className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+            >
+              Dismiss
+            </Link>
+          </div>
+        ) : null}
+        {errorMessage ? (
+          <div
+            className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+            style={{
+              borderColor: "rgba(239,68,68,0.3)",
+              background: "rgba(239,68,68,0.08)",
+              color: "#fca5a5",
+            }}
+          >
+            <span>{errorMessage}</span>
+            <Link
+              href="/inspections/history"
+              className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+            >
+              Dismiss
+            </Link>
+          </div>
+        ) : null}
         <div className="flex items-baseline justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
@@ -241,12 +286,14 @@ export default async function HistoryPage({
         ) : (
           <Card>
             <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
-              No matching inspections
+              {q || status !== "all" ? "No matching inspections" : totals.all === 0 ? "No inspections yet" : "No inspections in this view"}
             </p>
             <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
               {q || status !== "all"
                 ? "Try clearing filters or searching for something else."
-                : "Start your first inspection from the New button."}
+                : totals.all === 0
+                  ? "Tap the New button above to start your first inspection."
+                  : "Tap the New button above to start a new inspection."}
             </p>
           </Card>
         )}
