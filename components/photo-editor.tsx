@@ -33,6 +33,8 @@ export type Bbox = {
   index: number;
   severity: "Low" | "Medium" | "High";
   title: string;
+  /** Stroke-width override (1 thin, 2 medium, 3 thick). Default 2. */
+  strokeWidth?: number;
 };
 
 type Tool = "select" | "rect" | "circle" | "arrow" | "text";
@@ -51,6 +53,7 @@ type EditableShape =
       severity: "Low" | "Medium" | "High";
       index: number;
       title: string;
+      strokeWidth?: number; // mirrors annotation strokeWidth
       cleared?: boolean;   // user wants to clear this bbox on save
     };
 
@@ -107,6 +110,7 @@ export function PhotoEditor({
       severity: b.severity,
       index: b.index,
       title: b.title,
+      strokeWidth: typeof b.strokeWidth === "number" ? b.strokeWidth : 2,
     })),
     ...annotations.map((a) => ({ kind: "annotation" as const, ...a })),
   ];
@@ -150,15 +154,20 @@ export function PhotoEditor({
       }
       const o = original.get(s.id);
       if (!o) continue;
-      if (
+      const coordChanged =
         Math.abs(o.x1 - s.x1) > 1e-4 ||
         Math.abs(o.y1 - s.y1) > 1e-4 ||
         Math.abs(o.x2 - s.x2) > 1e-4 ||
-        Math.abs(o.y2 - s.y2) > 1e-4
-      ) {
+        Math.abs(o.y2 - s.y2) > 1e-4;
+      const swChanged =
+        (o.strokeWidth ?? 2) !== (s.strokeWidth ?? 2);
+      if (coordChanged || swChanged) {
         bboxUpdates.push({
           findingId: s.id,
-          bbox: { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 },
+          bbox: coordChanged
+            ? { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 }
+            : { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 },
+          strokeWidth: swChanged ? s.strokeWidth : undefined,
         });
       }
     }
@@ -422,6 +431,10 @@ export function PhotoEditor({
       if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
       if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
       setFill(sel.fill);
+    } else if (sel.kind === "bbox") {
+      // Mirror only the thickness for bboxes — color is locked to severity
+      // and there's no fill / fontSize concept on bboxes.
+      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -460,9 +473,7 @@ export function PhotoEditor({
     if (!selectedId) return;
     setShapes((prev) =>
       prev.map((s) =>
-        s.id === selectedId && s.kind === "annotation"
-          ? { ...s, strokeWidth: sw }
-          : s,
+        s.id === selectedId ? ({ ...s, strokeWidth: sw } as EditableShape) : s,
       ),
     );
   }
@@ -886,15 +897,12 @@ function ShapeSvg({
   // Stroke widths are in PIXELS because we use vectorEffect="non-scaling-stroke",
   // which means the stroke width is interpreted in the SVG host's pixel space
   // (not the 0..1 viewBox). Sub-pixel values render invisibly.
-  // User strokeWidth multiplier: 1 (thin), 2 (medium), 3 (thick).
+  // User strokeWidth multiplier: 1 (thin), 2 (medium), 3 (thick) — applies to
+  // BOTH annotations and bboxes now.
   const swMultiplier =
-    shape.kind === "annotation" && typeof shape.strokeWidth === "number"
-      ? shape.strokeWidth
-      : 2;
-  const basePx = shape.kind === "bbox" ? 3 : 2; // px per multiplier unit
-  const strokeWidth =
-    (shape.kind === "bbox" ? 3 : basePx * swMultiplier) +
-    (selected ? 1 : 0);
+    typeof shape.strokeWidth === "number" ? shape.strokeWidth : 2;
+  const basePx = shape.kind === "bbox" ? 1.5 : 2; // px per multiplier unit
+  const strokeWidth = basePx * swMultiplier + (selected ? 1 : 0);
   const fillColor =
     shape.kind === "annotation" && shape.fill
       ? hexWithOpacity(shape.fill, 0.25)

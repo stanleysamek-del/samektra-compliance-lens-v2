@@ -300,6 +300,8 @@ export async function updatePhotoAnnotations(
 export type FindingBboxPatch = {
   findingId: string;
   bbox: { x1: number; y1: number; x2: number; y2: number } | null;
+  /** Optional stroke-width override (1 thin, 2 medium, 3 thick). Undefined means don't change. */
+  strokeWidth?: number;
 };
 
 export async function updatePhotoState(
@@ -370,7 +372,12 @@ export async function updatePhotoState(
       update.bbox_y1 = clamp(u.bbox.y1);
       update.bbox_x2 = clamp(u.bbox.x2);
       update.bbox_y2 = clamp(u.bbox.y2);
-    } else {
+    }
+    if (typeof u.strokeWidth === "number" && u.strokeWidth >= 0.5 && u.strokeWidth <= 5) {
+      update.bbox_stroke_width = u.strokeWidth;
+    }
+    if (Object.keys(update).length === 1) {
+      // Only "edited: true" present — nothing to write.
       continue;
     }
     await supabase.from("findings").update(update).eq("id", u.findingId);
