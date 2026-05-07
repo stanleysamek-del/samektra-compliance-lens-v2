@@ -6,6 +6,7 @@ import {
   deleteFinding,
   type FindingPatch,
 } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { BboxPicker, type Bbox } from "@/components/bbox-picker";
 
 export type FindingRow = {
   id: string;
@@ -20,6 +21,10 @@ export type FindingRow = {
   references: string[] | null;
   ai_confidence: number | null;
   edited: boolean;
+  bbox_x1: number | null;
+  bbox_y1: number | null;
+  bbox_x2: number | null;
+  bbox_y2: number | null;
 };
 
 const CATEGORIES = [
@@ -38,10 +43,27 @@ const SEVERITIES = ["Low", "Medium", "High"] as const;
 export function FindingCard({
   finding,
   index,
+  photoUrl,
 }: {
   finding: FindingRow;
   index: number;
+  /** If provided, edit mode shows a BboxPicker on the photo so the user can
+   *  add/move/resize/clear the annotation for this finding. */
+  photoUrl?: string | null;
 }) {
+  const initialBbox: Bbox | null =
+    finding.bbox_x1 != null &&
+    finding.bbox_y1 != null &&
+    finding.bbox_x2 != null &&
+    finding.bbox_y2 != null
+      ? {
+          x1: Number(finding.bbox_x1),
+          y1: Number(finding.bbox_y1),
+          x2: Number(finding.bbox_x2),
+          y2: Number(finding.bbox_y2),
+        }
+      : null;
+
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<FindingPatch>({
     title: finding.title,
@@ -52,11 +74,18 @@ export function FindingCard({
     location: finding.location ?? "",
     remediation: finding.remediation ?? "",
   });
+  // Bbox draft: undefined means "no change", null means "clear", object means "new value".
+  const [bboxDraft, setBboxDraft] = useState<Bbox | null | undefined>(undefined);
   const [isPending, startTransition] = useTransition();
 
   function save() {
     startTransition(async () => {
-      await updateFinding(finding.id, finding.inspection_id, draft);
+      const patch: FindingPatch = { ...draft };
+      if (bboxDraft !== undefined) {
+        patch.bbox = bboxDraft;
+      }
+      await updateFinding(finding.id, finding.inspection_id, patch);
+      setBboxDraft(undefined);
       setEditing(false);
     });
   }
@@ -224,6 +253,45 @@ export function FindingCard({
               onChange={(e) => setDraft({ ...draft, remediation: e.target.value })}
             />
           </Field>
+
+          {/* Bbox editor: lets the inspector add, move, resize, or clear the
+              red box drawn on the photo for this finding. */}
+          {photoUrl ? (
+            <Field label="Mark on photo">
+              <div className="flex flex-col gap-2">
+                <BboxPicker
+                  src={photoUrl}
+                  initial={
+                    bboxDraft === undefined ? initialBbox : bboxDraft
+                  }
+                  onChange={(b) => setBboxDraft(b)}
+                />
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[var(--fg-subtle)]">
+                    {bboxDraft === undefined
+                      ? initialBbox
+                        ? "Drag inside to move, corners to resize. Changes save with the rest of the form."
+                        : "No box yet — click and drag on the photo to add one."
+                      : bboxDraft === null
+                        ? "Box will be cleared on save."
+                        : "Box will be updated on save."}
+                  </span>
+                  {(() => {
+                    const effective = bboxDraft === undefined ? initialBbox : bboxDraft;
+                    return effective ? (
+                      <button
+                        type="button"
+                        onClick={() => setBboxDraft(null)}
+                        className="rounded-full px-2 py-0.5 text-[var(--fg-muted)] underline-offset-2 hover:text-[#fca5a5] hover:underline"
+                      >
+                        Remove box
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            </Field>
+          ) : null}
         </div>
       ) : (
         <div className="mt-2 flex flex-col gap-2 text-sm">

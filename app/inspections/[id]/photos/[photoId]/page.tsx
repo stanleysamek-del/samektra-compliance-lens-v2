@@ -180,7 +180,11 @@ export default async function PhotoDetailPage({
             <ul className="flex flex-col gap-3">
               {sortedFindings.map((f, idx) => (
                 <li key={f.id} id={`finding-${f.id}`}>
-                  <FindingCard finding={f as unknown as FindingRow} index={idx} />
+                  <FindingCard
+                    finding={f as unknown as FindingRow}
+                    index={idx}
+                    photoUrl={photoUrl || null}
+                  />
                 </li>
               ))}
             </ul>

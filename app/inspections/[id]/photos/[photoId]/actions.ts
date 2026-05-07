@@ -12,6 +12,13 @@ export type FindingPatch = {
   description?: string;
   location?: string;
   remediation?: string;
+  /**
+   * Bbox patch. Tri-state semantics:
+   *   - undefined  → don't touch the bbox columns
+   *   - null       → clear the bbox (set all four columns to NULL)
+   *   - object     → write x1/y1/x2/y2 (each must be in [0, 1])
+   */
+  bbox?: { x1: number; y1: number; x2: number; y2: number } | null;
 };
 
 export async function updateFinding(
@@ -25,18 +32,33 @@ export async function updateFinding(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const update: Record<string, unknown> = {
+    title: patch.title,
+    category: patch.category,
+    code: patch.code || null,
+    severity: patch.severity,
+    description: patch.description || null,
+    location: patch.location || null,
+    remediation: patch.remediation || null,
+    edited: true,
+  };
+
+  if (patch.bbox === null) {
+    update.bbox_x1 = null;
+    update.bbox_y1 = null;
+    update.bbox_x2 = null;
+    update.bbox_y2 = null;
+  } else if (patch.bbox && typeof patch.bbox === "object") {
+    const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
+    update.bbox_x1 = clamp(patch.bbox.x1);
+    update.bbox_y1 = clamp(patch.bbox.y1);
+    update.bbox_x2 = clamp(patch.bbox.x2);
+    update.bbox_y2 = clamp(patch.bbox.y2);
+  }
+
   const { error } = await supabase
     .from("findings")
-    .update({
-      title: patch.title,
-      category: patch.category,
-      code: patch.code || null,
-      severity: patch.severity,
-      description: patch.description || null,
-      location: patch.location || null,
-      remediation: patch.remediation || null,
-      edited: true,
-    })
+    .update(update)
     .eq("id", findingId);
 
   if (error) {
