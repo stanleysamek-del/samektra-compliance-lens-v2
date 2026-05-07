@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { addCustomFinding } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { BboxPicker, type Bbox } from "@/components/bbox-picker";
 
 type Props = {
   inspectionId: string;
   photoId: string;
+  /** Signed URL of the photo so the inspector can draw a bbox on it. */
+  photoUrl: string | null;
 };
 
 const SEVERITIES = ["Low", "Medium", "High"] as const;
@@ -58,9 +61,10 @@ const CODE_SUGGESTIONS = [
  * code, location, and references are free-text with autocomplete; title,
  * description, and remediation are open text.
  */
-export function AddFindingForm({ inspectionId, photoId }: Props) {
+export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
   const [open, setOpen] = useState(false);
   const [severity, setSeverity] = useState<(typeof SEVERITIES)[number]>("Medium");
+  const [bbox, setBbox] = useState<Bbox | null>(null);
 
   if (!open) {
     return (
@@ -85,6 +89,14 @@ export function AddFindingForm({ inspectionId, photoId }: Props) {
       <input type="hidden" name="inspection_id" value={inspectionId} />
       <input type="hidden" name="photo_id" value={photoId} />
       <input type="hidden" name="severity" value={severity} />
+      {bbox ? (
+        <>
+          <input type="hidden" name="bbox_x1" value={bbox.x1} />
+          <input type="hidden" name="bbox_y1" value={bbox.y1} />
+          <input type="hidden" name="bbox_x2" value={bbox.x2} />
+          <input type="hidden" name="bbox_y2" value={bbox.y2} />
+        </>
+      ) : null}
 
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -98,6 +110,18 @@ export function AddFindingForm({ inspectionId, photoId }: Props) {
           Cancel
         </button>
       </div>
+
+      {/* Bbox picker (optional) */}
+      {photoUrl ? (
+        <div>
+          <label className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+            Mark on photo (optional)
+          </label>
+          <div className="mt-1.5">
+            <BboxPicker src={photoUrl} onChange={setBbox} />
+          </div>
+        </div>
+      ) : null}
 
       {/* Severity pills */}
       <div>

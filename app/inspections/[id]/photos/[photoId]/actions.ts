@@ -120,6 +120,20 @@ export async function addCustomFinding(formData: FormData) {
           .filter(Boolean)
       : null;
 
+  // Optional bbox from the BboxPicker — all four must be present and parse as
+  // numbers in [0,1] or we drop the bbox entirely.
+  const bx1 = Number(formData.get("bbox_x1"));
+  const by1 = Number(formData.get("bbox_y1"));
+  const bx2 = Number(formData.get("bbox_x2"));
+  const by2 = Number(formData.get("bbox_y2"));
+  const bboxValid =
+    Number.isFinite(bx1) &&
+    Number.isFinite(by1) &&
+    Number.isFinite(bx2) &&
+    Number.isFinite(by2) &&
+    bx2 > bx1 &&
+    by2 > by1;
+
   if (!photoId || !inspectionId || !title) {
     // Bail silently — the form should require these client-side.
     return;
@@ -154,6 +168,10 @@ export async function addCustomFinding(formData: FormData) {
     references,
     edited: true,
     ai_confidence: null,
+    bbox_x1: bboxValid ? Math.max(0, Math.min(1, bx1)) : null,
+    bbox_y1: bboxValid ? Math.max(0, Math.min(1, by1)) : null,
+    bbox_x2: bboxValid ? Math.max(0, Math.min(1, bx2)) : null,
+    bbox_y2: bboxValid ? Math.max(0, Math.min(1, by2)) : null,
   });
 
   if (error) {

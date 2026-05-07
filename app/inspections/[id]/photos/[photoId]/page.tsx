@@ -191,6 +191,7 @@ export default async function PhotoDetailPage({
             <AddFindingForm
               inspectionId={inspectionId}
               photoId={photo.id}
+              photoUrl={photoUrl || null}
             />
           </div>
         </section>

@@ -258,22 +258,20 @@ export default async function InspectionDetailPage({
                   >
                     Download PDF
                   </a>
-                  <button
-                    type="button"
-                    disabled
-                    title="Corrective Action Plan — coming next iteration"
-                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  <a
+                    href={`/api/inspections/${inspection.id}/export/cap`}
+                    className="cl-btn-outline w-full text-center"
+                    title="Corrective Action Plan (.xlsx)"
                   >
-                    CAP (soon)
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    title="Life Safety Risk Assessment — coming next iteration"
-                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                    Download CAP
+                  </a>
+                  <a
+                    href={`/api/inspections/${inspection.id}/export/lsra`}
+                    className="cl-btn-outline w-full text-center"
+                    title="Life Safety Risk Assessment (.xlsx)"
                   >
-                    LSRA (soon)
-                  </button>
+                    Download LSRA
+                  </a>
                   <button
                     type="button"
                     disabled
