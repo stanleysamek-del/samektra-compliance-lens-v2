@@ -2,14 +2,20 @@
  * Compliance Lens vision analysis.
  *
  * Tier system:
- *   - "default" — Claude Haiku 4.5: fast, cheap (~$0.005-0.010/photo).
- *                 Used for every uploaded photo. Catches obvious violations.
- *   - "deep"    — Claude Sonnet 4.5: stronger reasoning (~$0.020-0.040/photo).
- *                 Triggered by the "Re-analyze deeply" button on the photo
- *                 detail page. Best for advisories and subtle judgment calls.
+ *   - "default" — fast, cheap.
+ *                 Anthropic: Claude Haiku 4.5 (~$0.005-0.010/photo).
+ *                 Google:    Gemini 2.5 Flash (~$0.001-0.003/photo).
+ *   - "deep"    — stronger reasoning.
+ *                 Anthropic: Claude Sonnet 4.5 (~$0.020-0.040/photo).
+ *                 Google:    Gemini 2.5 Pro (~$0.008-0.025/photo).
  *
- * If the chosen Anthropic tier fails (5xx, timeout, malformed JSON), we fall
- * back to OpenAI GPT-4o so a single hiccup doesn't break the whole upload.
+ * Provider order is controlled by the AI_PROVIDER env var:
+ *   AI_PROVIDER=anthropic   → Anthropic, then Google, then OpenAI (default)
+ *   AI_PROVIDER=google      → Google,   then Anthropic, then OpenAI
+ *   AI_PROVIDER=openai      → OpenAI,   then Anthropic, then Google
+ *
+ * If the chosen provider fails (5xx, timeout, malformed JSON), we fall
+ * through the rest of the chain so a single hiccup doesn't break the upload.
  */
 
 import {
@@ -27,17 +33,22 @@ export type Tier = "default" | "deep";
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 const SONNET_MODEL = "claude-sonnet-4-5-20250929";
 const OPENAI_MODEL = "gpt-4o";
+const GEMINI_FLASH_MODEL = "gemini-2.5-flash";
+const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
-// Per-million-token pricing in USD.
+// Per-million-token pricing in USD. Tweak as Google / Anthropic / OpenAI
+// re-price; the cost dashboard reads these.
 const PRICING = {
-  "claude-haiku-4-5-20251001":  { input: 1.0, output: 5.0 },
-  "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0 },
-  "gpt-4o":                      { input: 2.5, output: 10.0 },
+  "claude-haiku-4-5-20251001":  { input: 1.0,  output: 5.0  },
+  "claude-sonnet-4-5-20250929": { input: 3.0,  output: 15.0 },
+  "gpt-4o":                      { input: 2.5,  output: 10.0 },
+  "gemini-2.5-flash":            { input: 0.30, output: 2.50 },
+  "gemini-2.5-pro":              { input: 1.25, output: 10.0 },
 } as const;
 
-type Provider = "anthropic" | "openai";
+type Provider = "anthropic" | "openai" | "google";
 
 export type Usage = {
   inputTokens: number;
@@ -72,50 +83,98 @@ export async function analyzeImage(
   userContext: ContextAnswer[] = [],
 ): Promise<AnalyzeResult> {
   const start = Date.now();
-  const claudeModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
   const userPrompt = USER_QUERY + formatUserContext(userContext);
 
-  if (process.env.ANTHROPIC_API_KEY) {
+  // Resolve the per-tier model id for each provider.
+  const anthropicModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
+  const googleModel = tier === "deep" ? GEMINI_PRO_MODEL : GEMINI_FLASH_MODEL;
+
+  // Build the provider try-order from AI_PROVIDER env (default Anthropic).
+  const providers = providerChainFromEnv();
+
+  const errors: Array<{ provider: Provider; err: unknown }> = [];
+  for (const provider of providers) {
     try {
-      const { analysis, usage } = await callAnthropic(
-        imageBase64,
-        mimeType,
-        claudeModel,
-        userPrompt,
-      );
-      return {
-        analysis,
-        provider: "anthropic",
-        model: claudeModel,
-        durationMs: Date.now() - start,
-        usage,
-        tier,
-      };
+      if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+        const { analysis, usage } = await callAnthropic(
+          imageBase64,
+          mimeType,
+          anthropicModel,
+          userPrompt,
+        );
+        return {
+          analysis,
+          provider: "anthropic",
+          model: anthropicModel,
+          durationMs: Date.now() - start,
+          usage,
+          tier,
+        };
+      }
+      if (provider === "google" && process.env.GOOGLE_API_KEY) {
+        const { analysis, usage } = await callGemini(
+          imageBase64,
+          mimeType,
+          googleModel,
+          userPrompt,
+        );
+        return {
+          analysis,
+          provider: "google",
+          model: googleModel,
+          durationMs: Date.now() - start,
+          usage,
+          tier,
+        };
+      }
+      if (
+        provider === "openai" &&
+        (process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY)
+      ) {
+        const { analysis, usage } = await callOpenAI(
+          imageBase64,
+          mimeType,
+          userPrompt,
+        );
+        return {
+          analysis,
+          provider: "openai",
+          model: OPENAI_MODEL,
+          durationMs: Date.now() - start,
+          usage,
+          tier,
+        };
+      }
     } catch (err) {
-      console.warn(`[ai] Claude (${claudeModel}) failed, falling back to OpenAI:`, err);
+      console.warn(`[ai] ${provider} failed, trying next provider:`, err);
+      errors.push({ provider, err });
     }
   }
 
-  if (process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY) {
-    try {
-      const { analysis, usage } = await callOpenAI(imageBase64, mimeType, userPrompt);
-      return {
-        analysis,
-        provider: "openai",
-        model: OPENAI_MODEL,
-        durationMs: Date.now() - start,
-        usage,
-        tier,
-      };
-    } catch (err) {
-      console.error("[ai] OpenAI also failed:", err);
-      throw new AnalyzeError("Both providers failed", "openai", err);
-    }
+  if (errors.length > 0) {
+    throw new AnalyzeError(
+      "All AI providers failed: " +
+        errors.map((e) => `${e.provider}: ${(e.err as Error)?.message ?? e.err}`).join("; "),
+      errors[errors.length - 1]!.provider,
+      errors[errors.length - 1]!.err,
+    );
   }
-
   throw new AnalyzeError(
-    "No AI provider configured. Set ANTHROPIC_API_KEY and/or OPENAI_API_KEY.",
+    "No AI provider configured. Set at least one of ANTHROPIC_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.",
   );
+}
+
+/** Resolve the provider chain from the AI_PROVIDER env var. */
+function providerChainFromEnv(): Provider[] {
+  const v = (process.env.AI_PROVIDER ?? "").toLowerCase();
+  if (v === "google" || v === "gemini") {
+    return ["google", "anthropic", "openai"];
+  }
+  if (v === "openai") {
+    return ["openai", "anthropic", "google"];
+  }
+  // Default: Anthropic first, then Google, then OpenAI.
+  return ["anthropic", "google", "openai"];
 }
 
 /* --------------------------------------------------------------------- */
@@ -243,6 +302,97 @@ async function callOpenAI(
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
     const costUsd = computeCost(OPENAI_MODEL, inputTokens, outputTokens);
+
+    return {
+      analysis: parseAnalysis(text),
+      usage: { inputTokens, outputTokens, costUsd },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* --------------------------------------------------------------------- */
+
+async function callGemini(
+  imageBase64: string,
+  mimeType: string,
+  model: string,
+  userPrompt: string,
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
+  const apiKey = process.env.GOOGLE_API_KEY ?? "";
+  if (!apiKey) {
+    throw new AnalyzeError("GOOGLE_API_KEY missing", "google");
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model,
+    )}:generateContent`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: SYSTEM_PROMPT }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: imageBase64,
+                },
+              },
+              { text: userPrompt },
+            ],
+          },
+        ],
+        generation_config: {
+          max_output_tokens: 4096,
+          response_mime_type: "application/json",
+          temperature: 0.2,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new AnalyzeError(
+        `Google ${res.status}: ${body.slice(0, 500)}`,
+        "google",
+      );
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+        finishReason?: string;
+      }>;
+      usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        totalTokenCount?: number;
+      };
+    };
+
+    const text = (data.candidates ?? [])
+      .flatMap((c) => c.content?.parts ?? [])
+      .map((p) => p.text ?? "")
+      .join("\n");
+
+    const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
+    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const costUsd = computeCost(model, inputTokens, outputTokens);
 
     return {
       analysis: parseAnalysis(text),
@@ -399,13 +549,52 @@ export async function generateContextQuestions(
   mimeType: string,
 ): Promise<QuestionsResult> {
   const start = Date.now();
-  const model = SONNET_MODEL;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Walk the provider chain (Anthropic / Google / OpenAI), preferring the
+  // chain order set by AI_PROVIDER. The first one that's configured + works
+  // wins. Each provider uses its "deep" model for question generation since
+  // we want strong reasoning here.
+  const providers = providerChainFromEnv();
+  const errors: Array<{ provider: Provider; err: unknown }> = [];
+
+  for (const provider of providers) {
+    try {
+      if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+        return await callAnthropicQuestions(imageBase64, mimeType, start);
+      }
+      if (provider === "google" && process.env.GOOGLE_API_KEY) {
+        return await callGeminiQuestions(imageBase64, mimeType, start);
+      }
+      // OpenAI question-generation isn't implemented (we'd need a separate
+      // JSON-mode prompt path). Skip it and continue the chain.
+    } catch (err) {
+      console.warn(
+        `[ai/questions] ${provider} failed, trying next provider:`,
+        err,
+      );
+      errors.push({ provider, err });
+    }
+  }
+
+  if (errors.length > 0) {
     throw new AnalyzeError(
-      "ANTHROPIC_API_KEY required for deep analysis (context questions).",
+      "All providers failed for context questions: " +
+        errors.map((e) => `${e.provider}: ${(e.err as Error)?.message ?? e.err}`).join("; "),
+      errors[errors.length - 1]!.provider,
+      errors[errors.length - 1]!.err,
     );
   }
+  throw new AnalyzeError(
+    "Deep analysis (context questions) requires ANTHROPIC_API_KEY or GOOGLE_API_KEY.",
+  );
+}
+
+async function callAnthropicQuestions(
+  imageBase64: string,
+  mimeType: string,
+  start: number,
+): Promise<QuestionsResult> {
+  const model = SONNET_MODEL;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -463,6 +652,89 @@ export async function generateContextQuestions(
     return {
       questions: parseQuestions(text),
       provider: "anthropic",
+      model,
+      durationMs: Date.now() - start,
+      usage: { inputTokens, outputTokens, costUsd },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callGeminiQuestions(
+  imageBase64: string,
+  mimeType: string,
+  start: number,
+): Promise<QuestionsResult> {
+  const model = GEMINI_PRO_MODEL;
+  const apiKey = process.env.GOOGLE_API_KEY ?? "";
+  if (!apiKey) throw new AnalyzeError("GOOGLE_API_KEY missing", "google");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model,
+    )}:generateContent`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: CONTEXT_QUESTIONS_SYSTEM }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                inline_data: { mime_type: mimeType, data: imageBase64 },
+              },
+              { text: CONTEXT_QUESTIONS_USER },
+            ],
+          },
+        ],
+        generation_config: {
+          max_output_tokens: 1024,
+          response_mime_type: "application/json",
+          temperature: 0.2,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new AnalyzeError(
+        `Google ${res.status}: ${body.slice(0, 500)}`,
+        "google",
+      );
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+      usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+      };
+    };
+
+    const text = (data.candidates ?? [])
+      .flatMap((c) => c.content?.parts ?? [])
+      .map((p) => p.text ?? "")
+      .join("\n");
+
+    const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
+    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const costUsd = computeCost(model, inputTokens, outputTokens);
+
+    return {
+      questions: parseQuestions(text),
+      provider: "google",
       model,
       durationMs: Date.now() - start,
       usage: { inputTokens, outputTokens, costUsd },

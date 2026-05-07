@@ -11,7 +11,7 @@ type AICall = {
   user_id: string;
   inspection_id: string | null;
   photo_id: string | null;
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "google";
   model: string;
   input_tokens: number;
   output_tokens: number;
@@ -433,8 +433,9 @@ export default async function AdminStatsPage() {
 
         <p className="px-1 text-center text-[11px] text-[var(--fg-subtle)] sm:text-left">
           Pricing: Claude Haiku 4.5 $1/M in · $5/M out · Claude Sonnet 4.5 $3/M
-          in · $15/M out · GPT-4o $2.50/M in · $10/M out. Costs computed at
-          call time.{" "}
+          in · $15/M out · Gemini 2.5 Flash $0.30/M in · $2.50/M out · Gemini
+          2.5 Pro $1.25/M in · $10/M out · GPT-4o $2.50/M in · $10/M out.
+          Costs computed at call time.{" "}
           <Link
             href="/inspections"
             className="text-[var(--primary)] hover:text-[var(--primary-hover)]"
@@ -501,6 +502,9 @@ function prettyModel(provider: string, model: string): string {
   if (model.includes("sonnet-4-5")) return "Claude Sonnet 4.5";
   if (model.includes("opus")) return "Claude Opus";
   if (model.includes("gpt-4o")) return "GPT-4o";
+  if (model.includes("gemini-2.5-flash")) return "Gemini 2.5 Flash";
+  if (model.includes("gemini-2.5-pro")) return "Gemini 2.5 Pro";
+  if (model.startsWith("gemini")) return model.replace(/^gemini-/, "Gemini ");
   return `${provider} · ${model}`;
 }
 
