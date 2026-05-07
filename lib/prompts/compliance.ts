@@ -164,6 +164,32 @@ SPRINKLER HEADS — NFPA 13 / NFPA 25:
 - Storage Clearance: items within 18 in. of sprinkler deflector → Medium, Fire, NFPA 13. Storage near (but not within) → Low advisory.
 - Condition: corrosion, paint, dust loading, obstructed spray → Medium/High depending on severity, Fire, NFPA 25 §5.2.
 
+SPRINKLER HEAD ORIENTATION & DEFLECTOR DISTANCE — NFPA 13 §7.2.2 + §10.2.6:
+RECOGNIZE THE ORIENTATION FIRST:
+- UPRIGHT sprinkler: deflector points UP, frame/cup opens DOWNWARD, head sits ON TOP of the branch line. Standard for exposed-structure / open-ceiling spaces because piping is exposed and a pendant drop would be vulnerable.
+- PENDANT sprinkler: deflector points DOWN, head HANGS BELOW the piping (often via a drop nipple), frame/cup opens UPWARD. Standard for finished ceilings (ACT grid, drywall, plaster) where the head drops through an escutcheon.
+- SIDEWALL sprinkler: mounted horizontally on a wall, deflector points away from the wall.
+- Recognize CEILING TYPE — finished (continuous flat plane: ACT grid, drywall, plaster) versus EXPOSED STRUCTURE (visible joists/beams/decking/flutes, bare conduit, exposed piping/ductwork).
+
+THE LISTING RULE (most-cited violation, NFPA 13 §7.2.2):
+- A sprinkler MUST be installed in the orientation it is LISTED for. Pendant heads must be installed pendant; upright heads must be installed upright. Installing a pendant head in upright orientation (or vice-versa) IMMEDIATELY VOIDS the listing → High, Fire, NFPA 13 §7.2.2. Visual cue: an "upside-down" frame — a head whose cup/frame opens UPWARD while installed pointing DOWN, or whose cup opens DOWNWARD while installed pointing UP.
+- It is NOT a categorical violation to install a pendant in an open-ceiling space. Both orientations are permitted; the choice is driven by listing, exposed-piping concerns, and obstruction rules. However, pendant in exposed structure is UNUSUAL and worth flagging for verification — most exposed-structure spaces use upright because the drop nipple of a pendant is exposed and fragile.
+
+DEFLECTOR DISTANCE FROM CEILING / DECK — NFPA 13 §10.2.6 (standard pendent/upright spray):
+- UNOBSTRUCTED CONSTRUCTION (smooth ceiling, open-web bar joists ≥70% open with member depth ≤ least dimension of opening): deflector 1 in. to 12 in. below the ceiling.
+- OBSTRUCTED CONSTRUCTION (solid-web members like wood I-joists / solid beams ≤ 7 ft 6 in. apart, or pockets >300 sq ft): deflector either (a) 1–12 in. below the ceiling/deck, OR (b) 1–6 in. below the bottom of the structural member AND not more than 22 in. below the deck/ceiling.
+- A deflector visibly more than 12 in. below a smooth ceiling, or more than 22 in. below the deck in obstructed construction, is a likely violation → Medium, Fire, NFPA 13 §10.2.6.1. Description should state observed apparent distance and that exact measurement is required on site.
+- The "18 in." figure commonly cited is a DIFFERENT rule — minimum 18 in. clearance from deflector to top of storage (NFPA 13 §9.5.4.1). Don't conflate the two.
+
+WHEN AN ABOVE-CEILING / EXPOSED-STRUCTURE PHOTO SHOWS A SPRINKLER HEAD:
+- ALWAYS identify orientation (pendant vs upright vs sidewall) and call it out in the description.
+- ALWAYS check whether the orientation matches the apparent ceiling type:
+  * Pendant in EXPOSED structure → Low advisory: "Pendant sprinkler observed in exposed-structure space. Pendant orientation is permitted by NFPA 13 if the head is listed for pendant installation, but upright is the convention in open ceilings. Verify the head's listing matches its installed orientation per NFPA 13 §7.2.2 and that the deflector distance complies with §10.2.6."
+  * Upright sprinkler observed in finished ceiling space → similar advisory in reverse.
+- If the deflector appears CLEARLY more than 22 in. below the structural deck in obstructed construction (deep beam pocket, large void above pendant) → Medium, Fire, NFPA 13 §10.2.6.1.2. Title: "Sprinkler deflector likely exceeds NFPA 13 §10.2.6 clearance from deck".
+- ALWAYS add whatToLookFor: "Verify sprinkler is installed in its listed orientation (frame/cup orientation matches head label) per NFPA 13 §7.2.2" and "Measure deflector distance from deck and from any obstruction; verify against NFPA 13 §10.2.6 (1-12 in. unobstructed; ≤22 in. with member offset in obstructed construction)".
+- Bbox the sprinkler head tightly.
+
 FIRE DOORS — NFPA 80:
 - Propped open with wedge/kick-down/cord/unapproved hold-open → High, Fire, NFPA 80.
 - Self-closing failure (won't latch) → High, Fire, NFPA 80.
