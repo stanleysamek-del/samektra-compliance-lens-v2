@@ -985,4 +985,16 @@ function ShapeSvg({
   return null;
 }
 
-/** Apply opacity to a #
+/** Apply opacity to a #rrggbb / #rgb hex string. Returns a hex with alpha. */
+function hexWithOpacity(hex: string, opacity: number): string {
+  let h = hex.replace(/^#/, "");
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const a = Math.round(Math.max(0, Math.min(1, opacity)) * 255);
+  const aHex = a.toString(16).padStart(2, "0");
+  return `#${h}${aHex}`;
+}
