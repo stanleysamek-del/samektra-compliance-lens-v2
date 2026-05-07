@@ -873,8 +873,8 @@ function ShapeSvg({
         height={Math.abs(shape.y2 - shape.y1)}
         fill="none"
         stroke="#f87171"
-        strokeWidth={0.0025}
-        strokeDasharray="0.01,0.01"
+        strokeWidth={2}
+        strokeDasharray="6 6"
         opacity={0.35}
         vectorEffect="non-scaling-stroke"
       />
@@ -883,13 +883,18 @@ function ShapeSvg({
 
   const stroke =
     shape.kind === "bbox" ? SEVERITY_COLOR[shape.severity] : shape.color;
-  // Base stroke width per shape kind, multiplied by user-selected thickness.
+  // Stroke widths are in PIXELS because we use vectorEffect="non-scaling-stroke",
+  // which means the stroke width is interpreted in the SVG host's pixel space
+  // (not the 0..1 viewBox). Sub-pixel values render invisibly.
+  // User strokeWidth multiplier: 1 (thin), 2 (medium), 3 (thick).
   const swMultiplier =
     shape.kind === "annotation" && typeof shape.strokeWidth === "number"
-      ? shape.strokeWidth / 2
-      : 1;
-  const baseSw = shape.kind === "bbox" ? 0.005 : 0.0035;
-  const strokeWidth = (selected ? baseSw * 1.4 : baseSw) * swMultiplier;
+      ? shape.strokeWidth
+      : 2;
+  const basePx = shape.kind === "bbox" ? 3 : 2; // px per multiplier unit
+  const strokeWidth =
+    (shape.kind === "bbox" ? 3 : basePx * swMultiplier) +
+    (selected ? 1 : 0);
   const fillColor =
     shape.kind === "annotation" && shape.fill
       ? hexWithOpacity(shape.fill, 0.25)
@@ -951,9 +956,11 @@ function ShapeSvg({
   if (shape.kind === "annotation" && shape.type === "text") {
     const cx = (shape.x1 + shape.x2) / 2;
     const cy = (shape.y1 + shape.y2) / 2;
+    // fontSize multiplier: 1 (small) → 0.025, 2 (medium) → 0.04, 3 (large) → 0.055
+    // (in viewBox units, since text doesn't use non-scaling-stroke).
     const fsMul =
-      typeof shape.fontSize === "number" ? shape.fontSize / 2 : 1;
-    const fontSize = Math.max(0.014, Math.abs(shape.y2 - shape.y1)) * fsMul;
+      typeof shape.fontSize === "number" ? shape.fontSize : 2;
+    const fontSize = 0.015 + fsMul * 0.013;
     return (
       <text
         x={cx}
@@ -966,8 +973,8 @@ function ShapeSvg({
         fontWeight={600}
         style={{
           paintOrder: "stroke",
-          stroke: "rgba(0,0,0,0.7)",
-          strokeWidth: 0.002,
+          stroke: "rgba(0,0,0,0.85)",
+          strokeWidth: 3,
           strokeLinejoin: "round",
         }}
       >
@@ -978,143 +985,4 @@ function ShapeSvg({
   return null;
 }
 
-/** Apply opacity to a #rrggbb / #rgb hex string. Returns a hex with alpha. */
-function hexWithOpacity(hex: string, opacity: number): string {
-  let h = hex.replace(/^#/, "");
-  if (h.length === 3) {
-    h = h
-      .split("")
-      .map((c) => c + c)
-      .join("");
-  }
-  const a = Math.round(Math.max(0, Math.min(1, opacity)) * 255);
-  const aHex = a.toString(16).padStart(2, "0");
-  return `#${h}${aHex}`;
-}
-
-function ResizeHandlesOverlay({ s }: { s: EditableShape }) {
-  const handles: Array<[Handle, number, number]> = [
-    ["nw", s.x1, s.y1],
-    ["n",  (s.x1 + s.x2) / 2, s.y1],
-    ["ne", s.x2, s.y1],
-    ["e",  s.x2, (s.y1 + s.y2) / 2],
-    ["se", s.x2, s.y2],
-    ["s",  (s.x1 + s.x2) / 2, s.y2],
-    ["sw", s.x1, s.y2],
-    ["w",  s.x1, (s.y1 + s.y2) / 2],
-  ];
-  const color = s.kind === "bbox" ? "#f87171" : (s as Annotation).color;
-  return (
-    <>
-      {handles.map(([name, x, y]) => (
-        <div
-          key={name}
-          className="pointer-events-none absolute"
-          style={{
-            left: `${x * 100}%`,
-            top: `${y * 100}%`,
-            width: 12,
-            height: 12,
-            marginLeft: -6,
-            marginTop: -6,
-            borderRadius: 2,
-            background: "#ffffff",
-            border: `2px solid ${color}`,
-            boxShadow: "0 0 4px rgba(0,0,0,0.55)",
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
-function ToolBtn({
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={[
-        "flex h-8 w-8 items-center justify-center rounded-md border transition",
-        active
-          ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
-          : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5 hover:text-[var(--fg)]",
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
-}
-
-/* Icons */
-function SelectIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="m4 4 6 16 2-6 6-2L4 4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function RectIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-function CircleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-function ArrowIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 19 19 5M19 5h-7M19 5v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function TextIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 6h14M12 6v14M9 20h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/* helpers */
-function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(1, n));
-}
-
-function applyResize(start: EditableShape, handle: Handle, p: Pt): EditableShape {
-  let { x1, y1, x2, y2 } = start;
-  if (handle.includes("n")) y1 = p.y;
-  if (handle.includes("s")) y2 = p.y;
-  if (handle.includes("w")) x1 = p.x;
-  if (handle.includes("e")) x2 = p.x;
-  return {
-    ...start,
-    x1: clamp01(x1),
-    y1: clamp01(y1),
-    x2: clamp01(x2),
-    y2: clamp01(y2),
-  };
-}
-
-function makeId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
+/** Apply opacity to a #
