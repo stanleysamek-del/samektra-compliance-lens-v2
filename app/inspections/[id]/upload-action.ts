@@ -62,7 +62,7 @@ export async function uploadAndAnalyzePhoto(
 
   // ---- AI analysis with cost tracking ----
   let analysis: ComplianceAnalysis;
-  let aiProvider: "anthropic" | "openai" = "anthropic";
+  let aiProvider: "anthropic" | "openai" | "google" = "anthropic";
   let aiModel = "";
   let aiInputTokens = 0;
   let aiOutputTokens = 0;
