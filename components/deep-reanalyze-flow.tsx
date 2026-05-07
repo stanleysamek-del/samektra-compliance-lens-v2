@@ -81,6 +81,46 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
     await runReanalyze({}, []);
   }
 
+  async function runWithCustomObservation(observation: string) {
+    const trimmed = observation.trim();
+    if (!trimmed) return;
+    setStage({ kind: "analyzing", answers: { custom: trimmed }, questions: [] });
+    try {
+      const res = await fetch(`/api/photos/${photoId}/reanalyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: "deep",
+          answers: [
+            {
+              question:
+                "INSPECTOR OBSERVATION — what the inspector saw on site that you may have missed or under-rated. Treat this as authoritative ground truth and incorporate into your findings.",
+              answer: trimmed,
+            },
+          ],
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !json.ok) {
+        setStage({
+          kind: "error",
+          message: json.error ?? `Re-analysis failed (HTTP ${res.status})`,
+        });
+        return;
+      }
+      setStage({ kind: "done" });
+      router.refresh();
+    } catch (err) {
+      setStage({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Network error",
+      });
+    }
+  }
+
   async function runReanalyze(
     answers: Record<string, string>,
     questions: Question[],
@@ -124,24 +164,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
   /* -------------------- render -------------------- */
 
   if (stage.kind === "idle") {
-    return (
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <button
-          type="button"
-          onClick={startWithQuestions}
-          className="cl-btn-accent w-full sm:w-auto"
-        >
-          <SparkIcon /> Deep analyze (with questions)
-        </button>
-        <button
-          type="button"
-          onClick={quickReanalyze}
-          className="cl-btn-outline w-full sm:w-auto"
-        >
-          Skip questions
-        </button>
-      </div>
-    );
+    return <IdlePanel onWithQuestions={startWithQuestions} onSkip={quickReanalyze} onCustom={runWithCustomObservation} />;
   }
 
   if (stage.kind === "fetching-questions") {
@@ -320,5 +343,93 @@ function Spinner() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+/* ---------- Subcomponents ---------- */
+
+function IdlePanel({
+  onWithQuestions,
+  onSkip,
+  onCustom,
+}: {
+  onWithQuestions: () => void;
+  onSkip: () => void;
+  onCustom: (observation: string) => void;
+}) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [observation, setObservation] = useState("");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={onWithQuestions}
+          className="cl-btn-accent w-full sm:w-auto"
+        >
+          <SparkIcon /> Deep analyze (with questions)
+        </button>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="cl-btn-outline w-full sm:w-auto"
+        >
+          Skip questions
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowCustom((v) => !v)}
+          className="cl-btn-outline w-full sm:w-auto"
+          aria-expanded={showCustom}
+        >
+          {showCustom ? "Hide observation" : "I saw something the AI missed"}
+        </button>
+      </div>
+
+      {showCustom ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3">
+          <label
+            htmlFor="custom-observation"
+            className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
+          >
+            What did you observe on site?
+          </label>
+          <textarea
+            id="custom-observation"
+            value={observation}
+            onChange={(e) => setObservation(e.target.value)}
+            placeholder="e.g., 'There's an unsealed penetration around the MC cable behind the plastic sheeting — the wall is rated 1-hour. Also, the door has a Williamsburg Hardware self-closer that's missing the door coordinator.'"
+            rows={4}
+            className="cl-input min-h-[88px] resize-y py-2.5 text-sm"
+          />
+          <p className="text-[11px] text-[var(--fg-subtle)]">
+            Describe what you saw that the AI may have missed or under-rated.
+            This will be sent to the deeper model as authoritative ground truth
+            alongside the photo. Your custom findings and edits are preserved.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setShowCustom(false);
+                setObservation("");
+              }}
+              className="cl-btn-outline"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={observation.trim().length === 0}
+              onClick={() => onCustom(observation)}
+              className="cl-btn-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Re-analyze with my observation
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -36,7 +36,11 @@ const OPENAI_MODEL = "gpt-4o";
 const GEMINI_FLASH_MODEL = "gemini-2.5-flash";
 const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 
-const REQUEST_TIMEOUT_MS = 60_000;
+// Per-provider hard timeout. Vercel functions cap at 60s on Hobby and 90s
+// on Pro; we set 45s so a slow provider can be abandoned in time to fall
+// through to the next one (Anthropic → Google → OpenAI) without the whole
+// function getting killed by Vercel's gateway with a 504.
+const REQUEST_TIMEOUT_MS = 45_000;
 
 // Per-million-token pricing in USD. Tweak as Google / Anthropic / OpenAI
 // re-price; the cost dashboard reads these.
