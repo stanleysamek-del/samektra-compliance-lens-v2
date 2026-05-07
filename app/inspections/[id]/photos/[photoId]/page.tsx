@@ -7,6 +7,8 @@ import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoWithBoxes } from "@/components/photo-with-bboxes";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
 import { AddFindingForm } from "@/components/add-finding-form";
+import { PhotoAnnotator } from "@/components/photo-annotator";
+import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { deletePhoto } from "./actions";
 
 export default async function PhotoDetailPage({
@@ -31,7 +33,7 @@ export default async function PhotoDetailPage({
 
   const { data: photo } = await supabase
     .from("photos")
-    .select("id, storage_path, width, height, photo_location, raw_analysis, analyzed_at")
+    .select("id, storage_path, width, height, photo_location, raw_analysis, analyzed_at, annotations")
     .eq("id", photoId)
     .eq("inspection_id", inspectionId)
     .maybeSingle();
@@ -125,13 +127,14 @@ export default async function PhotoDetailPage({
           ) : null}
         </div>
 
-        {/* Photo with bboxes */}
+        {/* Photo with bboxes (read-only view also overlays annotations) */}
         {photoUrl ? (
           <PhotoWithBoxes
             src={photoUrl}
             width={photo.width ?? 16}
             height={photo.height ?? 9}
             bboxes={bboxes}
+            annotations={(photo.annotations ?? []) as Annotation[]}
           />
         ) : (
           <Card>
@@ -140,6 +143,34 @@ export default async function PhotoDetailPage({
             </p>
           </Card>
         )}
+
+        {/* Annotation editor: rectangles, circles, arrows, text on the photo. */}
+        {photoUrl ? (
+          <details className="group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] open:bg-[var(--bg-elevated)]">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm">
+              <div>
+                <p className="font-medium text-[var(--fg)]">
+                  Annotate this photo
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                  Add rectangles, circles, arrows, or text to highlight what you
+                  found on site. Saves to the photo and appears in the report.
+                </p>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-[var(--fg-subtle)] transition group-open:rotate-180">
+                ▾
+              </span>
+            </summary>
+            <div className="border-t border-[var(--border)] p-4">
+              <PhotoAnnotator
+                src={photoUrl}
+                inspectionId={inspectionId}
+                photoId={photo.id}
+                initial={(photo.annotations ?? []) as Annotation[]}
+              />
+            </div>
+          </details>
+        ) : null}
 
         {/* Deep re-analyze (Sonnet, with optional clarifying questions) */}
         <Card variant="tinted-teal">
@@ -258,14 +289,4 @@ export default async function PhotoDetailPage({
               <p className="font-medium text-[var(--fg)]">Remove this photo</p>
               <p className="mt-1 text-sm text-[var(--fg-muted)]">
                 Deletes the photo and all associated findings.
-              </p>
-            </div>
-            <button type="submit" className="cl-btn-outline">
-              Delete photo
-            </button>
-          </form>
-        </Card>
-      </div>
-    </AppShell>
-  );
-}
+  

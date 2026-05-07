@@ -109,7 +109,6 @@ export async function deletePhoto(
   redirect(`/inspections/${inspectionId}`);
 }
 
-
 /**
  * Insert a manually-entered finding (the inspector saw something the AI
  * missed, or wants to override / add to the AI's call). Uses FormData per
@@ -157,7 +156,6 @@ export async function addCustomFinding(formData: FormData) {
     by2 > by1;
 
   if (!photoId || !inspectionId || !title) {
-    // Bail silently — the form should require these client-side.
     return;
   }
 
@@ -201,5 +199,72 @@ export async function addCustomFinding(formData: FormData) {
   }
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
+  revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+}
+
+/* =====================================================================
+ *  Photo annotation layer (rect / circle / arrow / text shapes drawn
+ *  by the inspector on top of a photo). Stored as JSONB on photos.
+ * ===================================================================== */
+
+export type Annotation = {
+  id: string;
+  type: "rect" | "circle" | "arrow" | "text";
+  color: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  text?: string;
+};
+
+/**
+ * Persist the inspector-drawn annotation layer for a photo. Replaces the
+ * full annotations JSON. The shape array can be empty to clear all
+ * annotations on a photo.
+ */
+export async function updatePhotoAnnotations(
+  photoId: string,
+  inspectionId: string,
+  annotations: Annotation[],
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
+  const cleaned: Annotation[] = (Array.isArray(annotations) ? annotations : [])
+    .slice(0, 200)
+    .map((a) => ({
+      id: String(a.id ?? Math.random().toString(36).slice(2, 10)),
+      type:
+        a.type === "rect" ||
+        a.type === "circle" ||
+        a.type === "arrow" ||
+        a.type === "text"
+          ? a.type
+          : "rect",
+      color: typeof a.color === "string" ? a.color.slice(0, 16) : "#f87171",
+      x1: clamp(a.x1),
+      y1: clamp(a.y1),
+      x2: clamp(a.x2),
+      y2: clamp(a.y2),
+      text:
+        typeof a.text === "string" && a.text.length > 0
+          ? a.text.slice(0, 200)
+          : undefined,
+    }));
+
+  const { error } = await supabase
+    .from("photos")
+    .update({ annotations: cleaned })
+    .eq("id", photoId);
+
+  if (error) {
+    console.error("[updatePhotoAnnotations]", error);
+  }
+
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
 }

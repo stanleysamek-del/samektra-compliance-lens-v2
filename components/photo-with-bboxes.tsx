@@ -13,6 +13,17 @@ type BBox = {
   title: string;
 };
 
+type Annotation = {
+  id: string;
+  type: "rect" | "circle" | "arrow" | "text";
+  color: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  text?: string;
+};
+
 type Props = {
   src: string;
   /** Kept for API compatibility but no longer consumed. */
@@ -20,6 +31,8 @@ type Props = {
   /** Kept for API compatibility but no longer consumed. */
   height?: number;
   bboxes: BBox[];
+  /** Inspector-drawn annotation layer (read-only overlay). */
+  annotations?: Annotation[];
 };
 
 /**
@@ -40,7 +53,7 @@ type Props = {
  * Boxes are HTML <div>s with a CSS border (3px red), positioned in %
  * over the image.
  */
-export function PhotoWithBoxes({ src, bboxes }: Props) {
+export function PhotoWithBoxes({ src, bboxes, annotations = [] }: Props) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [legendVisible, setLegendVisible] = useState(true);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -94,6 +107,37 @@ export function PhotoWithBoxes({ src, bboxes }: Props) {
           onLoad={() => setImgLoaded(true)}
           className="block w-full h-auto"
         />
+
+        {/* Read-only annotation overlay (rectangles, circles, arrows, text)
+            drawn by the inspector via the PhotoAnnotator editor below. Sits
+            UNDER the bbox/badge layer so finding badges remain on top. */}
+        {imgLoaded && annotations.length > 0 ? (
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 1 1"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              {Array.from(new Set(annotations.map((a) => a.color))).map(
+                (color) => (
+                  <marker
+                    key={color}
+                    id={`pwb-arrowhead-${color.replace(/[^a-z0-9]/gi, "")}`}
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="8"
+                    markerHeight="8"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
+                  </marker>
+                ),
+              )}
+            </defs>
+            {annotations.map((a) => renderAnnotation(a))}
+          </svg>
+        ) : null}
 
         {/* Overlay container — sits exactly on top of the rendered image area.
             Because the <img> drives the parent's size and we don't fix an
@@ -273,4 +317,92 @@ function severityFill(s: "Low" | "Medium" | "High") {
   if (s === "High") return "rgba(248, 113, 113, 0.20)";
   if (s === "Medium") return "rgba(248, 113, 113, 0.14)";
   return "rgba(52, 211, 153, 0.16)";
+}
+
+/** Render a single inspector-drawn annotation as an SVG element. The
+ *  PhotoAnnotator component owns the editable version; this is read-only. */
+function renderAnnotation(a: Annotation) {
+  const stroke = a.color;
+  const strokeWidth = 0.0035;
+  const minX = Math.min(a.x1, a.x2);
+  const maxX = Math.max(a.x1, a.x2);
+  const minY = Math.min(a.y1, a.y2);
+  const maxY = Math.max(a.y1, a.y2);
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const markerId = `pwb-arrowhead-${a.color.replace(/[^a-z0-9]/gi, "")}`;
+
+  if (a.type === "rect") {
+    return (
+      <rect
+        key={a.id}
+        x={minX}
+        y={minY}
+        width={w}
+        height={h}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  if (a.type === "circle") {
+    return (
+      <ellipse
+        key={a.id}
+        cx={(minX + maxX) / 2}
+        cy={(minY + maxY) / 2}
+        rx={w / 2}
+        ry={h / 2}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  if (a.type === "arrow") {
+    return (
+      <line
+        key={a.id}
+        x1={a.x1}
+        y1={a.y1}
+        x2={a.x2}
+        y2={a.y2}
+        stroke={stroke}
+        strokeWidth={strokeWidth * 1.4}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+        markerEnd={`url(#${markerId})`}
+      />
+    );
+  }
+  if (a.type === "text") {
+    const cx = (a.x1 + a.x2) / 2;
+    const cy = (a.y1 + a.y2) / 2;
+    const fontSize = Math.max(0.018, Math.abs(a.y2 - a.y1));
+    return (
+      <text
+        key={a.id}
+        x={cx}
+        y={cy}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill={stroke}
+        fontSize={fontSize}
+        fontFamily="system-ui, sans-serif"
+        fontWeight={600}
+        style={{
+          paintOrder: "stroke",
+          stroke: "rgba(0,0,0,0.7)",
+          strokeWidth: 0.002,
+          strokeLinejoin: "round",
+        }}
+      >
+        {(a.text ?? "").slice(0, 80)}
+      </text>
+    );
+  }
+  return null;
 }
