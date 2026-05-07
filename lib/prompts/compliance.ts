@@ -208,7 +208,44 @@ WHEN you see substantial decoration on walls, doors, or ceilings:
 ELECTRICAL PANELS — NEC 110.26:
 - Storage within 36-in. working space → High, Electrical, NEC 110.26.
 
-PENETRATIONS — NFPA 101:
+FIRE-RATED WALLS / SMOKE BARRIERS / SMOKE PARTITIONS — NFPA 101 §8.3 / §8.4 / §8.5, IBC §703 / §707 / §714:
+ABOVE-CEILING photos commonly contain rated assemblies, and many code violations live in the concealed space. ALWAYS check the following when an above-ceiling, mechanical-room, or wall-cavity photo is provided.
+
+Wall identification (NFPA 101 §8.3.1.4 / IBC §703.7 in 2018, renumbered §703.6 in 2021):
+- Rated walls (fire barriers, smoke barriers, smoke partitions) enclosing accessible concealed spaces (above suspended ceilings, attic, etc.) MUST be permanently identified with stenciling or signs.
+- Required: lettering ≥ 3 in. high with min. 3/8 in. stroke, contrasting color, suggested wording "FIRE AND/OR SMOKE BARRIER — PROTECT ALL OPENINGS" plus the wall type and rating. Placed within 15 ft of each end and at intervals not exceeding 30 ft.
+- ABOVE-CEILING photo with a wall but NO visible stencil/sign → Medium, Fire, NFPA 101 §8.3.1.4 / IBC §703.7. Title: "Rated wall identification missing above ceiling". Description: note the assumption that the wall is rated (gypsum-board partition extending above ceiling typically is) and that without stenciling, service technicians have no warning they are working through a rated assembly.
+
+Through-penetration firestop systems (NFPA 101 §8.3.5.1 / IBC §714.4.1.2):
+- Every item passing through a rated wall (cable, conduit, pipe, sprinkler line, plastic tube, MC cable, EMT, ductwork) must be sealed with an APPROVED through-penetration firestop system tested per ASTM E814 or UL 1479. The system must have an F-rating equal to or greater than the wall rating.
+- ANNULAR SPACE = the gap between the penetrant and the edge of the opening. Listed firestop systems specify min/max annular space, the substrate (gypsum/CMU/concrete), the penetrant type and size, and the firestop material. Generic caulk or expanding foam is NOT a tested firestop system.
+- MC cable / armored cable / EMT through a rated wall: annular space sealed with intumescent putty, listed firestop sealant, mortar, or foam per a listed system (UL XHEZ category). NEC §300.21 requires restoration of the fire-resistance rating. Visible bare/unsealed annular space around MC cable → High, Fire, NFPA 101 §8.3.5.1 / NEC §300.21. Title: "Unsealed annular space around MC cable in fire-rated assembly".
+- Plastic / nonmetallic penetrants (PVC, CPVC, PEX, ABS, polyethylene tubing): NOT categorically banned, but ONLY permitted with a firestop system tested and listed for that specific plastic material at that specific diameter and schedule. Plastic penetrants almost always require an INTUMESCENT DEVICE (collar, wrap, cast-in firestop) because the pipe melts or burns away in fire. Plastic tubing through a rated wall with no visible intumescent collar → High, Fire, NFPA 101 §8.3.5.1. Title: "Plastic penetrant through rated assembly without listed firestop / intumescent device".
+- Large unprotected opening (gap > 1 in. with no penetrant filling it, or oversized hole with debris/sleeve only) → High, Fire, NFPA 101 §8.3.5.1. Title: "Unprotected through-opening in rated assembly".
+- "Pillow"/silver-foil intumescent firestop blocks visible: positive sign — note in description as compliant practice, do not flag.
+- Visible red firestop sealant or labeled firestop putty around cables: positive sign — same.
+
+Membrane vs through-penetration (IBC §714.4.2):
+- Membrane penetration breaches only one side (recessed electrical box, wall-mounted device). Steel/listed electrical boxes ≤ 16 sq in. each, aggregate ≤ 100 sq in. per 100 sq ft, ≥ 24 in. horizontal separation between boxes on opposite sides, annular gap ≤ 1/8 in. Boxes that exceed these limits or have unsealed gaps → Medium, Fire, NFPA 101 / IBC §714.4.2.
+
+Smoke barriers vs smoke partitions (NFPA 101 §8.4 / §8.5):
+- SMOKE BARRIER (§8.5): minimum 1-hr fire-resistance rating for new healthcare (½-hr existing). Subdivides healthcare floors into smoke compartments (NFPA 101 §18/19.3.7). Penetrations sealed to restrict smoke transfer; firestop systems with an L-rating preferred. K-tag K-372 for healthcare deficiencies.
+- SMOKE PARTITION (§8.4): no fire-resistance rating required; resists smoke passage only. Penetrations sealed with smoke-tight material; may terminate at a continuous suspended-ceiling membrane.
+- When the inspector indicates the area is healthcare AND the photo shows above-ceiling penetrations, default to assuming a smoke barrier and treat penetration deficiencies as K-372-relevant.
+
+CMS / Joint Commission tagging context (cite when occupancy is healthcare):
+- K-372 — Subdivision of Building Spaces / Smoke Barrier Construction (healthcare smoke-barrier penetration deficiencies).
+- K-321 / K-323 — hazardous areas / fire-barrier integrity.
+- K-521 — smoke/fire damper inspection and testing.
+- Joint Commission LS.02.01.10 (general life-safety building/fire features) and LS.02.01.30 (smoke compartments).
+
+OUTPUT GUIDANCE FOR ABOVE-CEILING PHOTOS:
+- ALWAYS emit a finding for missing wall stencils if the wall is in frame and no stencil is visible (Medium, NFPA 101 §8.3.1.4).
+- ALWAYS emit a SEPARATE finding (one-finding-per-object rule) for EACH unsealed/unlisted penetration visible. Don't lump multiple penetrations into one box.
+- Bbox the specific deficiency (the bare annular gap, the plastic tube without collar, the open hole), not the whole wall.
+- Add whatToLookFor entries: "Verify wall rating (typically a UL listed assembly number on architectural drawings or the wall's permanent identification stencil)", "For each penetration, locate the listed firestop system documentation (UL XHEZ number or manufacturer's Engineering Judgment)", "Confirm intumescent collar, wrap, or cast-in device for any plastic penetrants".
+
+PENETRATIONS — NFPA 101 (legacy heading, kept for compatibility — the rated-walls section above supersedes):
 - Unsealed cable/conduit/pipe penetrations through rated wall/ceiling → High, Fire, NFPA 101.
 
 HAZARDOUS ROOM DOORS:

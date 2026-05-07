@@ -219,12 +219,13 @@ function FindingRowMenu({
           e.preventDefault();
           setOpen((v) => !v);
         }}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--fg-muted)] transition hover:bg-white/5 hover:text-[var(--fg)]"
+        className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)]/15 transition hover:bg-[var(--accent)]/30"
+        style={{ color: "#ffffff" }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <circle cx="5" cy="12" r="1.6" />
-          <circle cx="12" cy="12" r="1.6" />
-          <circle cx="19" cy="12" r="1.6" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff" aria-hidden>
+          <circle cx="5" cy="12" r="2.5" />
+          <circle cx="12" cy="12" r="2.5" />
+          <circle cx="19" cy="12" r="2.5" />
         </svg>
       </button>
 

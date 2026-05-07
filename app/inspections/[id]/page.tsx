@@ -237,18 +237,52 @@ export default async function InspectionDetailPage({
 
           <Card>
             {isCompleted ? (
-              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium text-[var(--fg)]">Inspection finalized</p>
-                  <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                    CAP / LSRA / ILSM / PDF export ships in the next iteration.
-                  </p>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium text-[var(--fg)]">Inspection finalized</p>
+                    <p className="mt-1 text-sm text-[var(--fg-muted)]">
+                      Download the report below or reopen to make changes.
+                    </p>
+                  </div>
+                  <form action={finalizeInspection}>
+                    <input type="hidden" name="inspection_id" value={inspection.id} />
+                    <input type="hidden" name="status" value="in_progress" />
+                    <button type="submit" className="cl-btn-outline">Reopen</button>
+                  </form>
                 </div>
-                <form action={finalizeInspection}>
-                  <input type="hidden" name="inspection_id" value={inspection.id} />
-                  <input type="hidden" name="status" value="in_progress" />
-                  <button type="submit" className="cl-btn-outline">Reopen</button>
-                </form>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <a
+                    href={`/api/inspections/${inspection.id}/export/pdf`}
+                    className="cl-btn-accent w-full text-center"
+                  >
+                    Download PDF
+                  </a>
+                  <button
+                    type="button"
+                    disabled
+                    title="Corrective Action Plan — coming next iteration"
+                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    CAP (soon)
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    title="Life Safety Risk Assessment — coming next iteration"
+                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    LSRA (soon)
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    title="Interim Life Safety Measures — coming next iteration"
+                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ILSM (soon)
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
