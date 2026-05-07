@@ -289,4 +289,14 @@ export default async function PhotoDetailPage({
               <p className="font-medium text-[var(--fg)]">Remove this photo</p>
               <p className="mt-1 text-sm text-[var(--fg-muted)]">
                 Deletes the photo and all associated findings.
-  
+                </p>
+            </div>
+            <button type="submit" className="cl-btn-outline">
+              Delete photo
+            </button>
+          </form>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
