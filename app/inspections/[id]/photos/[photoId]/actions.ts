@@ -216,6 +216,12 @@ export type Annotation = {
   x2: number;
   y2: number;
   text?: string;
+  /** Line thickness multiplier — 1 (thin), 2 (medium), 3 (thick). Default 2. */
+  strokeWidth?: number;
+  /** Text size multiplier — 1 (small), 2 (medium), 3 (large). Default 2. */
+  fontSize?: number;
+  /** Fill color (hex). Undefined means no fill. Rendered at 25% opacity. */
+  fill?: string;
 };
 
 /**
@@ -254,6 +260,18 @@ export async function updatePhotoAnnotations(
       text:
         typeof a.text === "string" && a.text.length > 0
           ? a.text.slice(0, 200)
+          : undefined,
+      strokeWidth:
+        typeof a.strokeWidth === "number" && a.strokeWidth >= 0.5 && a.strokeWidth <= 5
+          ? a.strokeWidth
+          : 2,
+      fontSize:
+        typeof a.fontSize === "number" && a.fontSize >= 0.5 && a.fontSize <= 5
+          ? a.fontSize
+          : 2,
+      fill:
+        typeof a.fill === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.fill)
+          ? a.fill.slice(0, 16)
           : undefined,
     }));
 
@@ -318,6 +336,18 @@ export async function updatePhotoState(
         typeof a.text === "string" && a.text.length > 0
           ? a.text.slice(0, 200)
           : undefined,
+      strokeWidth:
+        typeof a.strokeWidth === "number" && a.strokeWidth >= 0.5 && a.strokeWidth <= 5
+          ? a.strokeWidth
+          : 2,
+      fontSize:
+        typeof a.fontSize === "number" && a.fontSize >= 0.5 && a.fontSize <= 5
+          ? a.fontSize
+          : 2,
+      fill:
+        typeof a.fill === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.fill)
+          ? a.fill.slice(0, 16)
+          : undefined,
     }));
 
   await supabase
@@ -338,14 +368,4 @@ export async function updatePhotoState(
     } else if (u.bbox && typeof u.bbox === "object") {
       update.bbox_x1 = clamp(u.bbox.x1);
       update.bbox_y1 = clamp(u.bbox.y1);
-      update.bbox_x2 = clamp(u.bbox.x2);
-      update.bbox_y2 = clamp(u.bbox.y2);
-    } else {
-      continue;
-    }
-    await supabase.from("findings").update(update).eq("id", u.findingId);
-  }
-
-  revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
-  revalidatePath(`/inspections/${inspectionId}`, "page");
-}
+      update.bbox_x2 = clamp(u.

@@ -114,6 +114,12 @@ export function PhotoEditor({
   const [shapes, setShapes] = useState<EditableShape[]>(initialShapes);
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState<string>("#f87171");
+  /** Line thickness multiplier 1 (thin) | 2 (medium) | 3 (thick). */
+  const [strokeWidth, setStrokeWidth] = useState<number>(2);
+  /** Text size multiplier 1 (small) | 2 (medium) | 3 (large). */
+  const [fontSize, setFontSize] = useState<number>(2);
+  /** Fill color (hex). undefined means no-fill. */
+  const [fill, setFill] = useState<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -261,6 +267,8 @@ export function PhotoEditor({
         x2: Math.min(1, p.x + 0.18),
         y2: Math.min(1, p.y + 0.04),
         text: text.trim(),
+        strokeWidth,
+        fontSize,
       };
       setShapes([...shapes, newA]);
       setSelectedId(newA.id);
@@ -277,6 +285,9 @@ export function PhotoEditor({
       y1: p.y,
       x2: p.x,
       y2: p.y,
+      strokeWidth,
+      fontSize,
+      fill: tool === "rect" || tool === "circle" ? fill : undefined,
     };
     setShapes([...shapes, newA]);
     setSelectedId(newA.id);
@@ -399,6 +410,22 @@ export function PhotoEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, selectedId]);
 
+  // When the user picks a shape, sync the editor's defaults to that shape's
+  // properties so the toolbar reflects the active selection and further edits
+  // continue from there.
+  useEffect(() => {
+    if (!editing || !selectedId) return;
+    const sel = shapes.find((s) => s.id === selectedId);
+    if (!sel) return;
+    if (sel.kind === "annotation") {
+      setColor(sel.color);
+      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
+      if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
+      setFill(sel.fill);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
   function deleteSelected() {
     if (!selectedId) return;
     setShapes((prev) => {
@@ -425,6 +452,42 @@ export function PhotoEditor({
         if (s.kind === "annotation") return { ...s, color: c };
         return s; // bboxes keep severity color
       }),
+    );
+  }
+
+  function changeSelectedStrokeWidth(sw: number) {
+    setStrokeWidth(sw);
+    if (!selectedId) return;
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === selectedId && s.kind === "annotation"
+          ? { ...s, strokeWidth: sw }
+          : s,
+      ),
+    );
+  }
+
+  function changeSelectedFontSize(fs: number) {
+    setFontSize(fs);
+    if (!selectedId) return;
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === selectedId && s.kind === "annotation"
+          ? { ...s, fontSize: fs }
+          : s,
+      ),
+    );
+  }
+
+  function changeSelectedFill(f: string | undefined) {
+    setFill(f);
+    if (!selectedId) return;
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === selectedId && s.kind === "annotation" && (s.type === "rect" || s.type === "circle")
+          ? { ...s, fill: f }
+          : s,
+      ),
     );
   }
 
@@ -497,6 +560,97 @@ export function PhotoEditor({
             />
           ))}
           <span className="mx-1 h-6 w-px bg-[var(--border)]" />
+
+          {/* Line thickness — 3 buttons rendered as progressively thicker lines. */}
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--fg-subtle)]">
+            Width
+          </span>
+          {[1, 2, 3].map((sw) => (
+            <button
+              key={`sw-${sw}`}
+              type="button"
+              title={sw === 1 ? "Thin" : sw === 2 ? "Medium" : "Thick"}
+              onClick={() => changeSelectedStrokeWidth(sw)}
+              className={[
+                "flex h-8 w-8 items-center justify-center rounded-md border transition",
+                strokeWidth === sw
+                  ? "border-[var(--primary)] bg-[var(--primary)]/15"
+                  : "border-[var(--border-strong)] hover:bg-white/5",
+              ].join(" ")}
+            >
+              <span
+                className="block w-4 rounded-full bg-[var(--fg)]"
+                style={{ height: sw === 1 ? 1 : sw === 2 ? 2 : 4 }}
+              />
+            </button>
+          ))}
+          <span className="mx-1 h-6 w-px bg-[var(--border)]" />
+
+          {/* Text size — 3 buttons rendered as S / M / L. */}
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--fg-subtle)]">
+            Text
+          </span>
+          {[
+            { v: 1, label: "S", size: "text-[10px]" },
+            { v: 2, label: "M", size: "text-xs" },
+            { v: 3, label: "L", size: "text-sm" },
+          ].map(({ v, label, size }) => (
+            <button
+              key={`fs-${v}`}
+              type="button"
+              title={`Text ${label}`}
+              onClick={() => changeSelectedFontSize(v)}
+              className={[
+                "flex h-8 w-8 items-center justify-center rounded-md border font-bold transition",
+                size,
+                fontSize === v
+                  ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+                  : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5 hover:text-[var(--fg)]",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="mx-1 h-6 w-px bg-[var(--border)]" />
+
+          {/* Fill — "None" + the 6 stroke colors at 25% opacity preview. */}
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--fg-subtle)]">
+            Fill
+          </span>
+          <button
+            key="fill-none"
+            type="button"
+            title="No fill"
+            onClick={() => changeSelectedFill(undefined)}
+            className={[
+              "relative flex h-6 w-6 items-center justify-center rounded-full border-2 bg-transparent",
+              fill === undefined
+                ? "border-white"
+                : "border-[var(--border-strong)]",
+            ].join(" ")}
+            style={{
+              boxShadow: fill === undefined ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+            }}
+          >
+            <span className="absolute h-[2px] w-5 rotate-45 bg-[#fca5a5]" />
+          </button>
+          {COLORS.map((c) => (
+            <button
+              key={`fill-${c.hex}`}
+              type="button"
+              title={`Fill ${c.label}`}
+              onClick={() => changeSelectedFill(c.hex)}
+              className="h-6 w-6 rounded-full border-2"
+              style={{
+                // 25% opacity tint, matching how the shape will render.
+                background: c.hex + "40",
+                borderColor: fill === c.hex ? "#ffffff" : c.hex,
+                boxShadow: fill === c.hex ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+              }}
+            />
+          ))}
+          <span className="mx-1 h-6 w-px bg-[var(--border)]" />
+
           <button
             type="button"
             disabled={!selected}
@@ -711,7 +865,6 @@ function ShapeSvg({
   selected: boolean;
 }) {
   if (shape.kind === "bbox" && (shape as EditableShape & { cleared?: boolean }).cleared) {
-    // Render faded so user knows it's pending clear.
     return (
       <rect
         x={Math.min(shape.x1, shape.x2)}
@@ -730,8 +883,17 @@ function ShapeSvg({
 
   const stroke =
     shape.kind === "bbox" ? SEVERITY_COLOR[shape.severity] : shape.color;
+  // Base stroke width per shape kind, multiplied by user-selected thickness.
+  const swMultiplier =
+    shape.kind === "annotation" && typeof shape.strokeWidth === "number"
+      ? shape.strokeWidth / 2
+      : 1;
   const baseSw = shape.kind === "bbox" ? 0.005 : 0.0035;
-  const strokeWidth = selected ? baseSw * 1.4 : baseSw;
+  const strokeWidth = (selected ? baseSw * 1.4 : baseSw) * swMultiplier;
+  const fillColor =
+    shape.kind === "annotation" && shape.fill
+      ? hexWithOpacity(shape.fill, 0.25)
+      : "none";
   const minX = Math.min(shape.x1, shape.x2);
   const maxX = Math.max(shape.x1, shape.x2);
   const minY = Math.min(shape.y1, shape.y2);
@@ -746,7 +908,7 @@ function ShapeSvg({
         y={minY}
         width={w}
         height={h}
-        fill="none"
+        fill={fillColor}
         stroke={stroke}
         strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke"
@@ -763,7 +925,7 @@ function ShapeSvg({
         cy={(minY + maxY) / 2}
         rx={w / 2}
         ry={h / 2}
-        fill="none"
+        fill={fillColor}
         stroke={stroke}
         strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke"
@@ -789,7 +951,9 @@ function ShapeSvg({
   if (shape.kind === "annotation" && shape.type === "text") {
     const cx = (shape.x1 + shape.x2) / 2;
     const cy = (shape.y1 + shape.y2) / 2;
-    const fontSize = Math.max(0.018, Math.abs(shape.y2 - shape.y1));
+    const fsMul =
+      typeof shape.fontSize === "number" ? shape.fontSize / 2 : 1;
+    const fontSize = Math.max(0.014, Math.abs(shape.y2 - shape.y1)) * fsMul;
     return (
       <text
         x={cx}
@@ -812,6 +976,20 @@ function ShapeSvg({
     );
   }
   return null;
+}
+
+/** Apply opacity to a #rrggbb / #rgb hex string. Returns a hex with alpha. */
+function hexWithOpacity(hex: string, opacity: number): string {
+  let h = hex.replace(/^#/, "");
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const a = Math.round(Math.max(0, Math.min(1, opacity)) * 255);
+  const aHex = a.toString(16).padStart(2, "0");
+  return `#${h}${aHex}`;
 }
 
 function ResizeHandlesOverlay({ s }: { s: EditableShape }) {
