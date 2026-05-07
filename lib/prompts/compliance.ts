@@ -304,10 +304,25 @@ Output rules:
 - Do NOT ask questions whose answer is plainly visible in the photo. Ask only what would change the analysis.
 - Maximum 6 questions. Prefer 3-4. Ask the highest-leverage ones first.
 
-Common topics worth asking (only when relevant to what is visible):
+MUST-ASK QUESTIONS BY PHOTO TYPE (these questions have such high leverage that you MUST include them when the photo type matches; they take precedence over generic topics):
+
+- ABOVE-CEILING / CONCEALED-SPACE photo (suspended ceiling tile edge in frame, exposed conduit/cable/sprinkler/duct/joists/structural deck visible, walls extending up through interstitial space, dust, exposed framing): When you see a wall in this kind of photo — ESPECIALLY if anything penetrates that wall (cable, conduit, pipe, duct, sleeve, hole) — you MUST include a question about WALL RATING as one of your first 1-2 questions. The whole severity of every penetration finding flips on this answer. Suggested wording: "What is the rating of the wall you are taking the photo of? (the rating dramatically changes whether unsealed penetrations are a violation)" with options like ["Fire-rated 1-hr", "Fire-rated 2-hr", "Fire-rated (unknown hours)", "Smoke barrier", "Smoke partition (no rating)", "Non-rated tenant partition", "Unsure"]. Also ask whether the smoke compartment is sprinklered.
+
+- DOORS in frame: ALWAYS ask whether the door(s) are fire-rated. Suggested: "Are the visible doors fire-rated? (look for a rating label on the hinge edge, intumescent seals around the door, self-closing hardware, smoke gasket)" with options ["Yes — fire-rated", "No — not rated", "Unsure / no label visible"].
+
+- DECORATIONS / WALL COVERINGS in an OCCUPIED space (NOT above-ceiling): ALWAYS ask occupancy classification AND sprinkler protection. The decoration percentage cap is meaningless without those.
+
+- FIRE EXTINGUISHER close-up: ask whether the extinguisher is mounted in a bracket/cabinet (if not visible in frame), and whether the most recent monthly inspection tag was current. Do NOT ask gauge-date / 5-year questions — extinguisher gauges have no calibration-date requirement.
+
+- SPRINKLER VALVE / DRY-PIPE / RISER assembly: ask whether the system is currently in service, whether the most recent trip-test record is on or near the valve, and the air/water pressure target on the valve nameplate.
+
+- ELECTRICAL PANEL: ask the working-space depth in front of the panel (clear of storage, ≥ 36 in. for ≤ 600 V).
+
+- EGRESS / CORRIDOR / EXIT: ask whether the corridor width is the required minimum and whether the exit signs are illuminated (verify visually on site).
+
+GENERIC topics worth asking when the must-ask list above doesn't already cover them:
 - OCCUPANCY classification — Health Care / Ambulatory Health Care / Educational / Day-care / Assembly / Business / Mercantile / Detention/Correctional / Industrial / Residential. Decoration percentages, egress widths, door rules, sprinkler trigger, and many other rules vary by occupancy.
 - SPRINKLER PROTECTION of the smoke compartment (sprinklered / non-sprinklered / unknown). Drives the 20%-vs-30%-vs-50% decoration split, and many other thresholds.
-- Whether visible doors are FIRE-RATED (look for rating label, smoke seal, self-closer — but the on-site inspector can confirm definitively).
 - Whether the area is in an EGRESS PATH (corridor / stairwell / exit access) versus a private room.
 - NEW vs EXISTING construction (different chapters apply).
 - Whether visible decorative material is NFPA 701 flame-retardant LABELED.
