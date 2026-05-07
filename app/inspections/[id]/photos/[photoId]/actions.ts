@@ -307,6 +307,11 @@ export type FindingBboxPatch = {
    * null means clear to the severity default, hex string sets it.
    */
   color?: string | null;
+  /**
+   * Optional fill override. Tri-state: undefined means don't change,
+   * null means no fill, hex string sets the fill at 25% opacity.
+   */
+  fill?: string | null;
 };
 
 export async function updatePhotoState(
@@ -385,6 +390,11 @@ export async function updatePhotoState(
       update.bbox_color = null;
     } else if (typeof u.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(u.color)) {
       update.bbox_color = u.color.slice(0, 16);
+    }
+    if (u.fill === null) {
+      update.bbox_fill = null;
+    } else if (typeof u.fill === "string" && /^#[0-9a-fA-F]{3,8}$/.test(u.fill)) {
+      update.bbox_fill = u.fill.slice(0, 16);
     }
     if (Object.keys(update).length === 1) {
       // Only "edited: true" present — nothing to write.

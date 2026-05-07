@@ -37,6 +37,8 @@ export type Bbox = {
   strokeWidth?: number;
   /** Color override (hex). Undefined means use the severity default. */
   color?: string;
+  /** Fill override (hex). Undefined means no fill. Rendered at 25% opacity. */
+  fill?: string;
 };
 
 type Tool = "select" | "rect" | "circle" | "arrow" | "text";
@@ -57,6 +59,7 @@ type EditableShape =
       title: string;
       strokeWidth?: number; // mirrors annotation strokeWidth
       color?: string;       // optional color override; undefined = severity default
+      fill?: string;        // optional fill (hex); undefined = no fill
       cleared?: boolean;   // user wants to clear this bbox on save
     };
 
@@ -115,6 +118,7 @@ export function PhotoEditor({
       title: b.title,
       strokeWidth: typeof b.strokeWidth === "number" ? b.strokeWidth : 2,
       color: typeof b.color === "string" ? b.color : undefined,
+      fill: typeof b.fill === "string" ? b.fill : undefined,
     })),
     ...annotations.map((a) => ({ kind: "annotation" as const, ...a })),
   ];
@@ -166,7 +170,8 @@ export function PhotoEditor({
       const swChanged =
         (o.strokeWidth ?? 2) !== (s.strokeWidth ?? 2);
       const colorChanged = (o.color ?? undefined) !== (s.color ?? undefined);
-      if (coordChanged || swChanged || colorChanged) {
+      const fillChanged = (o.fill ?? undefined) !== (s.fill ?? undefined);
+      if (coordChanged || swChanged || colorChanged || fillChanged) {
         bboxUpdates.push({
           findingId: s.id,
           bbox: coordChanged
@@ -174,6 +179,7 @@ export function PhotoEditor({
             : { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 },
           strokeWidth: swChanged ? s.strokeWidth : undefined,
           color: colorChanged ? (s.color ?? null) : undefined,
+          fill: fillChanged ? (s.fill ?? null) : undefined,
         });
       }
     }
@@ -438,10 +444,11 @@ export function PhotoEditor({
       if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
       setFill(sel.fill);
     } else if (sel.kind === "bbox") {
-      // Mirror thickness AND color for bboxes (color falls back to the
-      // severity default when no override is set).
+      // Mirror thickness, color, and fill for bboxes. Color falls back to
+      // the severity default; fill defaults to undefined (no fill).
       if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
       setColor(sel.color ?? SEVERITY_COLOR[sel.severity]);
+      setFill(sel.fill);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -499,11 +506,16 @@ export function PhotoEditor({
     setFill(f);
     if (!selectedId) return;
     setShapes((prev) =>
-      prev.map((s) =>
-        s.id === selectedId && s.kind === "annotation" && (s.type === "rect" || s.type === "circle")
-          ? { ...s, fill: f }
-          : s,
-      ),
+      prev.map((s) => {
+        if (s.id !== selectedId) return s;
+        if (s.kind === "bbox") {
+          return { ...s, fill: f } as EditableShape;
+        }
+        if (s.kind === "annotation" && (s.type === "rect" || s.type === "circle")) {
+          return { ...s, fill: f };
+        }
+        return s;
+      }),
     );
   }
 
@@ -911,7 +923,7 @@ function ShapeSvg({
   const basePx = shape.kind === "bbox" ? 1.5 : 2; // px per multiplier unit
   const strokeWidth = basePx * swMultiplier + (selected ? 1 : 0);
   const fillColor =
-    shape.kind === "annotation" && shape.fill
+    shape.fill
       ? hexWithOpacity(shape.fill, 0.25)
       : "none";
   const minX = Math.min(shape.x1, shape.x2);
