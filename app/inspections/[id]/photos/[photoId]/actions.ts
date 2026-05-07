@@ -302,6 +302,11 @@ export type FindingBboxPatch = {
   bbox: { x1: number; y1: number; x2: number; y2: number } | null;
   /** Optional stroke-width override (1 thin, 2 medium, 3 thick). Undefined means don't change. */
   strokeWidth?: number;
+  /**
+   * Optional color override. Tri-state: undefined means don't change,
+   * null means clear to the severity default, hex string sets it.
+   */
+  color?: string | null;
 };
 
 export async function updatePhotoState(
@@ -375,6 +380,11 @@ export async function updatePhotoState(
     }
     if (typeof u.strokeWidth === "number" && u.strokeWidth >= 0.5 && u.strokeWidth <= 5) {
       update.bbox_stroke_width = u.strokeWidth;
+    }
+    if (u.color === null) {
+      update.bbox_color = null;
+    } else if (typeof u.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(u.color)) {
+      update.bbox_color = u.color.slice(0, 16);
     }
     if (Object.keys(update).length === 1) {
       // Only "edited: true" present — nothing to write.

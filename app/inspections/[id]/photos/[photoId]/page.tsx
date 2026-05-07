@@ -41,7 +41,7 @@ export default async function PhotoDetailPage({
   const { data: findings } = await supabase
     .from("findings")
     .select(
-      "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width",
+      "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color",
     )
     .eq("photo_id", photoId)
     .order("severity", { ascending: false })
@@ -93,6 +93,10 @@ export default async function PhotoDetailPage({
         typeof (f as { bbox_stroke_width?: number }).bbox_stroke_width === "number"
           ? Number((f as { bbox_stroke_width?: number }).bbox_stroke_width)
           : 2,
+      color:
+        typeof (f as { bbox_color?: string | null }).bbox_color === "string"
+          ? ((f as { bbox_color?: string | null }).bbox_color as string)
+          : undefined,
     }));
 
   return (

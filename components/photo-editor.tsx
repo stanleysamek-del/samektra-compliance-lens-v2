@@ -35,6 +35,8 @@ export type Bbox = {
   title: string;
   /** Stroke-width override (1 thin, 2 medium, 3 thick). Default 2. */
   strokeWidth?: number;
+  /** Color override (hex). Undefined means use the severity default. */
+  color?: string;
 };
 
 type Tool = "select" | "rect" | "circle" | "arrow" | "text";
@@ -54,6 +56,7 @@ type EditableShape =
       index: number;
       title: string;
       strokeWidth?: number; // mirrors annotation strokeWidth
+      color?: string;       // optional color override; undefined = severity default
       cleared?: boolean;   // user wants to clear this bbox on save
     };
 
@@ -111,6 +114,7 @@ export function PhotoEditor({
       index: b.index,
       title: b.title,
       strokeWidth: typeof b.strokeWidth === "number" ? b.strokeWidth : 2,
+      color: typeof b.color === "string" ? b.color : undefined,
     })),
     ...annotations.map((a) => ({ kind: "annotation" as const, ...a })),
   ];
@@ -161,13 +165,15 @@ export function PhotoEditor({
         Math.abs(o.y2 - s.y2) > 1e-4;
       const swChanged =
         (o.strokeWidth ?? 2) !== (s.strokeWidth ?? 2);
-      if (coordChanged || swChanged) {
+      const colorChanged = (o.color ?? undefined) !== (s.color ?? undefined);
+      if (coordChanged || swChanged || colorChanged) {
         bboxUpdates.push({
           findingId: s.id,
           bbox: coordChanged
             ? { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 }
             : { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 },
           strokeWidth: swChanged ? s.strokeWidth : undefined,
+          color: colorChanged ? (s.color ?? null) : undefined,
         });
       }
     }
@@ -432,9 +438,10 @@ export function PhotoEditor({
       if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
       setFill(sel.fill);
     } else if (sel.kind === "bbox") {
-      // Mirror only the thickness for bboxes — color is locked to severity
-      // and there's no fill / fontSize concept on bboxes.
+      // Mirror thickness AND color for bboxes (color falls back to the
+      // severity default when no override is set).
       if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
+      setColor(sel.color ?? SEVERITY_COLOR[sel.severity]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -460,11 +467,9 @@ export function PhotoEditor({
     setColor(c);
     if (!selectedId) return;
     setShapes((prev) =>
-      prev.map((s) => {
-        if (s.id !== selectedId) return s;
-        if (s.kind === "annotation") return { ...s, color: c };
-        return s; // bboxes keep severity color
-      }),
+      prev.map((s) =>
+        s.id === selectedId ? ({ ...s, color: c } as EditableShape) : s,
+      ),
     );
   }
 
@@ -893,7 +898,9 @@ function ShapeSvg({
   }
 
   const stroke =
-    shape.kind === "bbox" ? SEVERITY_COLOR[shape.severity] : shape.color;
+    shape.kind === "bbox"
+      ? (shape.color ?? SEVERITY_COLOR[shape.severity])
+      : shape.color;
   // Stroke widths are in PIXELS because we use vectorEffect="non-scaling-stroke",
   // which means the stroke width is interpreted in the SVG host's pixel space
   // (not the 0..1 viewBox). Sub-pixel values render invisibly.
