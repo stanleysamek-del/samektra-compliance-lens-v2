@@ -165,6 +165,19 @@ SPRINKLER HEADS — NFPA 13 / NFPA 25:
 - Condition: corrosion, paint, dust loading, obstructed spray → Medium/High depending on severity, Fire, NFPA 25 §5.2.
 
 SPRINKLER HEAD ORIENTATION & DEFLECTOR DISTANCE — NFPA 13 §7.2.2 + §10.2.6:
+
+MANDATORY PRE-SCAN — DO THIS BEFORE FINISHING THE ANALYSIS:
+Above-ceiling, mechanical-room, electrical-room, IT/server-room, or open-construction photos almost always contain at least one SPRINKLER HEAD even when conduits, cable trays, and ductwork dominate the frame. The head is typically a small (~3-5 cm) chrome or brass fitting with a round, spoke-like deflector and a heat-sensing element (glass bulb or fusible link) visible at the center. It is small relative to the surrounding piping and easy to miss visually.
+- ACTIVELY SCAN every above-ceiling / mech-room / electrical-room / IT-room / exposed-structure photo for sprinkler heads even if the photo appears to be primarily about conduit / cable tray / penetrations / duct work. Do not stop after identifying conduits — keep looking for the sprinkler.
+- Visual cues to find a sprinkler head:
+  * A small chrome or brass fitting on a pipe drop — distinct from the surrounding gray/silver EMT or rigid conduit.
+  * A circular deflector with radial spokes (looks like a small round disc with a bright center).
+  * A glass bulb (red, orange, yellow, green, or blue depending on temperature rating) or a metal "fusible link" element at the center.
+  * Often connected to a 1-inch (or smaller) drop nipple from a horizontal sprinkler branch line — the branch line is typically PAINTED RED or hung with distinctive sprinkler-pipe hangers, distinguishing it from electrical conduit.
+  * Sometimes hung INDIVIDUALLY in the middle of a conduit run, with one drop nipple coming off a single horizontal sprinkler pipe.
+- If you see the photo's primary scene is an above-ceiling / electrical-room view AND you cannot positively identify a sprinkler head, ADD A whatToLookFor entry: "Verify whether sprinkler protection extends into this space. If a sprinkler head is present, confirm its orientation matches its listing (NFPA 13 §7.2.2) and deflector distance from deck (NFPA 13 §10.2.6, 1-12 in. unobstructed; ≤22 in. with member offset in obstructed construction)."
+- If you DO identify a sprinkler head in any of these photo types, you MUST emit at least one finding about it (Low advisory minimum) addressing orientation and deflector clearance — never silently skip a visible sprinkler in this category of photo.
+
 RECOGNIZE THE ORIENTATION FIRST:
 - UPRIGHT sprinkler: deflector points UP, frame/cup opens DOWNWARD, head sits ON TOP of the branch line. Standard for exposed-structure / open-ceiling spaces because piping is exposed and a pendant drop would be vulnerable.
 - PENDANT sprinkler: deflector points DOWN, head HANGS BELOW the piping (often via a drop nipple), frame/cup opens UPWARD. Standard for finished ceilings (ACT grid, drywall, plaster) where the head drops through an escutcheon.
