@@ -123,8 +123,23 @@ export async function POST(
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 
-  // ---- Replace findings & related rows ----
-  await supabase.from("findings").delete().eq("photo_id", photo.id);
+  // ---- Replace AI-generated findings only; preserve user-authored / edited rows ----
+  // A finding is "user-touched" when edited = true. That covers BOTH:
+  //   - custom findings inserted via addCustomFinding (edited: true, ai_confidence: null)
+  //   - AI findings the inspector subsequently edited via the FindingCard
+  // We delete only findings where edited IS NOT true (i.e. raw AI output that the
+  // user hasn't touched). Re-analysis then inserts the fresh AI batch alongside.
+  // First count what we're keeping so we can surface it in the response.
+  const { count: preservedCount } = await supabase
+    .from("findings")
+    .select("id", { count: "exact", head: true })
+    .eq("photo_id", photo.id)
+    .eq("edited", true);
+  await supabase
+    .from("findings")
+    .delete()
+    .eq("photo_id", photo.id)
+    .or("edited.is.null,edited.eq.false");
   await supabase.from("what_to_look_for").delete().eq("photo_id", photo.id);
   await supabase.from("not_visible").delete().eq("photo_id", photo.id);
 
@@ -203,5 +218,6 @@ export async function POST(
     cost: aiCostUsd,
     findingsCount: analysis.violations.length,
     contextUsed: answers.length,
+    preservedUserFindings: preservedCount ?? 0,
   });
 }

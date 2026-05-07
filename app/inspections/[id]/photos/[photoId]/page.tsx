@@ -149,12 +149,13 @@ export default async function PhotoDetailPage({
                 Not seeing what you expected?
               </p>
               <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                Run a deeper analysis with Sonnet 4.5. &ldquo;Deep analyze&rdquo;
-                first asks you a few clarifying questions (occupancy, sprinkler
-                status, fire-rated doors, egress role) so the AI can apply the
-                right code section — recommended when the call could swing on
-                context. &ldquo;Skip questions&rdquo; just re-runs Sonnet against
-                the photo alone.
+                Run a deeper analysis. &ldquo;Deep analyze&rdquo; first asks you a
+                few clarifying questions (occupancy, sprinkler status, fire-rated
+                doors, egress role) so the AI can apply the right code section —
+                recommended when the call could swing on context. &ldquo;Skip
+                questions&rdquo; just re-runs the deeper model against the photo
+                alone. Your custom findings and any edits you&apos;ve made to AI
+                findings are preserved across re-analysis.
               </p>
             </div>
             <DeepReanalyzeFlow photoId={photo.id} />
