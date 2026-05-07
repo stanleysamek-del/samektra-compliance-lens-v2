@@ -595,6 +595,10 @@ async function callAnthropicQuestions(
   start: number,
 ): Promise<QuestionsResult> {
   const model = SONNET_MODEL;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AnalyzeError("ANTHROPIC_API_KEY missing", "anthropic");
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -604,7 +608,7 @@ async function callAnthropicQuestions(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       signal: controller.signal,
