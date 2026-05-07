@@ -368,4 +368,14 @@ export async function updatePhotoState(
     } else if (u.bbox && typeof u.bbox === "object") {
       update.bbox_x1 = clamp(u.bbox.x1);
       update.bbox_y1 = clamp(u.bbox.y1);
-      update.bbox_x2 = clamp(u.
+      update.bbox_x2 = clamp(u.bbox.x2);
+      update.bbox_y2 = clamp(u.bbox.y2);
+    } else {
+      continue;
+    }
+    await supabase.from("findings").update(update).eq("id", u.findingId);
+  }
+
+  revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+  revalidatePath(`/inspections/${inspectionId}`, "page");
+}
