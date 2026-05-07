@@ -1,47 +1,47 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import type { PDFPage, PDFFont } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { buildExportFilename } from "@/lib/exports/filename";
+import {
+  classifyToSection,
+  groupBySection,
+  type AuditSection,
+} from "@/lib/exports/audit-sections";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /* =====================================================================
- *  Inspection PDF report — modeled on the customer's EOC-LS Inspection
- *  archive format.
+ *  EOC / LS Inspection PDF report.
  *
- *    1. Cover page — facility metadata grid + score rollup.
- *    2. Findings grouped by category, with letter-numbered codes
- *       (A1, A2, B1, …). Each finding referenced as "Photo N".
- *    3. Photo gallery — 4 photos per page, captioned "Photo N".
+ *  Modeled on the customer's archive format:
+ *    1. Cover page — site header, document number, score, metadata grid.
+ *    2. Section 1: Flagged Items — High and Medium findings only,
+ *       organized by audit sub-section (A1 Fire Doors, A2 Fire-Rated
+ *       Walls, A3 Fire Alarm/Sprinkler, A4 Rooms, A5 Corridors, A6
+ *       General, B Safety Management, C Security Management).
+ *    3. Section 2: Audit (full) — every finding by section with code
+ *       numbers like A1.1.1, A2.1.4. Photo references inline.
+ *    4. Photos — 4-up gallery, captioned "Photo N".
  *
- *  Filename follows the convention:
- *    "EOC-LS-Inspection - {FacilityCode} - {Location}-{MM}-{YY}.pdf"
+ *  Findings are auto-classified into sub-sections by keywords in
+ *  lib/exports/audit-sections.ts.
  * ===================================================================== */
 
-// Map our schema's category enum to the inspection-letter codes used in
-// healthcare LS/EOC reports.
-const CATEGORY_CODES: Record<string, { code: string; title: string }> = {
-  Fire: { code: "A", title: "Fire Safety (doors, walls, alarm, sprinkler)" },
-  Egress: { code: "B", title: "Means of Egress" },
-  Electrical: { code: "C", title: "Electrical Safety" },
-  ADA: { code: "D", title: "Accessibility (ADA / ANSI)" },
-  Hazmat: { code: "E", title: "Hazardous Materials" },
-  InfectionControl: { code: "F", title: "Infection Control" },
-  Structural: { code: "G", title: "Structural / Building Integrity" },
-  Other: { code: "Z", title: "Other Findings" },
+type Finding = {
+  id: string;
+  photo_id: string;
+  photo_index: number;
+  title: string;
+  severity: "Low" | "Medium" | "High";
+  category: string;
+  code: string | null;
+  description: string | null;
+  location: string | null;
+  remediation: string | null;
+  references: string[] | null;
 };
-
-const CATEGORY_ORDER = [
-  "Fire",
-  "Egress",
-  "Electrical",
-  "ADA",
-  "Hazmat",
-  "InfectionControl",
-  "Structural",
-  "Other",
-];
 
 export async function GET(
   request: NextRequest,
@@ -83,36 +83,26 @@ export async function GET(
 
     const photoList = photos ?? [];
     const photoIds = photoList.map((p) => p.id as string);
-
-    type Finding = {
-      photo_id: string;
-      photo_index: number;
-      title: string;
-      severity: "Low" | "Medium" | "High";
-      category: string;
-      code: string | null;
-      description: string | null;
-      location: string | null;
-      remediation: string | null;
-      references: string[] | null;
-    };
+    // Build photoIndexMap so we can show "Photo N" inline next to each finding.
+    const photoIndexById = new Map<string, number>();
+    photoList.forEach((p, i) => photoIndexById.set(p.id as string, i + 1));
 
     let allFindings: Finding[] = [];
     if (photoIds.length > 0) {
       const { data: findings } = await supabase
         .from("findings")
         .select(
-          "photo_id, title, severity, category, code, description, location, remediation, references, created_at",
+          "id, photo_id, title, severity, category, code, description, location, remediation, references, created_at",
         )
         .in("photo_id", photoIds)
         .order("severity", { ascending: false })
         .order("created_at", { ascending: true });
       allFindings = (findings ?? []).map((f) => {
         const pid = f.photo_id as string;
-        const photoIndex = photoIds.indexOf(pid);
         return {
+          id: f.id as string,
           photo_id: pid,
-          photo_index: photoIndex,
+          photo_index: photoIndexById.get(pid) ?? 0,
           title: (f.title as string) ?? "Untitled finding",
           severity: f.severity as "Low" | "Medium" | "High",
           category: (f.category as string) ?? "Other",
@@ -125,25 +115,52 @@ export async function GET(
       });
     }
 
-    // Group findings by category. Sort categories per CATEGORY_ORDER.
-    const byCategory = new Map<string, Finding[]>();
-    for (const cat of CATEGORY_ORDER) byCategory.set(cat, []);
-    for (const f of allFindings) {
-      const list = byCategory.get(f.category) ?? byCategory.get("Other")!;
-      list.push(f);
-    }
+    // Classify and group.
+    const grouped = groupBySection(allFindings);
+    // For each group, assign a stable per-question index (e.g. A2.1, A2.2),
+    // and per-finding sub-index (A2.1.1, A2.1.2, …). Since we don't have
+    // explicit "questions" the way the customer's checklist does, we use a
+    // single "Q1" per section and number all findings under that as .1, .2, …
+    const numbered: Array<{
+      section: AuditSection;
+      questionCode: string; // e.g. "A2.1"
+      items: Array<Finding & { code_full: string }>;
+    }> = grouped.map((g) => {
+      const qCode = `${g.section.code}.1`;
+      return {
+        section: g.section,
+        questionCode: qCode,
+        items: g.items.map((f, idx) => ({
+          ...f,
+          code_full: `${qCode}.${idx + 1}`,
+        })),
+      };
+    });
+
+    const counts = { High: 0, Medium: 0, Low: 0 };
+    for (const f of allFindings) counts[f.severity] += 1;
+    const totalFindings = allFindings.length;
+    // Customer-style score: deficiencies vs. (deficiencies + photos).
+    // Not a perfect mapping but a reasonable proxy until we add a real
+    // checklist with Y/N questions.
+    const totalChecks = Math.max(photoList.length * 5, 5); // assume 5 checks per photo
+    const flagged = totalFindings;
+    const passed = Math.max(0, totalChecks - flagged);
+    const scorePct = totalChecks > 0 ? (passed / totalChecks) * 100 : 0;
 
     // ---- Build PDF ----
     const pdf = await PDFDocument.create();
     const helv = await pdf.embedFont(StandardFonts.Helvetica);
     const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-    // A4 size to match the customer reference (595 x 841).
     const PAGE_W = 595;
     const PAGE_H = 842;
     const MARGIN = 48;
+    const COL_RIGHT = PAGE_W - MARGIN;
+
     const FG = rgb(0.07, 0.09, 0.13);
     const MUTED = rgb(0.42, 0.45, 0.5);
+    const SUBTLE = rgb(0.65, 0.68, 0.72);
     const TEAL = rgb(0.08, 0.72, 0.65);
     const ORANGE = rgb(0.97, 0.45, 0.13);
     const RED = rgb(0.85, 0.18, 0.18);
@@ -157,17 +174,18 @@ export async function GET(
     }
 
     function drawWrapped(
-      page: import("pdf-lib").PDFPage,
+      page: PDFPage,
       raw: string | null | undefined,
       x: number,
       y: number,
       maxW: number,
       size: number,
-      font: import("pdf-lib").PDFFont,
+      font: PDFFont,
       color = FG,
       lineHeight = 1.35,
     ): number {
       const text = safeText(raw);
+      if (!text) return y;
       const words = text.split(/\s+/);
       let line = "";
       let cy = y;
@@ -189,7 +207,7 @@ export async function GET(
       return cy;
     }
 
-    // ---- Cover page ----
+    /* ============================ COVER ============================ */
     const cover = pdf.addPage([PAGE_W, PAGE_H]);
     cover.drawRectangle({
       x: 0,
@@ -199,90 +217,90 @@ export async function GET(
       color: ORANGE,
     });
 
-    cover.drawText(safeText("Compliance Lens by Samektra"), {
-      x: MARGIN,
-      y: PAGE_H - 56,
-      size: 9,
-      font: helv,
-      color: MUTED,
-    });
+    // Tiny header line, like "Northside Hospital / LS-EOC Inspection / Existing"
+    cover.drawText(
+      safeText(
+        `${inspection.facility_name ?? "Facility"} / EOC-LS Inspection / ${inspection.status === "completed" ? "Completed" : "In Progress"}`,
+      ),
+      { x: MARGIN, y: PAGE_H - 56, size: 9, font: helv, color: MUTED },
+    );
 
+    // Big bold title block
     cover.drawText(safeText("EOC / LS Inspection Report"), {
       x: MARGIN,
-      y: PAGE_H - 88,
+      y: PAGE_H - 92,
       size: 22,
       font: helvBold,
       color: FG,
     });
-
     cover.drawText(
-      safeText(inspection.facility_name ?? "Inspection"),
-      { x: MARGIN, y: PAGE_H - 116, size: 14, font: helvBold, color: FG },
+      safeText(`${inspection.facility_name ?? "—"}${inspection.location ? " — " + inspection.location : ""}`),
+      { x: MARGIN, y: PAGE_H - 116, size: 13, font: helvBold, color: FG },
     );
 
-    if (inspection.location) {
-      cover.drawText(safeText(inspection.location), {
-        x: MARGIN,
-        y: PAGE_H - 134,
-        size: 11,
-        font: helv,
-        color: MUTED,
-      });
-    }
+    // Score / counts row, mimicking the customer's "Score 55/65 (84.62%) Flagged items 10"
+    const scoreLine = `Score ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)    Flagged items ${flagged}    Actions 0`;
+    cover.drawText(safeText(scoreLine), {
+      x: MARGIN,
+      y: PAGE_H - 138,
+      size: 11,
+      font: helv,
+      color: MUTED,
+    });
 
-    // Score / counts
-    const counts = { High: 0, Medium: 0, Low: 0 };
-    for (const f of allFindings) counts[f.severity] += 1;
-    const totalFindings = allFindings.length;
+    cover.drawText(
+      safeText(
+        `Document No. ${inspection.id.slice(0, 6).toUpperCase()}  ·  ${counts.High} High · ${counts.Medium} Medium · ${counts.Low} Low`,
+      ),
+      { x: MARGIN, y: PAGE_H - 154, size: 9, font: helv, color: SUBTLE },
+    );
 
-    let cy = PAGE_H - 180;
-    function field(label: string, value: string) {
-      cover.drawText(safeText(label.toUpperCase()), {
+    // Metadata block (label / value rows, two columns)
+    let cy = PAGE_H - 200;
+    function metaRow(label: string, value: string) {
+      cover.drawText(safeText(label), {
         x: MARGIN,
         y: cy,
-        size: 8,
+        size: 9,
         font: helvBold,
         color: MUTED,
       });
-      cy -= 12;
-      cover.drawText(safeText(value && value.trim() ? value : "—"), {
-        x: MARGIN,
-        y: cy,
-        size: 11,
-        font: helv,
-        color: FG,
-      });
-      cy -= 22;
+      drawWrapped(
+        cover,
+        value && value.trim() ? value : "—",
+        MARGIN + 130,
+        cy,
+        COL_RIGHT - (MARGIN + 130),
+        11,
+        helv,
+        FG,
+      );
+      cy -= 26;
     }
 
-    field("Inspector", inspection.inspector_name ?? "");
-    field("Manager Assigned", inspection.manager_assigned ?? "");
-    field("Date of Inspection", inspection.date_of_inspection ?? "");
-    field("Address", inspection.facility_address ?? "");
-    field("Status", inspection.status ?? "");
-    field(
-      "Findings",
-      `${totalFindings} total · ${counts.High} High · ${counts.Medium} Medium · ${counts.Low} Low`,
+    metaRow("Audit Title", `EOC/LS Inspection - ${inspection.facility_name ?? ""}${inspection.location ? " " + inspection.location : ""}`);
+    metaRow("Client / Site", inspection.facility_name ?? "");
+    metaRow("Location", inspection.location ?? "");
+    metaRow("Address", inspection.facility_address ?? "");
+    metaRow(
+      "Conducted on",
+      inspection.date_of_inspection
+        ? new Date(inspection.date_of_inspection).toLocaleDateString()
+        : "",
     );
-    field("Photos", String(photoList.length));
+    metaRow("Prepared by", inspection.inspector_name ?? "");
+    metaRow("Manager Assigned", inspection.manager_assigned ?? "");
+    metaRow("Photos", String(photoList.length));
+    metaRow("Status", inspection.status ?? "");
 
     cover.drawText(
-      safeText(`Generated ${new Date().toLocaleString()}`),
-      { x: MARGIN, y: 40, size: 8, font: helv, color: MUTED },
+      safeText(`Generated ${new Date().toLocaleString()} · Compliance Lens by Samektra`),
+      { x: MARGIN, y: 36, size: 8, font: helv, color: SUBTLE },
     );
 
-    // ---- Findings sections ----
+    /* ============================ SECTION 1 — FLAGGED ITEMS ============================ */
     let page = pdf.addPage([PAGE_W, PAGE_H]);
     let py = PAGE_H - MARGIN;
-
-    page.drawText(safeText("Findings"), {
-      x: MARGIN,
-      y: py,
-      size: 18,
-      font: helvBold,
-      color: FG,
-    });
-    py -= 28;
 
     function newPageIfNeeded(minRoom: number) {
       if (py < minRoom + 60) {
@@ -291,151 +309,39 @@ export async function GET(
       }
     }
 
-    let categoryHadAnyFinding = false;
-    for (const cat of CATEGORY_ORDER) {
-      const list = byCategory.get(cat) ?? [];
-      if (list.length === 0) continue;
-      categoryHadAnyFinding = true;
-      const meta = CATEGORY_CODES[cat] ?? { code: "Z", title: cat };
+    page.drawText(safeText("1.  Flagged Items"), {
+      x: MARGIN,
+      y: py,
+      size: 16,
+      font: helvBold,
+      color: FG,
+    });
+    py -= 6;
+    page.drawLine({
+      start: { x: MARGIN, y: py },
+      end: { x: COL_RIGHT, y: py },
+      thickness: 0.6,
+      color: TEAL,
+    });
+    py -= 10;
+    page.drawText(safeText(`${counts.High + counts.Medium} flagged · ${counts.High} High · ${counts.Medium} Medium`), {
+      x: MARGIN,
+      y: py,
+      size: 9,
+      font: helv,
+      color: MUTED,
+    });
+    py -= 22;
 
-      newPageIfNeeded(80);
-      // Section header
-      page.drawText(safeText(`${meta.code}.  ${meta.title}`), {
-        x: MARGIN,
-        y: py,
-        size: 13,
-        font: helvBold,
-        color: TEAL,
-      });
-      py -= 8;
-      page.drawLine({
-        start: { x: MARGIN, y: py },
-        end: { x: PAGE_W - MARGIN, y: py },
-        thickness: 0.8,
-        color: TEAL,
-      });
-      py -= 12;
+    const flaggedGrouped = numbered
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((f) => f.severity === "High" || f.severity === "Medium"),
+      }))
+      .filter((g) => g.items.length > 0);
 
-      // One numbered sub-finding per item: code = "A1.1", "A1.2", ...
-      list.forEach((f, idx) => {
-        const subCode = `${meta.code}${idx + 1}`;
-        newPageIfNeeded(120);
-
-        // Severity dot + sub-code + title
-        page.drawCircle({
-          x: MARGIN + 4,
-          y: py + 3,
-          size: 3.5,
-          color: severityColor(f.severity),
-        });
-        page.drawText(safeText(`${subCode}.`), {
-          x: MARGIN + 14,
-          y: py,
-          size: 11,
-          font: helvBold,
-          color: FG,
-        });
-        py = drawWrapped(
-          page,
-          f.title,
-          MARGIN + 36,
-          py,
-          PAGE_W - MARGIN * 2 - 36,
-          11,
-          helvBold,
-          FG,
-        );
-
-        // Severity + code citation + photo ref
-        const photoLabel =
-          f.photo_index >= 0 ? `Photo ${f.photo_index + 1}` : "—";
-        const metaLine = [
-          f.severity,
-          f.code ?? "",
-          photoLabel,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        page.drawText(safeText(metaLine), {
-          x: MARGIN + 36,
-          y: py,
-          size: 9,
-          font: helv,
-          color: MUTED,
-        });
-        py -= 14;
-
-        if (f.location) {
-          py = drawWrapped(
-            page,
-            `Location: ${f.location}`,
-            MARGIN + 36,
-            py,
-            PAGE_W - MARGIN * 2 - 36,
-            9,
-            helv,
-            MUTED,
-          );
-        }
-
-        if (f.description) {
-          py -= 2;
-          py = drawWrapped(
-            page,
-            f.description,
-            MARGIN + 36,
-            py,
-            PAGE_W - MARGIN * 2 - 36,
-            10,
-            helv,
-            FG,
-          );
-        }
-
-        if (f.remediation) {
-          py -= 4;
-          page.drawText(safeText("Remediation:"), {
-            x: MARGIN + 36,
-            y: py,
-            size: 9,
-            font: helvBold,
-            color: TEAL,
-          });
-          py -= 12;
-          py = drawWrapped(
-            page,
-            f.remediation,
-            MARGIN + 36,
-            py,
-            PAGE_W - MARGIN * 2 - 36,
-            10,
-            helv,
-            FG,
-          );
-        }
-
-        if (f.references && f.references.length > 0) {
-          py -= 2;
-          py = drawWrapped(
-            page,
-            `References: ${f.references.join("; ")}`,
-            MARGIN + 36,
-            py,
-            PAGE_W - MARGIN * 2 - 36,
-            8,
-            helv,
-            MUTED,
-          );
-        }
-
-        py -= 14;
-      });
-
-      py -= 8;
-    }
-
-    if (!categoryHadAnyFinding) {
-      page.drawText(safeText("No deficiencies were detected."), {
+    if (flaggedGrouped.length === 0) {
+      page.drawText(safeText("No High- or Medium-severity findings."), {
         x: MARGIN,
         y: py,
         size: 11,
@@ -443,59 +349,161 @@ export async function GET(
         color: MUTED,
       });
       py -= 18;
+    } else {
+      for (const g of flaggedGrouped) {
+        newPageIfNeeded(70);
+        py = drawSectionHeader(page, py, "Audit / " + g.section.code + ".  " + g.section.title);
+
+        // One synthetic question line per section; mirrors the customer's
+        // "A2.1. Are penetrations in rated walls properly sealed?  No"
+        const qText = sectionQuestionText(g.section);
+        py = drawQuestionRow(page, py, g.questionCode, qText, "No");
+
+        // Sub-findings (A2.1.1, A2.1.2, …)
+        g.items.forEach((f, idx) => {
+          newPageIfNeeded(60);
+          const code = `${g.questionCode}.${idx + 1}.`;
+          py = drawSubFinding(page, py, code, f);
+        });
+
+        py -= 8;
+      }
     }
 
-    // ---- Photo gallery ----
+    /* ============================ SECTION 2 — FULL AUDIT ============================ */
+    page = pdf.addPage([PAGE_W, PAGE_H]);
+    py = PAGE_H - MARGIN;
+
+    page.drawText(
+      safeText(`2.  Audit  -  ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`),
+      { x: MARGIN, y: py, size: 16, font: helvBold, color: FG },
+    );
+    py -= 6;
+    page.drawLine({
+      start: { x: MARGIN, y: py },
+      end: { x: COL_RIGHT, y: py },
+      thickness: 0.6,
+      color: TEAL,
+    });
+    py -= 18;
+
+    let auditIdx = 0;
+    for (const g of numbered) {
+      auditIdx += 1;
+      newPageIfNeeded(80);
+      // Sub-section header like "2.3.  A2.  Fire-Rated Walls — N flagged"
+      const sectFlagged = g.items.filter(
+        (f) => f.severity === "High" || f.severity === "Medium",
+      ).length;
+      const sectTotal = Math.max(g.items.length, 1) + 2; // proxy "denominator"
+      const sectPct = ((sectTotal - sectFlagged) / sectTotal) * 100;
+
+      page.drawText(
+        safeText(
+          `2.${auditIdx}.  ${g.section.code}.  ${g.section.title}  -  ${sectTotal - sectFlagged}/${sectTotal} (${sectPct.toFixed(1)}%)`,
+        ),
+        { x: MARGIN, y: py, size: 12, font: helvBold, color: TEAL },
+      );
+      py -= 6;
+      page.drawLine({
+        start: { x: MARGIN, y: py },
+        end: { x: COL_RIGHT, y: py },
+        thickness: 0.4,
+        color: TEAL,
+      });
+      py -= 12;
+
+      page.drawText(
+        safeText(
+          `${g.section.code}.  ${g.section.title}  -  ${sectFlagged} flagged, ${g.items.length} total`,
+        ),
+        { x: MARGIN, y: py, size: 10, font: helvBold, color: FG },
+      );
+      py -= 16;
+
+      const qText = sectionQuestionText(g.section);
+      py = drawQuestionRow(
+        page,
+        py,
+        g.questionCode,
+        qText,
+        sectFlagged > 0 ? "No" : "Yes",
+      );
+
+      g.items.forEach((f, idx) => {
+        newPageIfNeeded(60);
+        const code = `${g.questionCode}.${idx + 1}.`;
+        py = drawSubFinding(page, py, code, f);
+      });
+
+      py -= 12;
+    }
+
+    if (numbered.length === 0) {
+      page.drawText(safeText("No findings recorded."), {
+        x: MARGIN,
+        y: py,
+        size: 11,
+        font: helv,
+        color: MUTED,
+      });
+      py -= 16;
+    }
+
+    /* ============================ PHOTO GALLERY ============================ */
     if (photoList.length > 0) {
       page = pdf.addPage([PAGE_W, PAGE_H]);
       py = PAGE_H - MARGIN;
-
       page.drawText(safeText("Photos"), {
         x: MARGIN,
         y: py,
-        size: 18,
+        size: 16,
         font: helvBold,
         color: FG,
       });
-      py -= 28;
+      py -= 6;
+      page.drawLine({
+        start: { x: MARGIN, y: py },
+        end: { x: COL_RIGHT, y: py },
+        thickness: 0.6,
+        color: TEAL,
+      });
+      py -= 14;
 
-      // 2-up grid: photos arranged in pairs across the page, two rows per page.
+      // 2 per row, 2 rows per page
       const colW = (PAGE_W - MARGIN * 2 - 16) / 2;
-      const cellH = 240;
+      const cellH = 280;
       let col = 0;
-      let rowY = py;
 
       for (let i = 0; i < photoList.length; i++) {
         const p = photoList[i];
 
-        if (rowY - cellH < MARGIN) {
+        if (py - cellH < MARGIN) {
           page = pdf.addPage([PAGE_W, PAGE_H]);
-          rowY = PAGE_H - MARGIN;
+          py = PAGE_H - MARGIN;
           col = 0;
         }
 
         const cellX = MARGIN + col * (colW + 16);
-        const cellTopY = rowY;
+        const cellTop = py;
 
-        // Caption first (above the image)
         page.drawText(safeText(`Photo ${i + 1}`), {
           x: cellX,
-          y: cellTopY - 12,
+          y: cellTop - 12,
           size: 10,
           font: helvBold,
           color: FG,
         });
         if (p.photo_location) {
-          page.drawText(safeText(String(p.photo_location).slice(0, 50)), {
+          page.drawText(safeText(String(p.photo_location).slice(0, 60)), {
             x: cellX,
-            y: cellTopY - 26,
+            y: cellTop - 26,
             size: 8,
             font: helv,
             color: MUTED,
           });
         }
 
-        // Embed image
         try {
           const { data: blob } = await supabase.storage
             .from("photos")
@@ -511,7 +519,7 @@ export async function GET(
             const w = img.width * scale;
             const h = img.height * scale;
             const x = cellX + (colW - w) / 2;
-            const y = cellTopY - 32 - h;
+            const y = cellTop - 32 - h;
             page.drawImage(img, { x, y, width: w, height: h });
           }
         } catch (err) {
@@ -521,26 +529,28 @@ export async function GET(
         col += 1;
         if (col >= 2) {
           col = 0;
-          rowY -= cellH;
+          py -= cellH;
         }
       }
     }
 
-    // ---- Footer / page numbers ----
+    /* ============================ FOOTER ============================ */
     const pages = pdf.getPages();
     pages.forEach((pg, idx) => {
-      pg.drawText(
-        safeText(
-          `Compliance Lens by Samektra · ${idx + 1} / ${pages.length}`,
-        ),
-        {
-          x: MARGIN,
-          y: 24,
-          size: 8,
-          font: helv,
-          color: MUTED,
-        },
-      );
+      pg.drawText(safeText(`${idx + 1} / ${pages.length}`), {
+        x: COL_RIGHT - 30,
+        y: 24,
+        size: 8,
+        font: helv,
+        color: SUBTLE,
+      });
+      pg.drawText(safeText("Compliance Lens by Samektra"), {
+        x: MARGIN,
+        y: 24,
+        size: 8,
+        font: helv,
+        color: SUBTLE,
+      });
     });
 
     const bytes = await pdf.save();
@@ -554,6 +564,161 @@ export async function GET(
         "Cache-Control": "private, no-store",
       },
     });
+
+    /* ============================ HELPERS ============================ */
+    function drawSectionHeader(pg: PDFPage, ySstart: number, label: string): number {
+      pg.drawText(safeText(label), {
+        x: MARGIN,
+        y: ySstart,
+        size: 11,
+        font: helvBold,
+        color: TEAL,
+      });
+      let y = ySstart - 5;
+      pg.drawLine({
+        start: { x: MARGIN, y },
+        end: { x: COL_RIGHT, y },
+        thickness: 0.4,
+        color: TEAL,
+      });
+      return y - 12;
+    }
+
+    function drawQuestionRow(
+      pg: PDFPage,
+      ySstart: number,
+      qCode: string,
+      qText: string,
+      yesNo: "Yes" | "No",
+    ): number {
+      pg.drawText(safeText(`${qCode}.`), {
+        x: MARGIN,
+        y: ySstart,
+        size: 10,
+        font: helvBold,
+        color: FG,
+      });
+      const after = drawWrapped(
+        pg,
+        qText,
+        MARGIN + 36,
+        ySstart,
+        COL_RIGHT - MARGIN - 36 - 40,
+        10,
+        helv,
+        FG,
+      );
+      pg.drawText(safeText(yesNo), {
+        x: COL_RIGHT - 30,
+        y: ySstart,
+        size: 10,
+        font: helvBold,
+        color: yesNo === "No" ? RED : GREEN,
+      });
+      return after - 4;
+    }
+
+    function drawSubFinding(
+      pg: PDFPage,
+      ySstart: number,
+      code: string,
+      f: Finding,
+    ): number {
+      let y = ySstart;
+
+      // Severity dot
+      pg.drawCircle({
+        x: MARGIN + 4,
+        y: y + 4,
+        size: 3,
+        color: severityColor(f.severity),
+      });
+
+      // Code + (Location) + Title — one wrapped block
+      const locPrefix = f.location ? `(${f.location}) ` : "";
+      const main = `${code} ${locPrefix}${f.title}`;
+      pg.drawText(safeText(`${code}`), {
+        x: MARGIN + 14,
+        y,
+        size: 10,
+        font: helvBold,
+        color: FG,
+      });
+      y = drawWrapped(
+        pg,
+        `${locPrefix}${f.title}`,
+        MARGIN + 50,
+        y,
+        COL_RIGHT - MARGIN - 50,
+        10,
+        helvBold,
+        FG,
+      );
+      void main;
+
+      // Severity badge + photo ref
+      const photoLabel = f.photo_index ? `Photo ${f.photo_index}` : "";
+      const metaParts = [f.severity, f.code ?? "", photoLabel].filter(Boolean);
+      pg.drawText(safeText(metaParts.join("  ·  ")), {
+        x: MARGIN + 50,
+        y,
+        size: 8.5,
+        font: helv,
+        color: MUTED,
+      });
+      y -= 12;
+
+      if (f.description) {
+        y = drawWrapped(
+          pg,
+          f.description,
+          MARGIN + 50,
+          y,
+          COL_RIGHT - MARGIN - 50,
+          9.5,
+          helv,
+          FG,
+        );
+      }
+
+      if (f.remediation) {
+        y -= 2;
+        pg.drawText(safeText("Remediation:"), {
+          x: MARGIN + 50,
+          y,
+          size: 8.5,
+          font: helvBold,
+          color: TEAL,
+        });
+        y -= 11;
+        y = drawWrapped(
+          pg,
+          f.remediation,
+          MARGIN + 50,
+          y,
+          COL_RIGHT - MARGIN - 50,
+          9.5,
+          helv,
+          FG,
+        );
+      }
+
+      if (f.references && f.references.length > 0) {
+        y -= 2;
+        y = drawWrapped(
+          pg,
+          `References: ${f.references.join("; ")}`,
+          MARGIN + 50,
+          y,
+          COL_RIGHT - MARGIN - 50,
+          8,
+          helv,
+          MUTED,
+        );
+      }
+
+      return y - 10;
+    }
   } catch (err) {
     console.error("[pdf-export] failed", err);
     const message = err instanceof Error ? err.message : String(err);
@@ -575,11 +740,33 @@ export async function GET(
   }
 }
 
-/**
- * pdf-lib's StandardFonts only support WinAnsi encoding, which can't render
- * em-dashes, curly quotes, the section sign §, or other Unicode characters
- * the AI emits constantly. Replace them with ASCII equivalents.
- */
+/** A short Y/N-style question caption per audit section, modeled on the
+ *  customer's checklist questions. */
+function sectionQuestionText(section: AuditSection): string {
+  switch (section.code) {
+    case "A1":
+      return "Are fire doors compliant with NFPA 80 (positive latching, self-closing, intact rating labels, no unapproved hardware)?";
+    case "A2":
+      return "Are penetrations in fire-rated walls, ceilings, and floors properly sealed with a listed firestop system, and are rated assemblies identified per NFPA 101 §8.3.1.4?";
+    case "A3":
+      return "Are fire alarm and sprinkler systems clear of obstructions and in compliance with NFPA 13 / 25 / 72?";
+    case "A4":
+      return "Are rooms compliant with NFPA 101 occupancy chapters (waiting areas, patient sleeping rooms, hazardous areas, trash/linen limits)?";
+    case "A5":
+      return "Are corridors free from obstructions and in compliance with egress width and dead-end limits?";
+    case "A6":
+      return "Are general life-safety items (extinguishers, exit signs, electrical panels, ADA reach, decorations) compliant?";
+    case "B":
+      return "Is the facility compliant with general safety-management items (eyewash, ceiling tiles, power strips, housekeeping)?";
+    case "C":
+      return "Are security-management items (access control, ID badges, surveillance) compliant?";
+    case "Z":
+    default:
+      return "Other findings worth noting.";
+  }
+}
+
+/** WinAnsi-safe text. */
 function safeText(s: string | null | undefined): string {
   if (s == null) return "";
   return s
@@ -596,3 +783,7 @@ function safeText(s: string | null | undefined): string {
     .replace(/¾/g, "3/4")
     .replace(/[^\x00-\xFF]/g, "?");
 }
+
+// classifyToSection imported from "@/lib/exports/audit-sections" but only used
+// transitively through groupBySection — silence the unused warning.
+void classifyToSection;
