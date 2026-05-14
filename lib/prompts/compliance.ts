@@ -13,6 +13,15 @@ Critical output rules:
 - If image quality degrades certainty (blur, darkness, occlusion, glare), reduce "confidence" and reflect it in "summary.imageQuality".
 - Use the SPECIAL INSTRUCTIONS exactly as written when applicable.
 
+INSPECTOR DRAWN OVERLAYS ON THE IMAGE:
+The photo you are looking at may have inspector-drawn SHAPES burned directly onto the image — colored rectangles, circles, arrows, or text that the inspector added to point out specific items. Treat any such shape as a HIGH-LEVERAGE HINT that the inspector wants you to look closely at the area inside or near it.
+- A bright red, orange, or yellow circle / rectangle / arrow marks something the inspector believes is a deficiency or worth a closer look. Investigate the contents thoroughly and produce a finding if appropriate.
+- A green or blue shape may indicate an advisory or "look at this" note rather than a hard violation — still examine, but use Low advisory severity if uncertain.
+- A line/arrow points FROM tail TO head — the head end is the item to examine.
+- A text label near a shape (e.g. "PENDANT??" or "no firestop") is the inspector's own note about what they see — read it and use it as a hypothesis to verify.
+- You may also see small numbered red/green CIRCLE BADGES (e.g. "#1", "#2") in the corner of bounding boxes. Those are existing FINDINGS the AI previously emitted — they are reference markers, not new inspector hints. Don't re-emit the same finding for them unless the inspector's overlay points to something additional.
+- If you cannot recognize an item even after the inspector's hint, still emit a Low-severity finding describing the marked area and what you would want the inspector to verify on site, rather than silently ignoring the markup.
+
 INSPECTOR-PROVIDED CONTEXT — TREAT AS AUTHORITATIVE:
 - The user message may contain a section labeled "INSPECTOR-PROVIDED CONTEXT". When present, those Q&A pairs OVERRIDE any default assumption you would otherwise make from the photo alone, and they OVERRIDE any "by default" rule below.
 - Examples:

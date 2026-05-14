@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateContextQuestions } from "@/lib/ai/client";
+import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -37,12 +38,42 @@ export async function POST(
 
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path")
+    .select("id, inspection_id, storage_path, annotations")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
     return NextResponse.json({ ok: false, error: "Photo not found" }, { status: 404 });
   }
+
+  // Existing AI bboxes to render alongside annotations so the AI can see
+  // both its prior calls and the inspector's markup.
+  const { data: existingFindings } = await supabase
+    .from("findings")
+    .select(
+      "severity, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, created_at",
+    )
+    .eq("photo_id", photoId)
+    .order("created_at", { ascending: true });
+  const burnableBboxes = (existingFindings ?? [])
+    .filter(
+      (f) =>
+        (f.severity === "Medium" || f.severity === "High") &&
+        f.bbox_x1 != null &&
+        f.bbox_y1 != null &&
+        f.bbox_x2 != null &&
+        f.bbox_y2 != null,
+    )
+    .map((f, idx) => ({
+      x1: Number(f.bbox_x1),
+      y1: Number(f.bbox_y1),
+      x2: Number(f.bbox_x2),
+      y2: Number(f.bbox_y2),
+      color: (f.bbox_color as string | null) ?? null,
+      strokeWidth: (f.bbox_stroke_width as number | null) ?? null,
+      fill: (f.bbox_fill as string | null) ?? null,
+      severity: f.severity as "Low" | "Medium" | "High",
+      index: idx,
+    }));
 
   const { data: inspection } = await supabase
     .from("inspections")
@@ -77,8 +108,26 @@ export async function POST(
   }
 
   const arrayBuffer = await blob.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-  const mimeType = blob.type || "image/jpeg";
+  let imgBuffer = Buffer.from(arrayBuffer);
+  let mimeType = blob.type || "image/jpeg";
+
+  const photoAnnotations =
+    (photo.annotations as import("@/app/inspections/[id]/photos/[photoId]/actions").Annotation[] | null) ??
+    [];
+  if (photoAnnotations.length > 0 || burnableBboxes.length > 0) {
+    try {
+      imgBuffer = await burnAnnotationsOnImage(
+        imgBuffer,
+        photoAnnotations,
+        burnableBboxes,
+      );
+      mimeType = "image/jpeg";
+    } catch (err) {
+      console.warn("[deep-questions] burn-annotations failed, falling back to raw image:", err);
+    }
+  }
+
+  const base64 = imgBuffer.toString("base64");
 
   try {
     const result = await generateContextQuestions(base64, mimeType);
