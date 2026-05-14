@@ -192,6 +192,16 @@ async function callAnthropic(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    // PROMPT CACHING — both the giant SYSTEM_PROMPT and the image are
+    // marked cacheable. Cache has a ~5-min TTL on Anthropic. The first
+    // call on a photo writes the cache (slightly slower); follow-up
+    // Coach turns / Re-analyze within 5 min read from the cache, which
+    // is ~10x cheaper on input cost AND noticeably faster.
+    //
+    // This is the single biggest speed lever for the Coach workflow,
+    // where the inspector typically iterates on the same photo back to
+    // back. cache_creation_input_tokens are billed at 1.25x, cache_read
+    // at 0.10x of normal input — see computeCost below.
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -203,7 +213,13 @@ async function callAnthropic(
       body: JSON.stringify({
         model,
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        system: [
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages: [
           {
             role: "user",
@@ -211,6 +227,7 @@ async function callAnthropic(
               {
                 type: "image",
                 source: { type: "base64", media_type: mimeType, data: imageBase64 },
+                cache_control: { type: "ephemeral" },
               },
               { type: "text", text: userPrompt },
             ],
@@ -229,7 +246,12 @@ async function callAnthropic(
 
     const data = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
-      usage?: { input_tokens?: number; output_tokens?: number };
+      usage?: {
+        input_tokens?: number;
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+        output_tokens?: number;
+      };
     };
 
     const text = data.content
@@ -238,12 +260,31 @@ async function callAnthropic(
       .join("\n");
 
     const inputTokens = data.usage?.input_tokens ?? 0;
+    const cacheCreate = data.usage?.cache_creation_input_tokens ?? 0;
+    const cacheRead = data.usage?.cache_read_input_tokens ?? 0;
     const outputTokens = data.usage?.output_tokens ?? 0;
-    const costUsd = computeCost(model, inputTokens, outputTokens);
+    // Effective input tokens for cost-tracking: cache writes are 1.25x,
+    // cache reads are 0.10x of the normal per-million input price.
+    const effectiveInputTokens =
+      inputTokens + Math.round(cacheCreate * 1.25) + Math.round(cacheRead * 0.10);
+    const costUsd = computeCost(model, effectiveInputTokens, outputTokens);
+
+    if (cacheRead > 0) {
+      console.log(
+        `[anthropic] cache HIT — saved ~${Math.round((cacheRead * 0.9) / 1000)}k effective input tokens`,
+      );
+    }
 
     return {
       analysis: parseAnalysis(text),
-      usage: { inputTokens, outputTokens, costUsd },
+      // Report the sum of all input-side tokens so the ai_calls ledger
+      // captures the full usage; cost is already adjusted via the
+      // multipliers above.
+      usage: {
+        inputTokens: inputTokens + cacheCreate + cacheRead,
+        outputTokens,
+        costUsd,
+      },
     };
   } finally {
     clearTimeout(timer);
@@ -473,6 +514,27 @@ function validateAnalysis(input: unknown): ComplianceAnalysis {
     notVisible: Array.isArray(o.notVisible)
       ? o.notVisible.map((n) => normalizeNotVisible(n))
       : [],
+    // Phase 3 of Coach the AI — optional clarifying question back.
+    // Pass through only when the model returns a non-empty question;
+    // otherwise leave the field absent so legacy consumers stay clean.
+    clarifyingQuestion: normalizeClarifyingQuestion(o.clarifyingQuestion),
+  };
+}
+
+function normalizeClarifyingQuestion(
+  raw: unknown,
+): ComplianceAnalysis["clarifyingQuestion"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const question = String(r.question ?? "").trim();
+  if (!question) return undefined;
+  const options = Array.isArray(r.options)
+    ? r.options.map((o) => String(o ?? "").trim()).filter((s) => s.length > 0)
+    : undefined;
+  return {
+    question,
+    rationale: r.rationale ? String(r.rationale).trim() || undefined : undefined,
+    options: options && options.length > 0 ? options : undefined,
   };
 }
 

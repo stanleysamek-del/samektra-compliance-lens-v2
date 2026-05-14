@@ -21,13 +21,22 @@ type Turn = {
   ai_meta: {
     findingsCount?: number;
     findingsPreserved?: number;
+    ratingsRestored?: number;
     whatToLookForCount?: number;
     notVisibleCount?: number;
     confidence?: number | null;
     model?: string;
     costUsd?: number;
+    durationMs?: number;
     error?: boolean;
     errorMessage?: string;
+    // Phase 3 — when present, render below the AI bubble as a follow-up
+    // question with clickable answer chips.
+    clarifyingQuestion?: {
+      question: string;
+      rationale?: string;
+      options?: string[];
+    } | null;
   } | null;
   created_at: string;
 };
@@ -104,8 +113,10 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns.length, status.kind]);
 
-  async function send() {
-    const text = draft.trim();
+  async function send(override?: string) {
+    // override is used by the "answer the AI's question" chips, which need
+    // to send a specific text instead of whatever is in `draft`.
+    const text = (override ?? draft).trim();
     if (!text || status.kind === "sending") return;
     setStatus({ kind: "sending", pendingText: text });
     setDraft("");
@@ -182,6 +193,23 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Animations used throughout the panel — mounted once at the root
+          so they survive even when TypingIndicator unmounts. */}
+      <style>{`
+        @keyframes cl-typing-dot {
+          0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+          30%           { opacity: 1;    transform: translateY(-2px); }
+        }
+        @keyframes cl-msg-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes cl-pulse-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.0); }
+          50%      { box-shadow: 0 0 0 6px rgba(20, 184, 166, 0.15); }
+        }
+      `}</style>
+
       <div>
         <p className="font-medium text-[var(--fg)]">Coach the AI</p>
         <p className="mt-1 text-xs text-[var(--fg-muted)]">
@@ -202,18 +230,36 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
       {/* Thread */}
       {turns.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {turns.map((t) => (
-            <li key={t.id} className="flex">
-              {t.role === "inspector" ? (
-                <InspectorBubble text={t.text} annotation={t.annotation_ref} />
-              ) : (
-                <AIBubble
-                  text={t.text}
-                  meta={t.ai_meta}
-                />
-              )}
-            </li>
-          ))}
+          {turns.map((t, idx) => {
+            // Only the latest AI turn's clarifyingQuestion gets clickable
+            // chips — older ones display as static "AI asked:" history.
+            const isLatestAI =
+              t.role === "ai" &&
+              idx === turns.length - 1 &&
+              status.kind !== "sending";
+            return (
+              <li
+                key={t.id}
+                className="flex animate-[cl-msg-in_0.22s_ease-out]"
+              >
+                {t.role === "inspector" ? (
+                  <InspectorBubble text={t.text} annotation={t.annotation_ref} />
+                ) : (
+                  <AIBubble
+                    text={t.text}
+                    meta={t.ai_meta}
+                    canAnswerClarification={isLatestAI}
+                    onAnswerClarification={(answer) => {
+                      setDraft(answer);
+                      // Tiny defer so React commits the draft before send()
+                      // reads it via state.
+                      requestAnimationFrame(() => send(answer));
+                    }}
+                  />
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : !isLoading ? (
         <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--fg-subtle)]">
@@ -222,13 +268,11 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
         </p>
       ) : null}
 
-      {/* Pending inspector turn (optimistic) */}
+      {/* Pending inspector turn (optimistic) + animated typing indicator */}
       {isSending ? (
         <>
           <InspectorBubble text={pendingText} annotation={null} />
-          <div className="flex items-center gap-2 self-start text-xs text-[var(--fg-muted)]">
-            <Spinner /> Re-analyzing with your hint…
-          </div>
+          <TypingIndicator />
         </>
       ) : null}
 
@@ -384,11 +428,20 @@ function InspectorBubble({
 function AIBubble({
   text,
   meta,
+  canAnswerClarification = false,
+  onAnswerClarification,
 }: {
   text: string;
   meta: Turn["ai_meta"];
+  /** True only on the LATEST AI turn — older clarifying questions still
+   *  render as text but their chips are not actionable (already answered). */
+  canAnswerClarification?: boolean;
+  onAnswerClarification?: (answer: string) => void;
 }) {
   const isError = meta?.error === true;
+  const cq = meta?.clarifyingQuestion;
+  const hasClarification = Boolean(cq && cq.question);
+
   return (
     <div className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
       <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
@@ -432,6 +485,19 @@ function AIBubble({
                 {meta.findingsPreserved} preserved
               </span>
             ) : null}
+            {typeof meta.ratingsRestored === "number" &&
+            meta.ratingsRestored > 0 ? (
+              <span
+                className="rounded-full px-2 py-0.5"
+                style={{
+                  background: "rgba(168,85,247,0.12)",
+                  color: "#d8b4fe",
+                }}
+                title="Inspector thumbs ratings carried forward by title match"
+              >
+                {meta.ratingsRestored} ratings kept
+              </span>
+            ) : null}
             {typeof meta.confidence === "number" ? (
               <span
                 className="rounded-full px-2 py-0.5"
@@ -443,9 +509,81 @@ function AIBubble({
                 {Math.round(meta.confidence * 100)}% confidence
               </span>
             ) : null}
+            {typeof meta.durationMs === "number" ? (
+              <span
+                className="rounded-full px-2 py-0.5"
+                style={{
+                  background: "rgba(148,163,184,0.08)",
+                  color: "var(--fg-subtle)",
+                }}
+                title={`${meta.model ?? "model"} · ${(meta.durationMs / 1000).toFixed(1)}s`}
+              >
+                {(meta.durationMs / 1000).toFixed(1)}s
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>
+
+      {/* Phase 3 — clarifying question attached to this AI turn.
+          Rendered as a sub-bubble below so it visually distinct from the
+          AI's main reply. Chips are clickable only on the LATEST turn. */}
+      {hasClarification && cq ? (
+        <div
+          className="mt-1 flex w-full flex-col gap-2 rounded-xl border px-3 py-2.5 text-sm"
+          style={{
+            borderColor: "rgba(20,184,166,0.35)",
+            background: "rgba(20,184,166,0.06)",
+          }}
+        >
+          <div className="flex items-start gap-2">
+            <span
+              aria-hidden
+              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+              style={{ background: "rgba(20,184,166,0.18)", color: "#5eead4" }}
+            >
+              ?
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-[var(--fg)]">{cq.question}</p>
+              {cq.rationale ? (
+                <p className="mt-1 text-[11px] italic text-[var(--fg-subtle)]">
+                  {cq.rationale}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {cq.options && cq.options.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 pl-7">
+              {cq.options.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  disabled={!canAnswerClarification}
+                  onClick={() => onAnswerClarification?.(opt)}
+                  className={[
+                    "rounded-full border px-2.5 py-1 text-xs font-medium transition active:scale-[0.97]",
+                    canAnswerClarification
+                      ? "border-[var(--primary)] text-[var(--fg)] hover:bg-[var(--primary)] hover:text-[#0a0d12]"
+                      : "border-[var(--border)] text-[var(--fg-subtle)] cursor-default",
+                  ].join(" ")}
+                  title={
+                    canAnswerClarification
+                      ? "Answer with this — sends as your next hint"
+                      : "Already answered earlier in the thread"
+                  }
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          ) : canAnswerClarification ? (
+            <p className="pl-7 text-[11px] text-[var(--fg-subtle)]">
+              Type your answer in the box below.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -468,6 +606,76 @@ function Spinner() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+/**
+ * Three-dot "AI is thinking" indicator with a rotating natural-language
+ * status caption — mirrors the upload "thinking messages" approach.
+ * Renders styled as an AI bubble so it visually slots into the thread.
+ */
+const COACH_THINKING_MESSAGES = [
+  "Re-reading the photo with your hint in mind…",
+  "Comparing what you said against what's visible…",
+  "Checking which existing findings still hold…",
+  "Cross-referencing applicable code sections…",
+  "Updating bounding boxes on the new findings…",
+  "Drafting an acknowledgment of what changed…",
+];
+
+function TypingIndicator() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(
+      () => setIdx((i) => (i + 1) % COACH_THINKING_MESSAGES.length),
+      2400,
+    );
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
+      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+        Compliance Lens AI
+      </span>
+      <div
+        className="flex items-center gap-2.5 rounded-2xl rounded-tl-md border px-3 py-2 text-xs"
+        style={{
+          borderColor: "rgba(148,163,184,0.25)",
+          background: "var(--bg-elevated)",
+          color: "var(--fg-muted)",
+        }}
+      >
+        <span aria-hidden className="flex items-center gap-1">
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{
+              background: "var(--primary)",
+              animation: "cl-typing-dot 1.2s ease-in-out infinite",
+              animationDelay: "0s",
+            }}
+          />
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{
+              background: "var(--primary)",
+              animation: "cl-typing-dot 1.2s ease-in-out infinite",
+              animationDelay: "0.18s",
+            }}
+          />
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{
+              background: "var(--primary)",
+              animation: "cl-typing-dot 1.2s ease-in-out infinite",
+              animationDelay: "0.36s",
+            }}
+          />
+        </span>
+        <span className="truncate">{COACH_THINKING_MESSAGES[idx]}</span>
+      </div>
+
+    </div>
   );
 }
 

@@ -43,6 +43,24 @@ export type NotVisibleItem = {
   reason: string;
 };
 
+/**
+ * Optional follow-up question the model can emit when it genuinely
+ * needs the inspector to clarify something before it can produce a
+ * confident finding. Used in the Coach the AI flow — when present,
+ * the UI renders it as a chip-style answer prompt instead of
+ * (or in addition to) the normal findings update.
+ *
+ * The model is instructed to use this SPARINGLY — only when the
+ * answer would materially change the call.
+ */
+export type ClarifyingQuestion = {
+  question: string;
+  /** Why answering this changes the analysis. One sentence. */
+  rationale?: string;
+  /** Discrete answer chips. Empty/omitted = free-text input. */
+  options?: string[];
+};
+
 export type ComplianceAnalysis = {
   schemaVersion: "1.1";
   summary: {
@@ -57,6 +75,8 @@ export type ComplianceAnalysis = {
   violations: Violation[];
   whatToLookFor: WhatToLookForItem[];
   notVisible: NotVisibleItem[];
+  /** Phase 3 of Coach the AI — AI asks one clarifying question back. */
+  clarifyingQuestion?: ClarifyingQuestion;
 };
 
 export type InspectionMetadata = {

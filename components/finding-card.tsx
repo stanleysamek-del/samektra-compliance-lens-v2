@@ -173,9 +173,9 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(1)}
                 className={[
-                  "rounded-md px-1.5 py-1 text-sm transition hover:bg-white/[0.06]",
+                  "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
                   localRating === 1
-                    ? "text-[#5eead4]"
+                    ? "text-[#5eead4] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >
@@ -192,9 +192,9 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(-1)}
                 className={[
-                  "rounded-md px-1.5 py-1 text-sm transition hover:bg-white/[0.06]",
+                  "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
                   localRating === -1
-                    ? "text-[#fca5a5]"
+                    ? "text-[#fca5a5] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >

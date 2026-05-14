@@ -436,6 +436,10 @@ export async function POST(
     model: aiModel,
     provider: aiProvider,
     costUsd: aiCostUsd,
+    durationMs: aiDurationMs,
+    // Phase 3 — the optional clarifying question, surfaced to the UI as
+    // a chip-style question bubble. Null/absent on most turns.
+    clarifyingQuestion: analysis.clarifyingQuestion ?? null,
   };
 
   const { data: aiTurnRow, error: aiTurnErr } = await supabase

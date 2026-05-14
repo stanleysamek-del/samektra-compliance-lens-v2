@@ -140,6 +140,33 @@ export function formatCoachThread(
         "If the inspector's hint contradicts a thumbs-down'd finding (they're un-doing their downvote), keep the finding but say so.",
       ].join("\n"),
     });
+
+    // Phase 3 of Coach the AI — ASK BACK when you need ONE specific fact
+    // to make a confident call, rather than guessing.
+    result.push({
+      question:
+        "ASKING THE INSPECTOR A CLARIFYING QUESTION (optional — use sparingly):",
+      answer: [
+        "Your JSON response may include an optional `clarifyingQuestion` field at the TOP LEVEL of the object (sibling of `violations`, `summary`, etc.). Shape:",
+        "  \"clarifyingQuestion\": {",
+        "    \"question\": \"What is the rating of the wall at the upper-left in this photo?\",",
+        "    \"rationale\": \"The unsealed MC-cable penetration is a High violation if the wall is fire-rated and only a Low advisory if it's a tenant partition.\",",
+        "    \"options\": [\"Fire-rated 1-hour\", \"Fire-rated 2-hour\", \"Smoke barrier\", \"Non-rated tenant partition\", \"Unsure / cannot tell on site\"]",
+        "  }",
+        "",
+        "Use it ONLY when ALL of these are true:",
+        "  - The answer would materially change at least one finding's severity or whether it appears at all.",
+        "  - You CANNOT determine the answer from the photo + the existing conversation alone.",
+        "  - You have NOT already asked this question earlier in the thread (don't re-ask the same question on every turn).",
+        "  - Only ONE such question per turn — pick the single highest-leverage one.",
+        "",
+        "When you emit clarifyingQuestion, you SHOULD STILL produce your best-effort `violations` array based on your current assumptions; just phrase the relevant finding's description CONDITIONALLY (\"If the wall is rated, this is a High violation per NFPA 101 §8.3.5.1; if non-rated, drop to Low advisory\"). The inspector's answer on the next turn will lock in the right severity.",
+        "",
+        "When you DON'T need clarification, OMIT the field entirely (do not include it with an empty string).",
+        "",
+        "`options` should be 2-5 specific concrete answers, with the last being an \"Unsure\" or \"Cannot tell on site\" escape hatch. If the answer space is fully free-form, omit `options` entirely.",
+      ].join("\n"),
+    });
   }
 
   return result;
