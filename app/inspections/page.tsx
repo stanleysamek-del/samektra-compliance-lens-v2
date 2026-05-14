@@ -5,6 +5,36 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
 
+/**
+ * Runs a Supabase query with a hard timeout. If Supabase is slow we return
+ * `null` instead of hanging the whole page render until Vercel's gateway
+ * times out. The page will show a "Couldn't load X" placeholder for that
+ * section rather than failing the entire dashboard.
+ */
+async function withQueryTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs = 4000,
+  label = "query",
+): Promise<T | null> {
+  try {
+    return (await Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`${label}-timeout`)),
+          timeoutMs,
+        ),
+      ),
+    ])) as T;
+  } catch (err) {
+    console.warn(
+      `[dashboard] ${label} failed:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
 export default async function InspectionsPage() {
   const supabase = await createClient();
   const {
@@ -12,48 +42,118 @@ export default async function InspectionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, organization")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!profile) redirect("/onboarding");
+  // Profile lookup is gating — we need it to render the header. Keep the
+  // timeout but treat null as "couldn't load" rather than redirect to
+  // onboarding (which would loop on a Supabase outage).
+  const profileResult = await withQueryTimeout(
+    supabase
+      .from("profiles")
+      .select("full_name, organization")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    4000,
+    "profiles",
+  );
+  const profile = profileResult?.data ?? null;
+  if (profileResult !== null && !profile) {
+    // Confirmed missing profile (not a timeout) — send them to onboarding.
+    redirect("/onboarding");
+  }
 
-  const { data: inProgress } = await supabase
-    .from("inspections")
-    .select("id, facility_name, location, date_of_inspection, updated_at")
-    .eq("status", "in_progress")
-    .order("updated_at", { ascending: false })
-    .limit(5);
+  // Fire the rest of the queries in parallel and let any of them fail open.
+  const [inProgressResult, recentResult, weeklyScansResult, weeklyHighFindingsResult] =
+    await Promise.all([
+      withQueryTimeout(
+        supabase
+          .from("inspections")
+          .select("id, facility_name, location, date_of_inspection, updated_at")
+          .eq("status", "in_progress")
+          .order("updated_at", { ascending: false })
+          .limit(5),
+        4000,
+        "in_progress",
+      ),
+      withQueryTimeout(
+        supabase
+          .from("inspections")
+          .select("id, facility_name, location, status, date_of_inspection, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5),
+        4000,
+        "recent",
+      ),
+      withQueryTimeout(
+        (async () => {
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          return supabase
+            .from("photos")
+            .select("id", { count: "exact", head: true })
+            .gte("created_at", sevenDaysAgo);
+        })(),
+        4000,
+        "weekly_scans",
+      ),
+      withQueryTimeout(
+        (async () => {
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          return supabase
+            .from("findings")
+            .select("id", { count: "exact", head: true })
+            .eq("severity", "High")
+            .gte("created_at", sevenDaysAgo);
+        })(),
+        4000,
+        "weekly_high_findings",
+      ),
+    ]);
 
-  const { data: recent } = await supabase
-    .from("inspections")
-    .select("id, facility_name, location, status, date_of_inspection, created_at")
-    .order("created_at", { ascending: false })
-    .limit(5);
+  const inProgress = inProgressResult?.data ?? null;
+  const recent = recentResult?.data ?? null;
+  const weeklyScans = weeklyScansResult?.count ?? null;
+  const weeklyHighFindings = weeklyHighFindingsResult?.count ?? null;
+  // True when at least one section couldn't load — surfaces a banner.
+  const anySectionDegraded =
+    inProgressResult === null ||
+    recentResult === null ||
+    weeklyScansResult === null ||
+    weeklyHighFindingsResult === null;
 
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { count: weeklyScans } = await supabase
-    .from("photos")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", sevenDaysAgo);
-  const { count: weeklyHighFindings } = await supabase
-    .from("findings")
-    .select("id", { count: "exact", head: true })
-    .eq("severity", "High")
-    .gte("created_at", sevenDaysAgo);
+  // Fallback profile so we can still render something if the profile query
+  // itself timed out. The user can refresh.
+  const displayProfile = profile ?? {
+    full_name: user.email ?? "Inspector",
+    organization: null as string | null,
+  };
 
   const insight = pickDailyInsight();
 
   return (
     <AppShell
       user={{
-        fullName: profile.full_name,
-        organization: profile.organization,
+        fullName: displayProfile.full_name,
+        organization: displayProfile.organization,
         email: user.email ?? null,
       }}
     >
       <div className="flex flex-col gap-5">
+        {anySectionDegraded ? (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
+            style={{
+              borderColor: "rgba(245,158,11,0.3)",
+              background: "rgba(245,158,11,0.08)",
+              color: "#fde68a",
+            }}
+          >
+            <span aria-hidden>⚠</span>
+            <span>
+              Some sections couldn&apos;t load — we&apos;re showing what we
+              have. Refresh to retry.
+            </span>
+          </div>
+        ) : null}
+
         {/* Hero card */}
         <Card variant="tinted-orange">
           <div className="flex items-start gap-4">
@@ -69,10 +169,10 @@ export default async function InspectionsPage() {
                 Online · Your Compliance Ally
               </div>
               <h1 className="mt-1 text-xl font-semibold tracking-tight text-[var(--fg)] sm:text-2xl">
-                Welcome back, {profile.full_name.split(" ")[0] || profile.full_name}.
+                Welcome back, {displayProfile.full_name.split(" ")[0] || displayProfile.full_name}.
               </h1>
-              {profile.organization ? (
-                <p className="mt-0.5 text-sm text-[var(--fg-muted)]">{profile.organization}</p>
+              {displayProfile.organization ? (
+                <p className="mt-0.5 text-sm text-[var(--fg-muted)]">{displayProfile.organization}</p>
               ) : null}
             </div>
           </div>

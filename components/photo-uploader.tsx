@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/card";
 import { resizeImageForUpload } from "@/lib/resize-image";
+import { fetchWithRetry } from "@/lib/retry";
 
 type Props = {
   inspectionId: string;
@@ -95,10 +96,29 @@ export function PhotoUploader({ inspectionId }: Props) {
     setStatus({ kind: "analyzing", filename: file.name, previewUrl });
 
     try {
-      const res = await fetch("/api/photos/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // Retry on transient network / 502/503/504 — uploads are the most
+      // failure-prone path (large body, AI call, multiple DB writes) so
+      // it's worth giving the request a couple shots before giving up.
+      const res = await fetchWithRetry(
+        "/api/photos/upload",
+        { method: "POST", body: formData },
+        {
+          retries: 2,
+          backoffMs: 1200,
+          onAttempt: (attempt, reason) => {
+            // Surface retry state to the user so the spinner doesn't look
+            // hung. Keep the same preview image.
+            setStatus({
+              kind: "analyzing",
+              filename: file.name,
+              previewUrl,
+            });
+            console.warn(
+              `[upload] retry ${attempt} (${reason}) — retrying…`,
+            );
+          },
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         photoId?: string;
@@ -120,7 +140,11 @@ export function PhotoUploader({ inspectionId }: Props) {
       router.push(`/inspections/${inspectionId}/photos/${json.photoId}`);
     } catch (err) {
       URL.revokeObjectURL(previewUrl);
-      const message = err instanceof Error ? err.message : "Upload failed";
+      const raw = err instanceof Error ? err.message : "Upload failed";
+      // Map low-level network errors to a friendly message.
+      const message = /fetch|network|failed/i.test(raw)
+        ? "Network hiccup — we retried but couldn't reach the server. Check your connection and try again."
+        : raw;
       setStatus({ kind: "error", message });
     }
   }

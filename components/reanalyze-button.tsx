@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { fetchWithRetry } from "@/lib/retry";
 
 type Props = {
   photoId: string;
@@ -33,11 +34,20 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/photos/${photoId}/reanalyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier }),
-      });
+      const res = await fetchWithRetry(
+        `/api/photos/${photoId}/reanalyze`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier }),
+        },
+        {
+          retries: 2,
+          backoffMs: 1500,
+          onAttempt: (attempt, reason) =>
+            console.warn(`[reanalyze] retry ${attempt} (${reason})`),
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;

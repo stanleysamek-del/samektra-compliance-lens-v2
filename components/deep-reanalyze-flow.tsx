@@ -2,6 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { fetchWithRetry } from "@/lib/retry";
+
+// Centralized retry config for this flow — all three call paths
+// (deep-questions, reanalyze, reanalyze-with-observation) hit the
+// AI which can blip with 502/504 under load.
+const RETRY_OPTS = {
+  retries: 2,
+  backoffMs: 1500,
+} as const;
 
 type Question = {
   id: string;
@@ -40,9 +49,15 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
   async function startWithQuestions() {
     setStage({ kind: "fetching-questions" });
     try {
-      const res = await fetch(`/api/photos/${photoId}/deep-questions`, {
-        method: "POST",
-      });
+      const res = await fetchWithRetry(
+        `/api/photos/${photoId}/deep-questions`,
+        { method: "POST" },
+        {
+          ...RETRY_OPTS,
+          onAttempt: (attempt, reason) =>
+            console.warn(`[deep-questions] retry ${attempt} (${reason})`),
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         questions?: Question[];
@@ -86,20 +101,28 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
     if (!trimmed) return;
     setStage({ kind: "analyzing", answers: { custom: trimmed }, questions: [] });
     try {
-      const res = await fetch(`/api/photos/${photoId}/reanalyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier: "deep",
-          answers: [
-            {
-              question:
-                "INSPECTOR OBSERVATION — what the inspector saw on site that you may have missed or under-rated. Treat this as authoritative ground truth and incorporate into your findings.",
-              answer: trimmed,
-            },
-          ],
-        }),
-      });
+      const res = await fetchWithRetry(
+        `/api/photos/${photoId}/reanalyze`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tier: "deep",
+            answers: [
+              {
+                question:
+                  "INSPECTOR OBSERVATION — what the inspector saw on site that you may have missed or under-rated. Treat this as authoritative ground truth and incorporate into your findings.",
+                answer: trimmed,
+              },
+            ],
+          }),
+        },
+        {
+          ...RETRY_OPTS,
+          onAttempt: (attempt, reason) =>
+            console.warn(`[reanalyze-observation] retry ${attempt} (${reason})`),
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
@@ -135,11 +158,19 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
       .filter((qa) => qa.answer.length > 0);
 
     try {
-      const res = await fetch(`/api/photos/${photoId}/reanalyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier: "deep", answers: payload }),
-      });
+      const res = await fetchWithRetry(
+        `/api/photos/${photoId}/reanalyze`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier: "deep", answers: payload }),
+        },
+        {
+          ...RETRY_OPTS,
+          onAttempt: (attempt, reason) =>
+            console.warn(`[reanalyze] retry ${attempt} (${reason})`),
+        },
+      );
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
