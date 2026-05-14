@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import type { PDFPage, PDFFont } from "pdf-lib";
+import type { PDFPage, PDFFont, RGB } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { buildExportFilename } from "@/lib/exports/filename";
 import {
@@ -8,6 +8,7 @@ import {
   groupBySection,
   type AuditSection,
 } from "@/lib/exports/audit-sections";
+import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,6 +41,14 @@ type Finding = {
   location: string | null;
   remediation: string | null;
   references: string[] | null;
+  // Bbox styling (used when drawing on photos in the gallery).
+  bbox_x1: number | null;
+  bbox_y1: number | null;
+  bbox_x2: number | null;
+  bbox_y2: number | null;
+  bbox_stroke_width: number | null;
+  bbox_color: string | null;
+  bbox_fill: string | null;
 };
 
 export async function GET(
@@ -76,7 +85,7 @@ export async function GET(
 
     const { data: photos } = await supabase
       .from("photos")
-      .select("id, storage_path, photo_location, raw_analysis, created_at")
+      .select("id, storage_path, photo_location, raw_analysis, annotations, created_at")
       .eq("inspection_id", inspectionId)
       .order("created_at", { ascending: true });
 
@@ -91,13 +100,22 @@ export async function GET(
       const { data: findings } = await supabase
         .from("findings")
         .select(
-          "id, photo_id, title, severity, category, code, description, location, remediation, references, created_at",
+          "id, photo_id, title, severity, category, code, description, location, remediation, references, created_at, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill",
         )
         .in("photo_id", photoIds)
         .order("severity", { ascending: false })
         .order("created_at", { ascending: true });
       allFindings = (findings ?? []).map((f) => {
         const pid = f.photo_id as string;
+        const fAny = f as {
+          bbox_x1: number | null;
+          bbox_y1: number | null;
+          bbox_x2: number | null;
+          bbox_y2: number | null;
+          bbox_stroke_width: number | null;
+          bbox_color: string | null;
+          bbox_fill: string | null;
+        };
         return {
           id: f.id as string,
           photo_id: pid,
@@ -108,6 +126,13 @@ export async function GET(
           code: (f.code as string | null) ?? null,
           description: (f.description as string | null) ?? null,
           location: (f.location as string | null) ?? null,
+          bbox_x1: fAny.bbox_x1,
+          bbox_y1: fAny.bbox_y1,
+          bbox_x2: fAny.bbox_x2,
+          bbox_y2: fAny.bbox_y2,
+          bbox_stroke_width: fAny.bbox_stroke_width,
+          bbox_color: fAny.bbox_color,
+          bbox_fill: fAny.bbox_fill,
           remediation: (f.remediation as string | null) ?? null,
           references: (f.references as string[] | null) ?? null,
         };
@@ -456,6 +481,48 @@ export async function GET(
             const x = cellX + (colW - w) / 2;
             const y = cellTop - 32 - h;
             page.drawImage(img, { x, y, width: w, height: h });
+
+            // Overlay AI bboxes (Medium / High only — same as the on-screen rule)
+            // and inspector annotations on top of the photo. Coordinates are
+            // normalized [0,1] relative to the image; convert to PDF coords
+            // (PDF origin bottom-left, so Y must be flipped from the
+            // image-space top-down).
+            const photoFindings = allFindings.filter(
+              (f) =>
+                f.photo_id === (p.id as string) &&
+                (f.severity === "Medium" || f.severity === "High") &&
+                f.bbox_x1 != null &&
+                f.bbox_y1 != null &&
+                f.bbox_x2 != null &&
+                f.bbox_y2 != null,
+            );
+            for (const f of photoFindings) {
+              const swMul = typeof f.bbox_stroke_width === "number" ? f.bbox_stroke_width : 2;
+              const stroke = f.bbox_color
+                ? hexToRgb(f.bbox_color)
+                : severityRgb(f.severity);
+              const fill = f.bbox_fill ? hexToRgb(f.bbox_fill) : null;
+              drawRect(
+                page,
+                x,
+                y,
+                w,
+                h,
+                f.bbox_x1!,
+                f.bbox_y1!,
+                f.bbox_x2!,
+                f.bbox_y2!,
+                stroke,
+                fill,
+                Math.max(0.8, swMul * 0.8),
+              );
+            }
+
+            const photoAnnotations =
+              (p.annotations as Annotation[] | null) ?? [];
+            for (const a of photoAnnotations) {
+              drawAnnotation(page, x, y, w, h, a, helv);
+            }
           }
         } catch (err) {
           console.error("[pdf] embed failed", err);
@@ -722,3 +789,173 @@ function safeText(s: string | null | undefined): string {
 // classifyToSection imported from "@/lib/exports/audit-sections" but only used
 // transitively through groupBySection — silence the unused warning.
 void classifyToSection;
+
+/* =====================================================================
+ *  Photo overlay drawing helpers — used to render AI bboxes and
+ *  inspector annotations on top of each photo in the gallery.
+ *
+ *  All coords from the editor are normalized [0, 1] relative to the
+ *  IMAGE. We translate to PDF coords where:
+ *    - x is left-to-right (same direction)
+ *    - y is bottom-to-top (FLIPPED from image space)
+ *  The image is drawn at PDF rect (imgX, imgY) with (imgW, imgH).
+ *  A normalized point (nx, ny) maps to PDF (imgX + nx*imgW,
+ *  imgY + imgH - ny*imgH).
+ * ===================================================================== */
+
+function hexToRgb(hex: string): RGB {
+  let h = hex.replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (h.length === 8) h = h.slice(0, 6); // strip alpha; opacity handled separately
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  if ([r, g, b].some(Number.isNaN)) return rgb(0.97, 0.45, 0.45);
+  return rgb(r, g, b);
+}
+
+function severityRgb(s: "Low" | "Medium" | "High"): RGB {
+  if (s === "Low") return rgb(0.20, 0.83, 0.60); // green
+  return rgb(0.97, 0.45, 0.45); // red for Medium/High
+}
+
+function drawRect(
+  page: PDFPage,
+  imgX: number,
+  imgY: number,
+  imgW: number,
+  imgH: number,
+  nx1: number,
+  ny1: number,
+  nx2: number,
+  ny2: number,
+  stroke: RGB,
+  fill: RGB | null,
+  thickness: number,
+) {
+  const left = imgX + Math.min(nx1, nx2) * imgW;
+  const right = imgX + Math.max(nx1, nx2) * imgW;
+  const top = imgY + imgH - Math.min(ny1, ny2) * imgH;
+  const bottom = imgY + imgH - Math.max(ny1, ny2) * imgH;
+  page.drawRectangle({
+    x: left,
+    y: bottom,
+    width: right - left,
+    height: top - bottom,
+    borderColor: stroke,
+    borderWidth: thickness,
+    color: fill ?? undefined,
+    opacity: fill ? 0.25 : undefined,
+    borderOpacity: 1,
+  });
+}
+
+function drawAnnotation(
+  page: PDFPage,
+  imgX: number,
+  imgY: number,
+  imgW: number,
+  imgH: number,
+  a: Annotation,
+  font: PDFFont,
+) {
+  const stroke = hexToRgb(a.color);
+  const fill = a.fill ? hexToRgb(a.fill) : null;
+  const swMul = typeof a.strokeWidth === "number" ? a.strokeWidth : 2;
+  const thickness = Math.max(0.8, swMul * 0.8);
+
+  // PDF Y is flipped relative to image-space Y.
+  const px1 = imgX + a.x1 * imgW;
+  const px2 = imgX + a.x2 * imgW;
+  const py1 = imgY + imgH - a.y1 * imgH;
+  const py2 = imgY + imgH - a.y2 * imgH;
+
+  if (a.type === "rect") {
+    drawRect(page, imgX, imgY, imgW, imgH, a.x1, a.y1, a.x2, a.y2, stroke, fill, thickness);
+    return;
+  }
+
+  if (a.type === "circle") {
+    const cx = (px1 + px2) / 2;
+    const cy = (py1 + py2) / 2;
+    const xScale = Math.abs(px2 - px1) / 2;
+    const yScale = Math.abs(py2 - py1) / 2;
+    page.drawEllipse({
+      x: cx,
+      y: cy,
+      xScale,
+      yScale,
+      borderColor: stroke,
+      borderWidth: thickness,
+      color: fill ?? undefined,
+      opacity: fill ? 0.25 : undefined,
+      borderOpacity: 1,
+    });
+    return;
+  }
+
+  if (a.type === "arrow") {
+    // Line from tail (x1,y1) to head (x2,y2).
+    page.drawLine({
+      start: { x: px1, y: py1 },
+      end: { x: px2, y: py2 },
+      thickness: thickness * 1.2,
+      color: stroke,
+    });
+    // Arrowhead: small triangle at the head end.
+    const dx = px2 - px1;
+    const dy = py2 - py1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0.5) {
+      const ux = dx / len;
+      const uy = dy / len;
+      const headLen = Math.max(6, thickness * 4);
+      // Perpendicular unit vector.
+      const perpX = -uy;
+      const perpY = ux;
+      const baseX = px2 - ux * headLen;
+      const baseY = py2 - uy * headLen;
+      const leftPt = {
+        x: baseX + perpX * headLen * 0.5,
+        y: baseY + perpY * headLen * 0.5,
+      };
+      const rightPt = {
+        x: baseX - perpX * headLen * 0.5,
+        y: baseY - perpY * headLen * 0.5,
+      };
+      page.drawLine({
+        start: { x: px2, y: py2 },
+        end: leftPt,
+        thickness: thickness * 1.2,
+        color: stroke,
+      });
+      page.drawLine({
+        start: { x: px2, y: py2 },
+        end: rightPt,
+        thickness: thickness * 1.2,
+        color: stroke,
+      });
+    }
+    return;
+  }
+
+  if (a.type === "text") {
+    const fsMul = typeof a.fontSize === "number" ? a.fontSize : 2;
+    // ~9pt base × multiplier (1=small, 2=medium, 3=large).
+    const fontSize = Math.max(7, 4.5 * fsMul);
+    const text = safeText(a.text ?? "").slice(0, 80);
+    if (!text) return;
+    // Anchor text roughly centered on the bbox.
+    const cx = (px1 + px2) / 2;
+    const cy = (py1 + py2) / 2;
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+    page.drawText(text, {
+      x: cx - textWidth / 2,
+      y: cy - fontSize / 2,
+      size: fontSize,
+      font,
+      color: stroke,
+    });
+    return;
+  }
+}
