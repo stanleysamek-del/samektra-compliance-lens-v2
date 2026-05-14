@@ -50,10 +50,12 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Fast path for API routes: they do their own auth. Skip the getUser()
-  // call entirely. The Supabase client above still runs its cookie sync,
-  // so any Set-Cookie from a downstream API request still flows through.
-  if (isApiRoute) {
+  // Fast path: API routes do their own auth, and public pages don't need
+  // any auth check at all. Skip the (slow) getUser() call for both. The
+  // Supabase client above still runs its cookie-sync setAll callback, so
+  // any Set-Cookie from a downstream login/signup/callback response still
+  // flows through correctly.
+  if (isApiRoute || isPublic) {
     return supabaseResponse;
   }
 
