@@ -24,14 +24,9 @@ export async function updateSession(request: NextRequest) {
   const isApiRoute = path.startsWith("/api");
   const isPublic = PUBLIC_PATHS.has(path) || isAuthRoute;
 
-  // Fast path: public pages and API routes don't need a session refresh in
-  // the middleware. API routes auth themselves; the public marketing
-  // pages don't need any auth at all. Skipping Supabase here keeps the
-  // middleware response near-instant for the homepage and asset-like calls.
-  if (isPublic || isApiRoute) {
-    return NextResponse.next({ request });
-  }
-
+  // Always set up the Supabase client (it handles cookie sync via setAll —
+  // required for the auth callback to persist the session). What we vary
+  // is whether we BLOCK the request on getUser() or fail open.
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -54,6 +49,13 @@ export async function updateSession(request: NextRequest) {
       },
     },
   );
+
+  // Fast path for API routes: they do their own auth. Skip the getUser()
+  // call entirely. The Supabase client above still runs its cookie sync,
+  // so any Set-Cookie from a downstream API request still flows through.
+  if (isApiRoute) {
+    return supabaseResponse;
+  }
 
   // Race the auth check against a 3s timeout. If Supabase is slow, fail
   // open — the destination page's server component will perform its own
