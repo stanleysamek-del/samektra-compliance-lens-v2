@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { setNewPassword } from "./actions";
 import { ResetPasswordForm } from "./reset-form";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,10 +9,9 @@ export default async function ResetPasswordPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // If Supabase is slow we render the "link no longer valid" state rather
+  // than time the whole page out. A retry will succeed once Supabase is up.
+  const user = await getUserOrNullFast();
   const params = await searchParams;
 
   return (

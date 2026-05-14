@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { signInWithPassword } from "./actions";
 import { LoginForm } from "./login-form";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,10 +9,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string; error?: string; reset?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Public page — if Supabase is slow, just render the form instead of
+  // hanging the request. Loses the "already signed in, redirect away"
+  // shortcut on outages, which is fine.
+  const user = await getUserOrNullFast();
 
   const params = await searchParams;
   if (user) {

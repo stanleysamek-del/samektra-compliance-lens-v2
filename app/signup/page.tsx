@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { signUp } from "./actions";
 import { SignupForm } from "./signup-form";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,10 +9,9 @@ export default async function SignupPage({
 }: {
   searchParams: Promise<{ next?: string; error?: string; sent?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Public page — render even if Supabase is slow so we never time out
+  // the request at Vercel's gateway.
+  const user = await getUserOrNullFast();
 
   const params = await searchParams;
   if (user) {

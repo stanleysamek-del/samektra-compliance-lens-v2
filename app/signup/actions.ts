@@ -4,6 +4,18 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+const SIGN_UP_TIMEOUT_MS = 15_000;
+
+function isRedirectThrow(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "digest" in err &&
+    typeof (err as { digest?: unknown }).digest === "string" &&
+    (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
+}
+
 export async function signUp(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
@@ -13,34 +25,73 @@ export async function signUp(formData: FormData) {
   const buildRedirect = (qs: string) =>
     `/signup?${qs}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
 
+  const fail = (message: string): never => {
+    redirect(buildRedirect(`error=${encodeURIComponent(message)}`));
+  };
+
   if (!email || !email.includes("@")) {
-    redirect(buildRedirect(`error=${encodeURIComponent("Enter a valid email address.")}`));
+    fail("Enter a valid email address.");
   }
   if (password.length < 8) {
-    redirect(buildRedirect(`error=${encodeURIComponent("Password must be at least 8 characters.")}`));
+    fail("Password must be at least 8 characters.");
   }
   if (password !== confirm) {
-    redirect(buildRedirect(`error=${encodeURIComponent("Passwords don't match.")}`));
+    fail("Passwords don't match.");
   }
 
-  const supabase = await createClient();
-  const headerList = await headers();
-  const origin = headerList.get("origin") ?? `https://${headerList.get("host")}`;
-  const callbackUrl = new URL("/auth/callback", origin);
-  if (next) callbackUrl.searchParams.set("next", next);
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.error("[signup] Missing Supabase env vars on server");
+    fail("Server configuration error. Please contact support.");
+  }
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo: callbackUrl.toString() },
-  });
+  let data:
+    | Awaited<ReturnType<Awaited<ReturnType<typeof createClient>>["auth"]["signUp"]>>["data"]
+    | null = null;
 
-  if (error) {
-    redirect(buildRedirect(`error=${encodeURIComponent(error.message)}`));
+  try {
+    const supabase = await createClient();
+    const headerList = await headers();
+    const origin = headerList.get("origin") ?? `https://${headerList.get("host")}`;
+    const callbackUrl = new URL("/auth/callback", origin);
+    if (next) callbackUrl.searchParams.set("next", next);
+
+    const signUpPromise = supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: callbackUrl.toString() },
+    });
+
+    const result = await Promise.race([
+      signUpPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("sign-up-timeout")),
+          SIGN_UP_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+
+    if (result.error) {
+      fail(result.error.message);
+    }
+    data = result.data;
+  } catch (err) {
+    if (isRedirectThrow(err)) throw err;
+
+    const raw = err instanceof Error ? err.message : String(err);
+    console.error("[signup] signUp failed:", raw);
+
+    let message = raw;
+    if (raw === "sign-up-timeout") {
+      message = "Sign-up is taking too long. Please try again in a moment.";
+    } else if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|UND_ERR/i.test(raw)) {
+      message = "Can't reach the auth service right now. Please try again shortly.";
+    }
+    fail(message);
   }
 
   // If email confirmation is disabled in Supabase, signUp also signs the user in.
-  if (data.session) {
+  if (data?.session) {
     redirect(next || "/onboarding");
   }
 

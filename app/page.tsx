@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { Card, CardDescription, CardTitle } from "@/components/card";
 import { SamektraMark } from "@/components/logo";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Fast path: if Supabase is slow we just render the marketing page
+  // anyway instead of timing the request out at Vercel's gateway.
+  const user = await getUserOrNullFast();
 
   if (user) {
     redirect("/inspections");
