@@ -108,7 +108,10 @@ export async function POST(
   }
 
   const arrayBuffer = await blob.arrayBuffer();
-  let imgBuffer = Buffer.from(arrayBuffer);
+  // Buffer return-type widened so sharp's Buffer<ArrayBufferLike> can be
+  // reassigned here (Buffer.from(arrayBuffer) infers the narrower
+  // Buffer<ArrayBuffer> otherwise).
+  let imgBuffer: Buffer = Buffer.from(arrayBuffer);
   let mimeType = blob.type || "image/jpeg";
 
   const photoAnnotations =
