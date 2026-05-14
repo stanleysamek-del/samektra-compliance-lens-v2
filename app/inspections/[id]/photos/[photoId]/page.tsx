@@ -6,6 +6,7 @@ import { Card } from "@/components/card";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoEditor } from "@/components/photo-editor";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
+import { CoachTheAI } from "@/components/coach-the-ai";
 import { AddFindingForm } from "@/components/add-finding-form";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { deletePhoto } from "./actions";
@@ -178,6 +179,13 @@ export default async function PhotoDetailPage({
             </div>
             <DeepReanalyzeFlow photoId={photo.id} />
           </div>
+        </Card>
+
+        {/* Coach the AI — back-and-forth hint thread. The inspector tells
+            the AI what to look at, AI re-analyzes with the whole thread as
+            authoritative context, and the conversation persists per photo. */}
+        <Card variant="tinted-teal">
+          <CoachTheAI photoId={photo.id} />
         </Card>
 
         {/* Findings */}
