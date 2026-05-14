@@ -42,7 +42,7 @@ export default async function PhotoDetailPage({
   const { data: findings } = await supabase
     .from("findings")
     .select(
-      "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill",
+      "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, user_rating",
     )
     .eq("photo_id", photoId)
     .order("severity", { ascending: false })
@@ -183,9 +183,14 @@ export default async function PhotoDetailPage({
 
         {/* Coach the AI — back-and-forth hint thread. The inspector tells
             the AI what to look at, AI re-analyzes with the whole thread as
-            authoritative context, and the conversation persists per photo. */}
+            authoritative context, and the conversation persists per photo.
+            Annotations the inspector drew on the photo are passed in so
+            they can attach a region to a specific hint. */}
         <Card variant="tinted-teal">
-          <CoachTheAI photoId={photo.id} />
+          <CoachTheAI
+            photoId={photo.id}
+            annotations={(photo.annotations ?? []) as Annotation[]}
+          />
         </Card>
 
         {/* Findings */}

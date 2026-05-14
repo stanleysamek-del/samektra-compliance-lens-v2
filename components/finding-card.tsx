@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   updateFinding,
   deleteFinding,
+  rateFinding,
   type FindingPatch,
 } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { BboxPicker, type Bbox } from "@/components/bbox-picker";
@@ -25,6 +26,8 @@ export type FindingRow = {
   bbox_y1: number | null;
   bbox_x2: number | null;
   bbox_y2: number | null;
+  /** 1 = thumbs-up, -1 = thumbs-down, null = no feedback. */
+  user_rating?: number | null;
 };
 
 const CATEGORIES = [
@@ -77,6 +80,21 @@ export function FindingCard({
   // Bbox draft: undefined means "no change", null means "clear", object means "new value".
   const [bboxDraft, setBboxDraft] = useState<Bbox | null | undefined>(undefined);
   const [isPending, startTransition] = useTransition();
+
+  // Local optimistic copy of the rating so the buttons feel snappy. The
+  // server is the source of truth on next page load.
+  const [localRating, setLocalRating] = useState<number | null>(
+    finding.user_rating ?? null,
+  );
+
+  function rate(next: 1 | -1) {
+    // Toggling the same rating clears it.
+    const target = localRating === next ? null : next;
+    setLocalRating(target);
+    startTransition(async () => {
+      await rateFinding(finding.id, finding.inspection_id, target);
+    });
+  }
 
   function save() {
     startTransition(async () => {
@@ -140,9 +158,49 @@ export function FindingCard({
             </h3>
           ) : null}
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {!editing ? (
             <>
+              {/* Feedback buttons — feed the AI on the next Coach turn. */}
+              <button
+                type="button"
+                title={
+                  localRating === 1
+                    ? "Remove thumbs-up"
+                    : "Good call — AI will see this on the next Coach turn"
+                }
+                aria-label="Thumbs up"
+                disabled={isPending}
+                onClick={() => rate(1)}
+                className={[
+                  "rounded-md px-1.5 py-1 text-sm transition hover:bg-white/[0.06]",
+                  localRating === 1
+                    ? "text-[#5eead4]"
+                    : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
+                ].join(" ")}
+              >
+                <ThumbsUpIcon filled={localRating === 1} />
+              </button>
+              <button
+                type="button"
+                title={
+                  localRating === -1
+                    ? "Remove thumbs-down"
+                    : "Wrong call — AI will see this on the next Coach turn"
+                }
+                aria-label="Thumbs down"
+                disabled={isPending}
+                onClick={() => rate(-1)}
+                className={[
+                  "rounded-md px-1.5 py-1 text-sm transition hover:bg-white/[0.06]",
+                  localRating === -1
+                    ? "text-[#fca5a5]"
+                    : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
+                ].join(" ")}
+              >
+                <ThumbsDownIcon filled={localRating === -1} />
+              </button>
+              <span className="mx-1 h-4 w-px bg-[var(--border)]" aria-hidden />
               <button
                 type="button"
                 onClick={() => setEditing(true)}
@@ -347,4 +405,42 @@ function severityStyles(s: "Low" | "Medium" | "High") {
   if (s === "High") return { bg: "rgba(239,68,68,0.12)", fg: "#fca5a5" };
   if (s === "Medium") return { bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" };
   return { bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" };
+}
+
+function ThumbsUpIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3Z" />
+      <path d="M7 11 11 3a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 17.5 19H7" />
+    </svg>
+  );
+}
+
+function ThumbsDownIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M17 13V4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3Z" />
+      <path d="M17 13 13 21a2 2 0 0 1-2-2v-4H5.5a2 2 0 0 1-2-2.3l1-6A2 2 0 0 1 6.5 5H17" />
+    </svg>
+  );
 }

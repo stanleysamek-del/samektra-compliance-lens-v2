@@ -4,6 +4,10 @@ import { analyzeImage, type Tier } from "@/lib/ai/client";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import type { ContextAnswer } from "@/lib/prompts/compliance";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
+import {
+  snapshotRatings,
+  reapplyRatings,
+} from "@/lib/findings/preserve-ratings";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -193,6 +197,12 @@ export async function POST(
     .select("id", { count: "exact", head: true })
     .eq("photo_id", photo.id)
     .eq("edited", true);
+
+  // Snapshot thumbs ratings before delete so we can re-apply them to the
+  // new rows by matching title — otherwise re-analyze would silently wipe
+  // every thumbs-up / thumbs-down the inspector had set.
+  const ratingSnapshot = await snapshotRatings(supabase, photo.id);
+
   await supabase
     .from("findings")
     .delete()
@@ -243,6 +253,13 @@ export async function POST(
     );
   }
 
+  // Restore inspector thumbs ratings onto matching new findings by title.
+  const restoredRatings = await reapplyRatings(
+    supabase,
+    photo.id,
+    ratingSnapshot,
+  );
+
   // Update raw_analysis on the photo, including any inspector-provided
   // context answers so the UI can surface what was clarified.
   const enrichedAnalysis = answers.length > 0
@@ -277,5 +294,6 @@ export async function POST(
     findingsCount: analysis.violations.length,
     contextUsed: answers.length,
     preservedUserFindings: preservedCount ?? 0,
+    ratingsRestored: restoredRatings,
   });
 }

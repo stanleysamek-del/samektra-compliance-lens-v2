@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithRetry } from "@/lib/retry";
+import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
 type Turn = {
   id: string;
@@ -39,6 +40,10 @@ type Status =
 
 type Props = {
   photoId: string;
+  /** Existing annotations on the photo. User can attach one to a hint so
+   *  the AI gets both the burned-on-image shape AND a text reference to
+   *  the specific region. */
+  annotations?: Annotation[];
 };
 
 const MAX_TEXTAREA_LEN = 4000;
@@ -46,12 +51,16 @@ const MAX_TEXTAREA_LEN = 4000;
 // summarizing/closing the conversation to keep token costs bounded.
 const SOFT_TURN_LIMIT = 16;
 
-export function CoachTheAI({ photoId }: Props) {
+export function CoachTheAI({ photoId, annotations = [] }: Props) {
   const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "loading-history" });
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+
+  const selectedAnnotation =
+    annotations.find((a) => a.id === selectedAnnotationId) ?? null;
 
   // Initial load — pull any existing thread for this photo so we don't
   // lose context across page navigations.
@@ -101,13 +110,27 @@ export function CoachTheAI({ photoId }: Props) {
     setStatus({ kind: "sending", pendingText: text });
     setDraft("");
 
+    // Build the annotationRef payload if the user attached one. We use
+    // normalized bbox + type + color so the server route can both reference
+    // it in the prompt AND burn it onto the image for the AI to see.
+    const annotationRef = selectedAnnotation
+      ? {
+          x1: selectedAnnotation.x1,
+          y1: selectedAnnotation.y1,
+          x2: selectedAnnotation.x2,
+          y2: selectedAnnotation.y2,
+          type: selectedAnnotation.type,
+          color: selectedAnnotation.color,
+        }
+      : undefined;
+
     try {
       const res = await fetchWithRetry(
         `/api/photos/${photoId}/coach`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, annotationRef }),
         },
         { retries: 1, backoffMs: 1500 },
       );
@@ -138,6 +161,9 @@ export function CoachTheAI({ photoId }: Props) {
       if (json.aiTurn) newTurns.push(json.aiTurn);
       setTurns((prev) => [...prev, ...newTurns]);
       setStatus({ kind: "idle" });
+      // Clear the annotation selection so the inspector doesn't accidentally
+      // tag the next hint with the same region.
+      setSelectedAnnotationId(null);
 
       // Refresh the page so the Findings panel reflects the new analysis.
       router.refresh();
@@ -231,6 +257,56 @@ export function CoachTheAI({ photoId }: Props) {
 
       {/* Composer */}
       <div className="flex flex-col gap-2">
+        {/* Annotation chooser — show the existing photo annotations as
+            selectable chips. Clicking attaches that region to the next
+            hint; the server burns the shape onto the image AND tells the
+            AI the bbox so it focuses there. */}
+        {annotations.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+              Attach a region from the photo (optional)
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {annotations.map((a, idx) => {
+                const selected = a.id === selectedAnnotationId;
+                const label = annotationLabel(a, idx);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedAnnotationId((prev) =>
+                        prev === a.id ? null : a.id,
+                      )
+                    }
+                    disabled={isSending}
+                    className={[
+                      "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                      selected
+                        ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
+                        : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]",
+                    ].join(" ")}
+                    title={`${a.type} at (${Math.round(a.x1 * 100)}%, ${Math.round(a.y1 * 100)}%)`}
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: selected ? "#0a0d12" : (a.color || "#22d3ee") }}
+                    />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] text-[var(--fg-subtle)]">
+            Tip: click <span className="font-medium text-[var(--fg-muted)]">Annotate</span> on
+            the photo above to circle a region, then come back here to attach
+            it to a hint — the AI will see exactly which spot you mean.
+          </p>
+        )}
+
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, MAX_TEXTAREA_LEN))}
@@ -242,7 +318,11 @@ export function CoachTheAI({ photoId }: Props) {
             }
           }}
           rows={3}
-          placeholder="e.g., There's a pendant sprinkler in the upper-right — check the deflector distance to the slab."
+          placeholder={
+            selectedAnnotation
+              ? "Describe what you want the AI to look at in the selected region…"
+              : "e.g., There's a pendant sprinkler in the upper-right — check the deflector distance to the slab."
+          }
           className="cl-input min-h-[72px] resize-y py-2.5 text-sm"
           disabled={isSending}
         />
@@ -389,4 +469,25 @@ function Spinner() {
       />
     </svg>
   );
+}
+
+/**
+ * Short human-readable label for an annotation chip. Prefers the annotation's
+ * own text if present (text labels the inspector drew); otherwise falls back
+ * to "[type] #N".
+ */
+function annotationLabel(a: Annotation, idx: number): string {
+  if (a.text && a.text.trim().length > 0) {
+    const t = a.text.trim();
+    return t.length > 28 ? t.slice(0, 27) + "…" : t;
+  }
+  const typeName =
+    a.type === "rect"
+      ? "Rectangle"
+      : a.type === "circle"
+        ? "Circle"
+        : a.type === "arrow"
+          ? "Arrow"
+          : "Text";
+  return `${typeName} #${idx + 1}`;
 }

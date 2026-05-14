@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { analyzeImage } from "@/lib/ai/client";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import { formatCoachThread, type CoachTurn } from "@/lib/prompts/coach";
+import {
+  snapshotRatings,
+  reapplyRatings,
+} from "@/lib/findings/preserve-ratings";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export const runtime = "nodejs";
@@ -162,11 +166,14 @@ export async function POST(
     );
   }
 
-  // ---- Existing AI bboxes — render alongside annotations on the image ----
+  // ---- Existing findings — pulled with title + user_rating so we can BOTH
+  // burn the bboxes AND tell the AI which of its prior calls the inspector
+  // thumbs-up'd vs thumbs-down'd. The ratings are the highest-value signal
+  // the AI gets next to the conversation itself. ----
   const { data: existingFindings } = await supabase
     .from("findings")
     .select(
-      "severity, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, created_at",
+      "title, severity, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, user_rating, edited, created_at",
     )
     .eq("photo_id", photoId)
     .order("created_at", { ascending: true });
@@ -189,6 +196,15 @@ export async function POST(
       fill: (f.bbox_fill as string | null) ?? null,
       severity: f.severity as "Low" | "Medium" | "High",
       index: idx,
+    }));
+
+  // Pull just the rated findings for the prompt — both up and down.
+  const ratedFindings = (existingFindings ?? [])
+    .filter((f) => f.user_rating === 1 || f.user_rating === -1)
+    .map((f) => ({
+      title: String(f.title ?? ""),
+      severity: f.severity as "Low" | "Medium" | "High",
+      rating: f.user_rating as 1 | -1,
     }));
 
   // ---- Download photo and burn annotations + AI bboxes ----
@@ -243,7 +259,15 @@ export async function POST(
   const base64 = imgBuffer.toString("base64");
 
   // ---- Build coaching context and call AI ----
-  const coachContext = formatCoachThread(history, hintText, annotationRef);
+  // ratedFindings carries the thumbs-up / thumbs-down signal; formatCoachThread
+  // prepends it as its own authoritative block so the model treats those calls
+  // as confirmed (keep) or wrong (drop) regardless of what it sees in the image.
+  const coachContext = formatCoachThread(
+    history,
+    hintText,
+    annotationRef,
+    ratedFindings,
+  );
 
   let analysis: ComplianceAnalysis;
   let aiProvider: "anthropic" | "openai" | "google" = "anthropic";
@@ -325,6 +349,12 @@ export async function POST(
     .select("id", { count: "exact", head: true })
     .eq("photo_id", photo.id)
     .eq("edited", true);
+
+  // Snapshot the thumbs ratings BEFORE we delete so we can re-apply them
+  // to the freshly-inserted rows below — otherwise the inspector's feedback
+  // would silently vanish on every re-analysis.
+  const ratingSnapshot = await snapshotRatings(supabase, photo.id);
+
   await supabase
     .from("findings")
     .delete()
@@ -375,6 +405,13 @@ export async function POST(
     );
   }
 
+  // Restore inspector thumbs ratings onto matching new findings by title.
+  const restoredRatings = await reapplyRatings(
+    supabase,
+    photo.id,
+    ratingSnapshot,
+  );
+
   await supabase
     .from("photos")
     .update({
@@ -391,6 +428,7 @@ export async function POST(
   const aiMeta = {
     findingsCount: analysis.violations.length,
     findingsPreserved: preservedCount ?? 0,
+    ratingsRestored: restoredRatings,
     whatToLookForCount: analysis.whatToLookFor.length,
     notVisibleCount: analysis.notVisible.length,
     confidence: analysis.summary?.confidence ?? null,
@@ -400,7 +438,7 @@ export async function POST(
     costUsd: aiCostUsd,
   };
 
-  const { data: aiTurnRow } = await supabase
+  const { data: aiTurnRow, error: aiTurnErr } = await supabase
     .from("photo_coach_turns")
     .insert({
       photo_id: photo.id,
@@ -414,10 +452,34 @@ export async function POST(
     .select("id, turn_index, role, text, annotation_ref, ai_meta, created_at")
     .maybeSingle();
 
+  if (aiTurnErr || !aiTurnRow) {
+    // The AI call succeeded and findings were already written, but the
+    // turn row itself didn't land. Log loudly so we can see this in the
+    // Vercel function logs and tell the client to re-hydrate from server
+    // rather than trusting the inline payload.
+    console.error("[coach] AI turn insert failed:", aiTurnErr, {
+      photoId: photo.id,
+      aiTurnIndex,
+      aiTextLen: aiText.length,
+    });
+  }
+
+  console.log("[coach] success", {
+    photoId: photo.id,
+    inspectorTurnIndex,
+    aiTurnIndex,
+    findingsCount: analysis.violations.length,
+    preservedCount: preservedCount ?? 0,
+    costUsd: aiCostUsd,
+    durationMs: aiDurationMs,
+    model: aiModel,
+  });
+
   return NextResponse.json({
     ok: true,
     inspectorTurn: inspectorTurnRow,
-    aiTurn: aiTurnRow,
+    aiTurn: aiTurnRow ?? null,
+    aiTurnInsertError: aiTurnErr?.message ?? null,
     findingsCount: analysis.violations.length,
     preservedUserFindings: preservedCount ?? 0,
     model: aiModel,

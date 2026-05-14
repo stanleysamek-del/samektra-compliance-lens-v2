@@ -83,6 +83,55 @@ export async function updateFinding(
   }
 }
 
+/**
+ * Set or clear the inspector's thumbs-up/down on a finding. The rating is
+ * NOT a destructive edit — it doesn't flip the `edited` flag, so a thumbs-up
+ * on an AI finding doesn't lock it out of being replaced on a subsequent
+ * re-analysis. (Inspector edits to the finding's CONTENT still set edited.)
+ *
+ * Ratings are read by the Coach API when building the prompt context so the
+ * AI sees which prior findings the inspector liked vs disliked.
+ */
+export async function rateFinding(
+  findingId: string,
+  inspectionId: string,
+  rating: 1 | -1 | null,
+  note?: string,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: existing } = await supabase
+    .from("findings")
+    .select("photo_id")
+    .eq("id", findingId)
+    .maybeSingle();
+  const photoId = (existing?.photo_id as string | null) ?? null;
+
+  const { error } = await supabase
+    .from("findings")
+    .update({
+      user_rating: rating,
+      user_feedback_note: rating === null ? null : (note ?? null),
+    })
+    .eq("id", findingId);
+
+  if (error) {
+    console.error("[rateFinding]", error);
+  }
+
+  revalidatePath(`/inspections/${inspectionId}`, "page");
+  if (photoId) {
+    revalidatePath(
+      `/inspections/${inspectionId}/photos/${photoId}`,
+      "page",
+    );
+  }
+}
+
 export async function deleteFinding(findingId: string, inspectionId: string) {
   const supabase = await createClient();
   const {
