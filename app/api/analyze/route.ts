@@ -1,9 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { analyzeImage, AnalyzeError } from "@/lib/ai/client";
+import { analyzeImage, analyzeImageTwoStage, AnalyzeError } from "@/lib/ai/client";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
+
+/**
+ * Two-stage mode (detect → focused analyze) is gated by env flag.
+ * Set AI_TWO_STAGE=1 to enable globally, or pass ?two_stage=1 / =0 in
+ * the request URL to override per-request. Default OFF for now while
+ * we collect evidence on speed vs. accuracy.
+ */
+function isTwoStageEnabled(request: NextRequest): boolean {
+  const override = request.nextUrl.searchParams.get("two_stage");
+  if (override === "1" || override === "true") return true;
+  if (override === "0" || override === "false") return false;
+  return process.env.AI_TWO_STAGE === "1";
+}
 
 const ALLOWED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -68,13 +81,20 @@ export async function POST(request: NextRequest) {
 
   // ---- Run analysis ----
   try {
-    const result = await analyzeImage(base64, file.type);
+    const useTwoStage = isTwoStageEnabled(request);
+    const result = useTwoStage
+      ? await analyzeImageTwoStage(base64, file.type)
+      : await analyzeImage(base64, file.type);
     return NextResponse.json({
       ok: true,
       provider: result.provider,
       model: result.model,
       durationMs: result.durationMs,
       analysis: result.analysis,
+      // When two-stage ran, surface what was detected so the UI / admin
+      // dashboards can show the focus list and we can collect telemetry
+      // on which equipment types most often appear.
+      detection: useTwoStage && "detection" in result ? result.detection : null,
     });
   } catch (err) {
     const message =

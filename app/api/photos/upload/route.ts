@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { analyzeImage } from "@/lib/ai/client";
+import { analyzeImage, analyzeImageTwoStage } from "@/lib/ai/client";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export const runtime = "nodejs";
@@ -110,13 +110,26 @@ export async function POST(request: NextRequest) {
 
   try {
     const base64 = Buffer.from(bytes).toString("base64");
-    const result = await analyzeImage(base64, file.type);
+    // Two-stage (detect → focused analyze) is gated by env flag so we
+    // can ship it dark, A/B test on the live site, and roll back without
+    // a code change if the focused output regresses any findings.
+    const useTwoStage = process.env.AI_TWO_STAGE === "1";
+    const result = useTwoStage
+      ? await analyzeImageTwoStage(base64, file.type)
+      : await analyzeImage(base64, file.type);
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
-    aiInputTokens = result.usage.inputTokens;
-    aiOutputTokens = result.usage.outputTokens;
-    aiCostUsd = result.usage.costUsd;
+    // Two-stage cost = detect call + analyze call. The detect usage is
+    // surfaced in result.detection; analyzeImage already returns the
+    // analyze-call usage. Sum them so the ai_calls ledger reflects true cost.
+    const detectionUsage =
+      useTwoStage && "detection" in result && result.detection
+        ? result.detection.usage
+        : null;
+    aiInputTokens = result.usage.inputTokens + (detectionUsage?.inputTokens ?? 0);
+    aiOutputTokens = result.usage.outputTokens + (detectionUsage?.outputTokens ?? 0);
+    aiCostUsd = result.usage.costUsd + (detectionUsage?.costUsd ?? 0);
     aiDurationMs = result.durationMs;
   } catch (err) {
     console.error("[upload] analyze", err);

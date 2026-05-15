@@ -26,6 +26,13 @@ import {
   formatUserContext,
   type ContextAnswer,
 } from "@/lib/prompts/compliance";
+import {
+  DETECT_SYSTEM_PROMPT,
+  DETECT_USER_PROMPT,
+  DETECT_CATEGORIES,
+  formatFocusHint,
+  type DetectCategory,
+} from "@/lib/prompts/compliance-detect";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export type Tier = "default" | "deep";
@@ -85,9 +92,16 @@ export async function analyzeImage(
   mimeType: string,
   tier: Tier = "default",
   userContext: ContextAnswer[] = [],
+  focusCategories: DetectCategory[] = [],
 ): Promise<AnalyzeResult> {
   const start = Date.now();
-  const userPrompt = USER_QUERY + formatUserContext(userContext);
+  // Order: schema/instructions → focus hint → inspector context.
+  // Focus hint helps the model skip irrelevant rule blocks and emit
+  // tighter, faster output; inspector context comes last because it's
+  // authoritative ground truth and should be the most-recent thing in
+  // the prompt the model reads.
+  const userPrompt =
+    USER_QUERY + formatFocusHint(focusCategories) + formatUserContext(userContext);
 
   // Resolve the per-tier model id for each provider.
   const anthropicModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
@@ -212,7 +226,10 @@ async function callAnthropic(
       signal: controller.signal,
       body: JSON.stringify({
         model,
-        max_tokens: 4096,
+        // Real outputs are 500-1500 tokens. Capping at 2048 instead of
+        // 4096 doesn't change speed for normal cases but caps the
+        // worst-case runaway response.
+        max_tokens: 2048,
         system: [
           {
             type: "text",
@@ -309,7 +326,7 @@ async function callOpenAI(
       signal: controller.signal,
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        max_tokens: 4096,
+        max_tokens: 2048,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -403,7 +420,7 @@ async function callGemini(
           },
         ],
         generation_config: {
-          max_output_tokens: 4096,
+          max_output_tokens: 2048,
           response_mime_type: "application/json",
           temperature: 0.2,
         },
@@ -854,4 +871,288 @@ function parseQuestions(raw: string): ContextQuestion[] {
     });
   }
   return out.slice(0, 6);
+}
+
+/* =====================================================================
+ * STAGE-1 DETECTION — fast triage classifier.
+ *
+ * Runs Haiku with a tiny (~500 tok) prompt to identify which
+ * compliance-relevant categories are visible in the photo. The result
+ * is used to prepend a focus hint to the STAGE-2 analysis prompt, so
+ * the model can skip rule blocks that don't apply to anything visible.
+ *
+ * Detection is intentionally CHEAP and PROMISCUOUS — false positives
+ * cost nothing because Stage 2 still has the full rulebook. False
+ * negatives are the only failure mode worth worrying about, so we err
+ * on the side of including categories.
+ * ===================================================================== */
+
+export type DetectResult = {
+  categories: DetectCategory[];
+  provider: Provider;
+  model: string;
+  durationMs: number;
+  usage: Usage;
+};
+
+export async function detectCategories(
+  imageBase64: string,
+  mimeType: string,
+): Promise<DetectResult> {
+  const start = Date.now();
+  const providers = providerChainFromEnv();
+  const errors: Array<{ provider: Provider; err: unknown }> = [];
+
+  for (const provider of providers) {
+    try {
+      if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+        return await callAnthropicDetect(imageBase64, mimeType, start);
+      }
+      if (provider === "google" && process.env.GOOGLE_API_KEY) {
+        return await callGeminiDetect(imageBase64, mimeType, start);
+      }
+      // OpenAI detection unimplemented — fall through.
+    } catch (err) {
+      console.warn(`[ai/detect] ${provider} failed, trying next:`, err);
+      errors.push({ provider, err });
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AnalyzeError(
+      "All providers failed for detection: " +
+        errors.map((e) => `${e.provider}: ${(e.err as Error)?.message ?? e.err}`).join("; "),
+      errors[errors.length - 1]!.provider,
+      errors[errors.length - 1]!.err,
+    );
+  }
+  throw new AnalyzeError(
+    "Detection requires ANTHROPIC_API_KEY or GOOGLE_API_KEY.",
+  );
+}
+
+async function callAnthropicDetect(
+  imageBase64: string,
+  mimeType: string,
+  start: number,
+): Promise<DetectResult> {
+  const model = HAIKU_MODEL;
+  const controller = new AbortController();
+  // Detection has a tighter budget — it MUST be fast or there's no point.
+  // 20s is generous; typical Haiku response is 1-2s.
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        max_tokens: 256,
+        system: DETECT_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mimeType, data: imageBase64 },
+              },
+              { type: "text", text: DETECT_USER_PROMPT },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new AnalyzeError(
+        `Anthropic detect ${res.status}: ${body.slice(0, 300)}`,
+        "anthropic",
+      );
+    }
+
+    const data = (await res.json()) as {
+      content: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+
+    const text = data.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
+    const inputTokens = data.usage?.input_tokens ?? 0;
+    const outputTokens = data.usage?.output_tokens ?? 0;
+    const costUsd = computeCost(model, inputTokens, outputTokens);
+
+    return {
+      categories: parseDetectCategories(text),
+      provider: "anthropic",
+      model,
+      durationMs: Date.now() - start,
+      usage: { inputTokens, outputTokens, costUsd },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callGeminiDetect(
+  imageBase64: string,
+  mimeType: string,
+  start: number,
+): Promise<DetectResult> {
+  const model = GEMINI_FLASH_MODEL;
+  const apiKey = process.env.GOOGLE_API_KEY ?? "";
+  if (!apiKey) throw new AnalyzeError("GOOGLE_API_KEY missing", "google");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model,
+    )}:generateContent`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: DETECT_SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inline_data: { mime_type: mimeType, data: imageBase64 } },
+              { text: DETECT_USER_PROMPT },
+            ],
+          },
+        ],
+        generation_config: {
+          max_output_tokens: 256,
+          response_mime_type: "application/json",
+          temperature: 0.1,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new AnalyzeError(
+        `Google detect ${res.status}: ${body.slice(0, 300)}`,
+        "google",
+      );
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+
+    const text = (data.candidates ?? [])
+      .flatMap((c) => c.content?.parts ?? [])
+      .map((p) => p.text ?? "")
+      .join("");
+    const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
+    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const costUsd = computeCost(model, inputTokens, outputTokens);
+
+    return {
+      categories: parseDetectCategories(text),
+      provider: "google",
+      model,
+      durationMs: Date.now() - start,
+      usage: { inputTokens, outputTokens, costUsd },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseDetectCategories(raw: string): DetectCategory[] {
+  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    const m = trimmed.match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    try {
+      parsed = JSON.parse(m[0]);
+    } catch {
+      return [];
+    }
+  }
+  const obj = parsed as { categories?: unknown };
+  const arr = Array.isArray(obj.categories) ? obj.categories : [];
+  const allowed = new Set<string>(DETECT_CATEGORIES);
+  const out: DetectCategory[] = [];
+  for (const item of arr) {
+    const s = String(item ?? "").trim();
+    if (allowed.has(s)) out.push(s as DetectCategory);
+  }
+  // De-dupe while preserving order.
+  return Array.from(new Set(out));
+}
+
+/* =====================================================================
+ * TWO-STAGE ANALYSIS — detection → focused analyzeImage.
+ *
+ * Runs detectCategories first, then passes the resulting category list
+ * as `focusCategories` to analyzeImage. The user-facing prompt then
+ * includes a "DETECTED EQUIPMENT" block that tells the model which rule
+ * blocks to focus on.
+ *
+ * Result shape mirrors analyzeImage with an extra `detection` field for
+ * telemetry / debugging. Cost adds the detect call (~$0.0005 with Haiku).
+ *
+ * Failure fallback: if detection itself fails for any reason, we skip
+ * the focus hint and run analyzeImage with the full default prompt, so
+ * a flaky detect call never blocks the main analysis.
+ * ===================================================================== */
+
+export type TwoStageResult = AnalyzeResult & {
+  detection: {
+    categories: DetectCategory[];
+    durationMs: number;
+    usage: Usage;
+  } | null;
+};
+
+export async function analyzeImageTwoStage(
+  imageBase64: string,
+  mimeType: string,
+  tier: Tier = "default",
+  userContext: ContextAnswer[] = [],
+): Promise<TwoStageResult> {
+  const start = Date.now();
+  let detection: TwoStageResult["detection"] = null;
+  let focus: DetectCategory[] = [];
+
+  try {
+    const det = await detectCategories(imageBase64, mimeType);
+    detection = {
+      categories: det.categories,
+      durationMs: det.durationMs,
+      usage: det.usage,
+    };
+    focus = det.categories;
+  } catch (err) {
+    // Detection failed — log and continue without a focus hint.
+    // The Stage-2 analyzer falls back to the original full-prompt
+    // behavior, so no findings are lost.
+    console.warn(
+      "[analyzeImageTwoStage] detection failed, falling back to full prompt:",
+      err,
+    );
+  }
+
+  const result = await analyzeImage(imageBase64, mimeType, tier, userContext, focus);
+  // Override durationMs with the wall-clock time across BOTH stages so
+  // callers see honest total latency, not just stage 2.
+  return { ...result, durationMs: Date.now() - start, detection };
 }
