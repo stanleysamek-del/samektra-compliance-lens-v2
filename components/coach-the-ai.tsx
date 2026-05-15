@@ -376,7 +376,7 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
           </span>
           <button
             type="button"
-            onClick={send}
+            onClick={() => send()}
             disabled={isSending || draft.trim().length === 0}
             className="cl-btn-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
