@@ -201,6 +201,72 @@ export async function unresolveNotVisible(formData: FormData) {
   revalidatePath(`/inspections/${inspectionId}`);
 }
 
+/**
+ * Mark an item as "skipped" — Chip flagged it but the inspector has decided
+ * it doesn't need re-photographing (false positive, out of scope, won't fix).
+ * Skipped items leave the active to-do list but remain in the DB for audit.
+ *
+ * Mutually exclusive with resolved: skipping an item also clears any
+ * resolution metadata, so we don't end up in a (resolved=true, skipped=true)
+ * state.
+ */
+export async function skipNotVisible(formData: FormData) {
+  const itemId = String(formData.get("item_id") ?? "");
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  const reason = stringOrNull(formData.get("reason")) ?? null;
+  if (!itemId || !inspectionId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("not_visible")
+    .update({
+      skipped: true,
+      skipped_reason: reason,
+      skipped_at: new Date().toISOString(),
+      // Clear any prior resolution so the state machine stays clean.
+      resolved: false,
+      resolved_at: null,
+      resolved_note: null,
+      resolved_photo_id: null,
+    })
+    .eq("id", itemId);
+  if (error) console.error("[skipNotVisible]", error);
+
+  revalidatePath(`/inspections/${inspectionId}`);
+}
+
+/**
+ * Reopen a skipped item — sends it back to the active to-do list.
+ */
+export async function unskipNotVisible(formData: FormData) {
+  const itemId = String(formData.get("item_id") ?? "");
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  if (!itemId || !inspectionId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("not_visible")
+    .update({
+      skipped: false,
+      skipped_reason: null,
+      skipped_at: null,
+    })
+    .eq("id", itemId);
+  if (error) console.error("[unskipNotVisible]", error);
+
+  revalidatePath(`/inspections/${inspectionId}`);
+}
+
 /* =====================================================================
  * Photo organization — inspection_sections CRUD + photo assignment.
  * ===================================================================== */

@@ -127,7 +127,7 @@ export default async function InspectionDetailPage({
       const { data: nvRows } = await supabase
         .from("not_visible")
         .select(
-          "id, item, reason, resolved, resolved_note, resolved_at, photo_id, created_at",
+          "id, item, reason, resolved, resolved_note, resolved_at, skipped, skipped_reason, skipped_at, photo_id, created_at",
         )
         .in("photo_id", photoIds)
         .order("resolved", { ascending: true })
@@ -144,6 +144,9 @@ export default async function InspectionDetailPage({
           resolved: Boolean(r.resolved),
           resolved_note: (r.resolved_note as string | null) ?? null,
           resolved_at: (r.resolved_at as string | null) ?? null,
+          skipped: Boolean(r.skipped),
+          skipped_reason: (r.skipped_reason as string | null) ?? null,
+          skipped_at: (r.skipped_at as string | null) ?? null,
           photo_id: r.photo_id as string,
           photo_location: meta.photo_location,
           section_name: meta.section_id
@@ -152,8 +155,10 @@ export default async function InspectionDetailPage({
         };
       });
     }
+    // Open = not yet resolved AND not skipped. This is what drives the
+    // header "needs re-photograph" pill.
     const unresolvedNotVisibleCount = notVisibleItems.filter(
-      (n) => !n.resolved,
+      (n) => !n.resolved && !n.skipped,
     ).length;
 
     stage = "findings-counts";

@@ -63,7 +63,7 @@ export default async function PhotoDetailPage({
 
   const { data: notVisible } = await supabase
     .from("not_visible")
-    .select("id, item, reason, resolved, resolved_note")
+    .select("id, item, reason, resolved, resolved_note, skipped, skipped_reason")
     .eq("photo_id", photoId);
 
   const { data: signed } = await supabase.storage
@@ -269,37 +269,48 @@ export default async function PhotoDetailPage({
               </Link>
             </h3>
             <ul className="mt-3 flex flex-col gap-2 text-sm">
-              {notVisible.map((n) => (
-                <li
-                  key={n.id}
-                  className={n.resolved ? "opacity-60" : ""}
-                >
-                  <p
-                    className={[
-                      "font-medium",
-                      n.resolved
-                        ? "text-[var(--fg-muted)] line-through"
-                        : "text-[var(--fg)]",
-                    ].join(" ")}
+              {notVisible.map((n) => {
+                const isClosed = n.resolved || n.skipped;
+                return (
+                  <li
+                    key={n.id}
+                    className={isClosed ? "opacity-60" : ""}
                   >
-                    {n.resolved ? "✓ " : ""}
-                    {n.item}
-                  </p>
-                  {n.reason ? (
-                    <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                      Reason: {n.reason}
-                    </p>
-                  ) : null}
-                  {n.resolved && n.resolved_note ? (
                     <p
-                      className="mt-1 rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-2 py-1 text-[11px]"
-                      style={{ color: "var(--fg-muted)" }}
+                      className={[
+                        "font-medium",
+                        isClosed
+                          ? "text-[var(--fg-muted)] line-through"
+                          : "text-[var(--fg)]",
+                      ].join(" ")}
                     >
-                      Resolved: {n.resolved_note}
+                      {n.resolved ? "✓ " : n.skipped ? "↷ " : ""}
+                      {n.item}
                     </p>
-                  ) : null}
-                </li>
-              ))}
+                    {n.reason ? (
+                      <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                        Reason: {n.reason}
+                      </p>
+                    ) : null}
+                    {n.resolved && n.resolved_note ? (
+                      <p
+                        className="mt-1 rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-2 py-1 text-[11px]"
+                        style={{ color: "var(--fg-muted)" }}
+                      >
+                        Resolved: {n.resolved_note}
+                      </p>
+                    ) : null}
+                    {n.skipped && n.skipped_reason ? (
+                      <p
+                        className="mt-1 rounded border-l-2 border-[var(--fg-subtle)] bg-white/[0.02] px-2 py-1 text-[11px]"
+                        style={{ color: "var(--fg-muted)" }}
+                      >
+                        Skipped: {n.skipped_reason}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         ) : null}
