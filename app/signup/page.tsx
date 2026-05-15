@@ -20,7 +20,8 @@ export default async function SignupPage({
 
   return (
     <AuthLayout
-      title="Create your account"
+      eyebrow="§ 09 — Sign up"
+      title="Create your account."
       subtitle="Free during the v2 staging build."
     >
       <SignupForm

@@ -21,7 +21,8 @@ export default async function LoginPage({
 
   return (
     <AuthLayout
-      title="Welcome back"
+      eyebrow="§ 09 — Sign in"
+      title="Welcome back."
       subtitle="Sign in to continue your inspection."
     >
       <LoginForm

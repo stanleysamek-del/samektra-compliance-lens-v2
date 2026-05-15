@@ -11,7 +11,8 @@ export default async function ForgotPasswordPage({
 
   return (
     <AuthLayout
-      title="Reset your password"
+      eyebrow="§ 09 — Recovery"
+      title="Reset your password."
       subtitle="Enter your email and we'll send you a reset link."
     >
       <ForgotPasswordForm

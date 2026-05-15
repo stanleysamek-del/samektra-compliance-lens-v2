@@ -1,8 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useFormStatus } from "react-dom";
-import { PasswordInput } from "@/components/password-input";
+import {
+  EditorialTextInput,
+  EditorialPasswordInput,
+  EditorialPrimaryButton,
+  EditorialErrorBanner,
+  EditorialSuccessBanner,
+  EditorialFootnote,
+  EditorialSerifLink,
+} from "@/components/auth-editorial-inputs";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
@@ -14,62 +21,42 @@ type Props = {
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="cl-btn-primary w-full"
-    >
-      {pending ? "Creating account…" : "Create account"}
-    </button>
+    <EditorialPrimaryButton pending={pending}>
+      {pending ? "Creating account" : "Create account"}
+    </EditorialPrimaryButton>
   );
 }
 
 export function SignupForm({ action, next, error, sent }: Props) {
   if (sent) {
     return (
-      <div
-        className="rounded-lg border px-4 py-4 text-sm"
-        style={{
-          borderColor: "rgba(34,197,94,0.3)",
-          background: "rgba(34,197,94,0.08)",
-          color: "#bbf7d0",
-        }}
-      >
-        <p className="font-medium text-[var(--fg)]">Check your email.</p>
-        <p className="mt-1.5 text-[var(--fg-muted)]">
-          We&apos;ve sent a confirmation link to verify your address. Click it
-          to finish creating your account, then come back and sign in.
-        </p>
-        <Link
-          href="/login"
-          className="mt-3 inline-block font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
-        >
-          Back to sign in →
-        </Link>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <EditorialSuccessBanner message="Check your email. We've sent a confirmation link to verify your address. Click it to finish creating your account, then come back and sign in." />
+        <EditorialFootnote>
+          Back to{" "}
+          <EditorialSerifLink href="/login">Sign in</EditorialSerifLink>
+        </EditorialFootnote>
       </div>
     );
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form
+      action={action}
+      style={{ display: "flex", flexDirection: "column", gap: 18 }}
+    >
       <input type="hidden" name="next" value={next ?? ""} />
 
-      <div className="flex flex-col">
-        <label htmlFor="email" className="cl-label">
-          Email address
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="you@example.com"
-          className="cl-input"
-        />
-      </div>
+      <EditorialTextInput
+        label="Email address"
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        placeholder="you@example.com"
+      />
 
-      <PasswordInput
+      <EditorialPasswordInput
         label="Password"
         name="password"
         autoComplete="new-password"
@@ -78,7 +65,7 @@ export function SignupForm({ action, next, error, sent }: Props) {
         hint="Minimum 8 characters."
       />
 
-      <PasswordInput
+      <EditorialPasswordInput
         label="Confirm password"
         name="confirm_password"
         autoComplete="new-password"
@@ -86,30 +73,18 @@ export function SignupForm({ action, next, error, sent }: Props) {
         minLength={8}
       />
 
-      {error ? (
-        <p
-          className="rounded-lg border px-3 py-2 text-sm"
-          style={{
-            borderColor: "rgba(239,68,68,0.3)",
-            background: "rgba(239,68,68,0.08)",
-            color: "#fca5a5",
-          }}
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <EditorialErrorBanner message={error} /> : null}
 
       <SubmitButton />
 
-      <p className="text-center text-sm text-[var(--fg-muted)]">
+      <EditorialFootnote>
         Already have an account?{" "}
-        <Link
+        <EditorialSerifLink
           href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
-          className="font-medium text-[var(--fg)] transition hover:text-[var(--primary)]"
         >
           Sign in
-        </Link>
-      </p>
+        </EditorialSerifLink>
+      </EditorialFootnote>
     </form>
   );
 }
