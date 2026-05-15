@@ -33,6 +33,7 @@ const NAV: NavItem[] = [
     accent: true,
   },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
+  { href: "/team", label: "Team", icon: <TeamIcon /> },
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
 ];
 
@@ -282,6 +283,20 @@ function ProfileIcon() {
       <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
       <path
         d="M4.5 20a7.5 7.5 0 0 1 15 0"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function TeamIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="17" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M3 19a6 6 0 0 1 12 0M14 19a4 4 0 0 1 7 0"
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"
