@@ -14,6 +14,7 @@ import {
   NotVisibleChecklist,
   type NotVisibleItem,
 } from "@/components/not-visible-checklist";
+import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -160,6 +161,15 @@ export default async function InspectionDetailPage({
     const unresolvedNotVisibleCount = notVisibleItems.filter(
       (n) => !n.resolved && !n.skipped,
     ).length;
+
+    // Group items by their source photo so each photo card can render its
+    // own collapsible dropdown of items inline.
+    const notVisibleByPhoto = new Map<string, NotVisibleItem[]>();
+    for (const it of notVisibleItems) {
+      const arr = notVisibleByPhoto.get(it.photo_id) ?? [];
+      arr.push(it);
+      notVisibleByPhoto.set(it.photo_id, arr);
+    }
 
     stage = "findings-counts";
     // photoIds was hoisted to the photos stage above.
@@ -402,6 +412,18 @@ export default async function InspectionDetailPage({
                                     inspectionId={inspection.id}
                                     photoId={p.id}
                                     findings={counts.items}
+                                  />
+
+                                  {/* Per-photo "Not visible" dropdown —
+                                      collapsed by default, click to expand.
+                                      Items have Resolve / Skip / Reopen
+                                      controls inline. Hidden when the photo
+                                      had no not-visible items at all. */}
+                                  <PhotoCardNotVisible
+                                    inspectionId={inspection.id}
+                                    photoId={p.id}
+                                    items={notVisibleByPhoto.get(p.id) ?? []}
+                                    readOnly={isCompleted}
                                   />
                                 </Card>
                               </li>
