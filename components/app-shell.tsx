@@ -6,6 +6,7 @@ import type { PropsWithChildren, ReactNode } from "react";
 import { SamektraMark } from "@/components/logo";
 import { ScrollToTop } from "@/components/scroll-to-top";
 import { OrgSwitcher } from "@/components/org-switcher";
+import { HelpDrawer } from "@/components/help-drawer";
 
 /* =====================================================================
  * AppShell
@@ -65,9 +66,17 @@ export function AppShell({ user, children }: Props) {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Compact org switcher — self-fetches via /api/team/context,
-                renders nothing for users with no teams. */}
+            {/* Persistent primary action — same intent as SC's "+ Create"
+                button. Always one click away from anywhere in the app. */}
+            <Link
+              href="/inspections/new"
+              className="hidden items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-[#0a0d12] transition hover:bg-[var(--accent-hover)] sm:inline-flex"
+              title="Start a new inspection"
+            >
+              <PlusGlyph /> New
+            </Link>
             <OrgSwitcher />
+            <HelpDrawer />
             <div className="hidden flex-col items-end leading-tight sm:flex">
               <span className="text-sm font-medium text-[var(--fg)]">
                 {user.fullName}
@@ -291,6 +300,22 @@ function ProfileIcon() {
         strokeWidth="1.6"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+function PlusGlyph() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }

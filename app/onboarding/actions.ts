@@ -36,5 +36,7 @@ export async function saveProfile(formData: FormData) {
     redirect(`/onboarding?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect("/inspections");
+  // Land first-time users on /welcome so they immediately understand what
+  // they can do, instead of being dropped onto an empty Home screen.
+  redirect("/welcome");
 }

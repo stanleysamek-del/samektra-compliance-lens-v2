@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
+import { TeamTipBanner } from "@/components/team-tip-banner";
 
 /**
  * Runs a Supabase query with a hard timeout. If Supabase is slow we return
@@ -179,6 +180,10 @@ export default async function InspectionsPage() {
           </div>
         </header>
 
+        {/* One-time, dismissible nudge — only shows for users not in a
+            team yet. Renders nothing once dismissed (localStorage). */}
+        <TeamTipBanner />
+
         {/* ============== Summary tiles ============== */}
         <Card padded={false}>
           <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
@@ -297,14 +302,34 @@ export default async function InspectionsPage() {
               </ul>
             </Card>
           ) : (
-            <Card padded={false}>
-              <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-                <p className="text-sm font-medium text-[var(--fg-muted)]">
-                  No inspections yet
-                </p>
-                <p className="text-xs text-[var(--fg-subtle)]">
-                  Start your first inspection from the button above.
-                </p>
+            /* Rich empty state — first-time users see this. Explains the
+               loop and offers the primary action right here, not buried
+               in the header. */
+            <Card variant="tinted-teal" padded={false}>
+              <div className="flex flex-col gap-5 px-6 py-8 sm:px-8 sm:py-10">
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <h3 className="text-lg font-semibold tracking-tight text-[var(--fg)]">
+                    Ready for your first inspection?
+                  </h3>
+                  <p className="max-w-md text-sm text-[var(--fg-muted)]">
+                    The loop is fast: snap photos of equipment, Chip flags
+                    violations with code citations, you confirm or correct,
+                    then export the signed report.
+                  </p>
+                </div>
+                <ol className="mx-auto grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+                  <EmptyStep n={1} title="Create" body="Set up a facility and a date — under a minute." />
+                  <EmptyStep n={2} title="Snap & coach" body="Add photos. Chip writes findings. You correct anything wrong." />
+                  <EmptyStep n={3} title="Export" body="PDF, CAP, LSRA, ILSM — all generated for you." />
+                </ol>
+                <div className="flex flex-wrap justify-center gap-2 pt-2">
+                  <Link href="/inspections/new" className="cl-btn-accent">
+                    + Start your first inspection
+                  </Link>
+                  <Link href="/welcome" className="cl-btn-outline">
+                    Open the guide
+                  </Link>
+                </div>
               </div>
             </Card>
           )}
@@ -332,6 +357,39 @@ export default async function InspectionsPage() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+function EmptyStep({
+  n,
+  title,
+  body,
+}: {
+  n: number;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <span
+          aria-hidden
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+          style={{
+            background: "rgba(20,184,166,0.18)",
+            color: "#5eead4",
+          }}
+        >
+          {n}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[var(--fg)]">{title}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-[var(--fg-muted)]">
+            {body}
+          </p>
+        </div>
+      </div>
+    </li>
   );
 }
 
