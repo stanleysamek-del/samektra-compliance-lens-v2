@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { sendInviteEmail } from "@/lib/email/send-invite";
 
 const CURRENT_ORG_COOKIE = "cl_org";
 
@@ -95,17 +96,49 @@ export async function inviteMember(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase.from("organization_invites").insert({
-    organization_id: orgId,
-    email: emailRaw,
-    role,
-  });
+  // Insert the invite row AND select back the generated token so we can
+  // build the link + send the email in one pass. The token is created
+  // server-side via the gen_random_uuid default in the schema.
+  const { data: insertedInvite, error } = await supabase
+    .from("organization_invites")
+    .insert({
+      organization_id: orgId,
+      email: emailRaw,
+      role,
+    })
+    .select("token")
+    .maybeSingle();
   if (error) {
     console.error("[inviteMember]", error);
     redirect(`/team?error=${encodeURIComponent(error.message)}`);
   }
 
+  // Best-effort email delivery via Resend. Failures don't block the invite
+  // itself — the admin can still copy the link manually from the pending-
+  // invites list. RESEND_API_KEY missing → no-op + console log.
+  if (insertedInvite?.token) {
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
+    const { data: inviterProfile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    await sendInviteEmail({
+      toEmail: emailRaw,
+      inviterName: inviterProfile?.full_name ?? user.email ?? "A teammate",
+      orgName: orgRow?.name ?? "Compliance Lens",
+      role: role as "admin" | "member",
+      token: insertedInvite.token as string,
+    });
+  }
+
   revalidatePath("/team");
+  revalidatePath("/team/members");
 }
 
 export async function revokeInvite(formData: FormData) {

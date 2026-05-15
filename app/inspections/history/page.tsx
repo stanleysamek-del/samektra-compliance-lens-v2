@@ -89,6 +89,29 @@ export default async function HistoryPage({
   const { data: inspections } = await query.limit(200);
   const inspectionList = inspections ?? [];
 
+  // Per-inspection findings counts (total + High) so each row shows a
+  // findings badge like SC's "Score" column. One IN query, in-memory aggregation.
+  const findingsCountByInspection = new Map<
+    string,
+    { total: number; high: number }
+  >();
+  if (inspectionList.length > 0) {
+    const ids = inspectionList.map((i) => i.id);
+    const { data: fRows } = await supabase
+      .from("findings")
+      .select("inspection_id, severity")
+      .in("inspection_id", ids);
+    for (const f of fRows ?? []) {
+      const bucket = findingsCountByInspection.get(f.inspection_id as string) ?? {
+        total: 0,
+        high: 0,
+      };
+      bucket.total += 1;
+      if (f.severity === "High") bucket.high += 1;
+      findingsCountByInspection.set(f.inspection_id as string, bucket);
+    }
+  }
+
   // Fetch folders for the current org so we can render the manager
   // + group inspections by folder. Personal workspace has no folders.
   let folders: Array<{ id: string; name: string; sort_order: number }> = [];
@@ -347,6 +370,7 @@ export default async function HistoryPage({
                             key={row.id}
                             row={row}
                             folderOptions={folderOptions}
+                            counts={findingsCountByInspection.get(row.id)}
                           />
                         ))}
                       </ul>
@@ -363,6 +387,7 @@ export default async function HistoryPage({
                   key={row.id}
                   row={row}
                   folderOptions={[]}
+                  counts={findingsCountByInspection.get(row.id)}
                 />
               ))}
             </ul>
@@ -393,6 +418,7 @@ export default async function HistoryPage({
 function InspectionListRow({
   row,
   folderOptions,
+  counts,
 }: {
   row: {
     id: string;
@@ -404,6 +430,7 @@ function InspectionListRow({
     folder_id: string | null;
   };
   folderOptions: Array<{ id: string; name: string }>;
+  counts?: { total: number; high: number };
 }) {
   return (
     <li>
@@ -425,6 +452,21 @@ function InspectionListRow({
                 .join(" · ") || "—"}
             </p>
           </Link>
+          {/* Findings count badge — same spot SC puts the score column. */}
+          {counts && counts.total > 0 ? (
+            <span
+              className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+              title={`${counts.total} findings · ${counts.high} High`}
+              style={
+                counts.high > 0
+                  ? { background: "rgba(239,68,68,0.12)", color: "#fca5a5" }
+                  : { background: "rgba(20,184,166,0.10)", color: "#5eead4" }
+              }
+            >
+              {counts.high > 0 ? `${counts.high}H · ` : ""}
+              {counts.total}
+            </span>
+          ) : null}
           {folderOptions.length > 0 ? (
             <InspectionMoveMenu
               inspectionId={row.id}

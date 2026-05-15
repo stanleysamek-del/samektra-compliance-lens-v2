@@ -590,14 +590,13 @@ export default async function InspectionDetailPage({
                   >
                     Download LSRA
                   </a>
-                  <button
-                    type="button"
-                    disabled
-                    title="Interim Life Safety Measures — coming next iteration"
-                    className="cl-btn-outline w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  <a
+                    href={`/api/inspections/${inspection.id}/export/ilsm`}
+                    title="Interim Life Safety Measures (.xlsx) — TJC LS.01.02.01 / CMS K-291"
+                    className="cl-btn-outline w-full text-center"
                   >
-                    ILSM (soon)
-                  </button>
+                    Download ILSM
+                  </a>
                 </div>
               </div>
             ) : (

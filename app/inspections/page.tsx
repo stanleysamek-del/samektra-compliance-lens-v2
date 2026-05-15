@@ -135,7 +135,7 @@ export default async function InspectionsPage() {
         email: user.email ?? null,
       }}
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         {anySectionDegraded ? (
           <div
             role="status"
@@ -154,45 +154,73 @@ export default async function InspectionsPage() {
           </div>
         ) : null}
 
-        {/* Hero card */}
-        <Card variant="tinted-orange">
-          <div className="flex items-start gap-4">
-            <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
-              style={{ background: "rgba(249,115,22,0.14)", border: "1px solid rgba(249,115,22,0.28)" }}
-            >
-              <span className="text-lg font-bold text-[var(--accent)]">ST</span>
-            </div>
-            <div className="flex flex-1 flex-col">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--fg-muted)]">
-                <span className="cl-status-dot online" />
-                Online · Your Compliance Ally
-              </div>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-[var(--fg)] sm:text-2xl">
-                Welcome back, {displayProfile.full_name.split(" ")[0] || displayProfile.full_name}.
-              </h1>
-              {displayProfile.organization ? (
-                <p className="mt-0.5 text-sm text-[var(--fg-muted)]">{displayProfile.organization}</p>
-              ) : null}
-            </div>
+        {/* ============== Header ============== */}
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+              Home
+            </p>
+            <h1 className="mt-0.5 truncate text-2xl font-semibold tracking-tight text-[var(--fg)] sm:text-3xl">
+              {`Welcome back, ${displayProfile.full_name.split(" ")[0] || displayProfile.full_name}.`}
+            </h1>
+            {displayProfile.organization ? (
+              <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                {displayProfile.organization}
+              </p>
+            ) : null}
           </div>
-
-          <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <Link href="/inspections/new" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
-              + New Inspection
-            </Link>
-            <Link href="/inspections/history" className="cl-btn-outline w-full sm:w-auto sm:flex-1">
+          <div className="flex items-center gap-2">
+            <Link href="/inspections/history" className="cl-btn-outline">
               History
             </Link>
+            <Link href="/inspections/new" className="cl-btn-accent">
+              + New inspection
+            </Link>
+          </div>
+        </header>
+
+        {/* ============== Summary tiles ============== */}
+        <Card padded={false}>
+          <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
+            <HomeStat
+              label="Weekly scans"
+              value={String(weeklyScans ?? 0)}
+              sub="last 7 days"
+            />
+            <HomeStat
+              label="High-severity"
+              value={String(weeklyHighFindings ?? 0)}
+              sub={
+                (weeklyHighFindings ?? 0) === 0 ? (
+                  <span style={{ color: "#86efac" }}>None this week</span>
+                ) : (
+                  "open issues"
+                )
+              }
+              tone="warning"
+            />
+            <HomeStat
+              label="Compliance"
+              value={
+                (weeklyScans ?? 0) === 0
+                  ? "—"
+                  : `${Math.max(0, 100 - Math.min(100, (weeklyHighFindings ?? 0) * 5))}%`
+              }
+              sub="this week"
+              tone="primary"
+            />
           </div>
         </Card>
 
-        {/* Resume in-progress */}
+        {/* ============== In progress (horizontal scroll) ============== */}
         {inProgress && inProgress.length > 0 ? (
           <section className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between px-1">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-                In progress · {inProgress.length}
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+                In progress
+                <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
+                  · {inProgress.length}
+                </span>
               </h2>
               <Link
                 href="/inspections/history?status=in_progress"
@@ -201,78 +229,34 @@ export default async function InspectionsPage() {
                 See all
               </Link>
             </div>
-            <ul className="flex flex-col gap-2">
+            <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
               {inProgress.map((row) => (
-                <li key={row.id}>
-                  <Card padded={false}>
-                    <div className="flex items-center gap-3 px-5 py-4">
-                      <Link
-                        href={`/inspections/${row.id}`}
-                        className="flex min-w-0 flex-1 flex-col gap-1"
-                      >
-                        <p className="truncate font-medium text-[var(--fg)]">
-                          {row.facility_name}
-                        </p>
-                        <p className="truncate text-xs text-[var(--fg-muted)]">
-                          {row.location ?? "—"} ·{" "}
-                          {row.date_of_inspection ?? "no date"}
-                        </p>
-                      </Link>
-                      <Link
-                        href={`/inspections/${row.id}`}
-                        className="hidden shrink-0 text-xs font-medium text-[var(--accent)] sm:inline"
-                      >
-                        Continue →
-                      </Link>
-                      <InspectionRowMenu
-                        inspectionId={row.id}
-                        facilityName={row.facility_name}
-                      />
-                    </div>
-                  </Card>
-                </li>
+                <Link
+                  key={row.id}
+                  href={`/inspections/${row.id}`}
+                  className="block w-64 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-3 transition hover:border-[var(--primary)]"
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
+                    Inspection
+                  </p>
+                  <p className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug text-[var(--fg)]">
+                    {row.facility_name}
+                  </p>
+                  {row.location ? (
+                    <p className="mt-0.5 truncate text-[11px] text-[var(--fg-muted)]">
+                      {row.location}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-[11px] text-[var(--fg-subtle)]">
+                    {row.date_of_inspection ?? "No date"}
+                  </p>
+                </Link>
               ))}
-            </ul>
+            </div>
           </section>
         ) : null}
 
-        {/* Stats grid */}
-        <section className="grid grid-cols-3 gap-3">
-          <StatCard label="Weekly Scans" value={String(weeklyScans ?? 0)} />
-          <StatCard
-            label="Risks Found"
-            value={String(weeklyHighFindings ?? 0)}
-            tone="warning"
-          />
-          <StatCard
-            label="Compliance"
-            value={(weeklyScans ?? 0) === 0 ? "—" : `${Math.max(0, 100 - Math.min(100, (weeklyHighFindings ?? 0) * 5))}%`}
-            tone="primary"
-          />
-        </section>
-
-        {/* Daily Code Insight */}
-        <Card variant="tinted-orange">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
-              💡 Daily Code Insight
-            </div>
-            <span className="text-[11px] text-[var(--fg-subtle)]">
-              {insight.day} of {insight.totalDays}
-            </span>
-          </div>
-          <h3 className="mt-3 text-base font-semibold tracking-tight text-[var(--fg)]">
-            {insight.title}
-          </h3>
-          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-            ({insight.year}) {insight.subtitle}
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-[var(--fg-muted)]">
-            {insight.body}
-          </p>
-        </Card>
-
-        {/* Recent activity */}
+        {/* ============== Recent activity (ledger) ============== */}
         <section className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between px-1">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
@@ -286,19 +270,19 @@ export default async function InspectionsPage() {
             </Link>
           </div>
           {recent && recent.length > 0 ? (
-            <ul className="flex flex-col gap-2">
-              {recent.map((row) => (
-                <li key={row.id}>
-                  <Card padded={false}>
-                    <div className="flex items-center gap-3 px-5 py-4">
+            <Card padded={false}>
+              <ul className="divide-y divide-[var(--border)]">
+                {recent.map((row) => (
+                  <li key={row.id}>
+                    <div className="flex items-center gap-3 px-4 py-2.5">
                       <Link
                         href={`/inspections/${row.id}`}
-                        className="flex min-w-0 flex-1 flex-col gap-1"
+                        className="flex min-w-0 flex-1 flex-col gap-0.5 transition hover:opacity-90"
                       >
                         <p className="truncate text-sm font-medium text-[var(--fg)]">
                           {row.facility_name}
                         </p>
-                        <p className="truncate text-xs text-[var(--fg-muted)]">
+                        <p className="truncate text-[11px] text-[var(--fg-subtle)]">
                           {row.location ?? "—"}
                         </p>
                       </Link>
@@ -308,10 +292,10 @@ export default async function InspectionsPage() {
                         facilityName={row.facility_name}
                       />
                     </div>
-                  </Card>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           ) : (
             <Card padded={false}>
               <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
@@ -325,30 +309,61 @@ export default async function InspectionsPage() {
             </Card>
           )}
         </section>
+
+        {/* ============== Daily code insight (smaller, less prominent) ============== */}
+        <Card>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
+              💡 Daily code insight
+            </div>
+            <span className="text-[10px] text-[var(--fg-subtle)]">
+              {insight.day} / {insight.totalDays}
+            </span>
+          </div>
+          <h3 className="mt-2 text-sm font-semibold tracking-tight text-[var(--fg)]">
+            {insight.title}
+            <span className="ml-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+              ({insight.year}) {insight.subtitle}
+            </span>
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--fg-muted)]">
+            {insight.body}
+          </p>
+        </Card>
       </div>
     </AppShell>
   );
 }
 
-function StatCard({
+function HomeStat({
   label,
   value,
+  sub,
   tone = "default",
 }: {
   label: string;
   value: string;
+  sub: React.ReactNode;
   tone?: "default" | "primary" | "warning";
 }) {
   const accent =
-    tone === "primary" ? "var(--primary)" : tone === "warning" ? "var(--warning)" : "var(--fg)";
+    tone === "primary"
+      ? "var(--primary)"
+      : tone === "warning"
+        ? "var(--warning)"
+        : "var(--fg)";
   return (
-    <div className="cl-card flex flex-col gap-1 p-4">
-      <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fg-subtle)]">
+    <div className="flex flex-col gap-1 px-5 py-4">
+      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
         {label}
       </span>
-      <span className="text-2xl font-semibold tracking-tight" style={{ color: accent }}>
+      <span
+        className="text-2xl font-semibold leading-none tracking-tight"
+        style={{ color: accent }}
+      >
         {value}
       </span>
+      <div className="text-[11px] text-[var(--fg-muted)]">{sub}</div>
     </div>
   );
 }
