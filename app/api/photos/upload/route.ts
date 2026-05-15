@@ -114,22 +114,35 @@ export async function POST(request: NextRequest) {
     // can ship it dark, A/B test on the live site, and roll back without
     // a code change if the focused output regresses any findings.
     const useTwoStage = process.env.AI_TWO_STAGE === "1";
-    const result = useTwoStage
-      ? await analyzeImageTwoStage(base64, file.type)
-      : await analyzeImage(base64, file.type);
+
+    // Detection usage (only present in two-stage mode) is captured via
+    // a separate variable so the type stays narrow. analyzeImageTwoStage
+    // returns AnalyzeResult & { detection: ... }, but a conditional
+    // expression unions the two return types and TS doesn't narrow the
+    // `detection` access cleanly, so split it explicitly.
+    let detectInputTokens = 0;
+    let detectOutputTokens = 0;
+    let detectCostUsd = 0;
+
+    let result;
+    if (useTwoStage) {
+      const ts = await analyzeImageTwoStage(base64, file.type);
+      if (ts.detection) {
+        detectInputTokens = ts.detection.usage.inputTokens;
+        detectOutputTokens = ts.detection.usage.outputTokens;
+        detectCostUsd = ts.detection.usage.costUsd;
+      }
+      result = ts;
+    } else {
+      result = await analyzeImage(base64, file.type);
+    }
+
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
-    // Two-stage cost = detect call + analyze call. The detect usage is
-    // surfaced in result.detection; analyzeImage already returns the
-    // analyze-call usage. Sum them so the ai_calls ledger reflects true cost.
-    const detectionUsage =
-      useTwoStage && "detection" in result && result.detection
-        ? result.detection.usage
-        : null;
-    aiInputTokens = result.usage.inputTokens + (detectionUsage?.inputTokens ?? 0);
-    aiOutputTokens = result.usage.outputTokens + (detectionUsage?.outputTokens ?? 0);
-    aiCostUsd = result.usage.costUsd + (detectionUsage?.costUsd ?? 0);
+    aiInputTokens = result.usage.inputTokens + detectInputTokens;
+    aiOutputTokens = result.usage.outputTokens + detectOutputTokens;
+    aiCostUsd = result.usage.costUsd + detectCostUsd;
     aiDurationMs = result.durationMs;
   } catch (err) {
     console.error("[upload] analyze", err);

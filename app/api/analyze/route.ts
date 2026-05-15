@@ -82,19 +82,31 @@ export async function POST(request: NextRequest) {
   // ---- Run analysis ----
   try {
     const useTwoStage = isTwoStageEnabled(request);
-    const result = useTwoStage
-      ? await analyzeImageTwoStage(base64, file.type)
-      : await analyzeImage(base64, file.type);
+    // Split branches so TS keeps the narrower return type — the union of
+    // analyzeImage's and analyzeImageTwoStage's returns confuses the
+    // narrowing on the `detection` field access.
+    if (useTwoStage) {
+      const result = await analyzeImageTwoStage(base64, file.type);
+      return NextResponse.json({
+        ok: true,
+        provider: result.provider,
+        model: result.model,
+        durationMs: result.durationMs,
+        analysis: result.analysis,
+        // Surface what was detected so the UI / admin dashboards can show
+        // the focus list and we can collect telemetry on which equipment
+        // types most often appear.
+        detection: result.detection,
+      });
+    }
+    const result = await analyzeImage(base64, file.type);
     return NextResponse.json({
       ok: true,
       provider: result.provider,
       model: result.model,
       durationMs: result.durationMs,
       analysis: result.analysis,
-      // When two-stage ran, surface what was detected so the UI / admin
-      // dashboards can show the focus list and we can collect telemetry
-      // on which equipment types most often appear.
-      detection: useTwoStage && "detection" in result ? result.detection : null,
+      detection: null,
     });
   } catch (err) {
     const message =
