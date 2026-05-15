@@ -211,13 +211,33 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
       `}</style>
 
       <div>
-        <p className="font-medium text-[var(--fg)]">Coach the AI</p>
+        <p className="flex items-center gap-1.5 font-medium text-[var(--fg)]">
+          Coach{" "}
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            style={{
+              background: "rgba(20,184,166,0.12)",
+              color: "#5eead4",
+              border: "1px solid rgba(20,184,166,0.3)",
+            }}
+            title="Compliance · Hazard · Identification · Partner"
+          >
+            <ChipIcon /> Chip
+          </span>
+        </p>
         <p className="mt-1 text-xs text-[var(--fg-muted)]">
-          Tell the AI what to look at — &ldquo;Check the deflector clearance
+          Tell Chip what to look at — &ldquo;Check the deflector clearance
           on the upper-right sprinkler,&rdquo; or &ldquo;The wall is 1-hour
           rated, re-examine the penetrations.&rdquo; Each hint triggers a deep
           re-analysis with the whole conversation as context. Your edited and
-          custom findings are preserved.
+          custom findings are preserved. Chip stands for{" "}
+          <span
+            className="font-medium text-[var(--fg-muted)]"
+            title="The four things Chip exists to help with"
+          >
+            Compliance · Hazard · Identification · Partner
+          </span>
+          .
         </p>
       </div>
 
@@ -444,8 +464,8 @@ function AIBubble({
 
   return (
     <div className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
-      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-        Compliance Lens AI
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+        <ChipIcon /> Chip
       </span>
       <div
         className="rounded-2xl rounded-tl-md border px-3 py-2 text-sm"
@@ -635,8 +655,8 @@ function TypingIndicator() {
 
   return (
     <div className="mr-auto flex max-w-[85%] flex-col items-start gap-1">
-      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-        Compliance Lens AI
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+        <ChipIcon /> Chip
       </span>
       <div
         className="flex items-center gap-2.5 rounded-2xl rounded-tl-md border px-3 py-2 text-xs"
@@ -676,6 +696,31 @@ function TypingIndicator() {
       </div>
 
     </div>
+  );
+}
+
+/**
+ * Tiny "microchip" glyph for the Chip badge — silicon with pins, plays
+ * on the C.H.I.P. (Compliance · Hazard · Identification · Partner) name
+ * and quietly nods at the fact that Chip is an AI under the hood.
+ */
+function ChipIcon() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3" />
+    </svg>
   );
 }
 

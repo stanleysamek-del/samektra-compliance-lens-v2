@@ -8,6 +8,8 @@ import {
   PhotoCardFindings,
   type CompactFinding,
 } from "@/components/photo-card-findings";
+import { SectionsManager, type SectionRow } from "@/components/sections-manager";
+import { PhotoMoveMenu } from "@/components/photo-move-menu";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -61,10 +63,39 @@ export default async function InspectionDetailPage({
     stage = "photos";
     const { data: photos } = await supabase
       .from("photos")
-      .select("id, storage_path, photo_location, analyzed_at, created_at")
+      .select(
+        "id, storage_path, photo_location, analyzed_at, created_at, section_id, sort_order",
+      )
       .eq("inspection_id", id)
+      .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
     const photosList = photos ?? [];
+
+    stage = "sections";
+    const { data: sectionsData } = await supabase
+      .from("inspection_sections")
+      .select("id, name, sort_order")
+      .eq("inspection_id", id)
+      .order("sort_order", { ascending: true });
+    const sectionsList = sectionsData ?? [];
+
+    // Count photos per section so the manager UI can display "· N photos".
+    const photoCountBySection = new Map<string, number>();
+    for (const p of photosList) {
+      if (p.section_id) {
+        photoCountBySection.set(
+          p.section_id,
+          (photoCountBySection.get(p.section_id) ?? 0) + 1,
+        );
+      }
+    }
+    const sectionsWithCounts: SectionRow[] = sectionsList.map((s) => ({
+      id: s.id,
+      name: s.name,
+      sort_order: s.sort_order,
+      photoCount: photoCountBySection.get(s.id) ?? 0,
+    }));
+    const sectionOptions = sectionsList.map((s) => ({ id: s.id, name: s.name }));
 
     stage = "findings-counts";
     const photoIds = photosList.map((p) => p.id);
@@ -156,7 +187,16 @@ export default async function InspectionDetailPage({
 
           {!isCompleted ? <PhotoUploader inspectionId={inspection.id} /> : null}
 
-          <section className="flex flex-col gap-3">
+          {/* Photo-organization manager — sits above the photo grid so it's
+              easy to add sections before/while shooting. Empty state nudges
+              the inspector to organize as photos come in. */}
+          <SectionsManager
+            inspectionId={inspection.id}
+            sections={sectionsWithCounts}
+            readOnly={isCompleted}
+          />
+
+          <section className="flex flex-col gap-4">
             <h2 className="px-1 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
               Photos {photosList.length ? `· ${photosList.length}` : ""}
             </h2>
@@ -170,68 +210,130 @@ export default async function InspectionDetailPage({
                 </p>
               </Card>
             ) : (
-              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {photosList.map((p) => {
-                  const counts =
-                    findingsByPhoto[p.id] ?? { total: 0, high: 0, items: [] };
-                  const url = photoUrls[p.id];
-                  return (
-                    <li key={p.id}>
-                      <Card padded={false} className="overflow-hidden">
-                        {/* Thumbnail + summary header is the click target. The
-                            findings list below has its own per-row controls
-                            (kebab menu) so it must NOT be wrapped in the same
-                            Link. */}
-                        <Link
-                          href={`/inspections/${inspection.id}/photos/${p.id}`}
-                          className="block"
-                        >
-                          <div
-                            className="relative aspect-video w-full"
-                            style={{ background: "#0a0d12" }}
-                          >
-                            {url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={url} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-xs text-[var(--fg-subtle)]">
-                                loading…
-                              </div>
-                            )}
-                          </div>
-                          <div className="px-4 pb-3 pt-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium text-[var(--fg)]">
-                                {counts.total} finding{counts.total === 1 ? "" : "s"}
-                              </span>
-                              {counts.high > 0 ? (
-                                <span
-                                  className="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                  style={{ background: "rgba(239,68,68,0.12)", color: "#fca5a5" }}
-                                >
-                                  {counts.high} high
-                                </span>
-                              ) : null}
-                            </div>
-                            {p.photo_location ? (
-                              <p className="mt-1 truncate text-xs text-[var(--fg-muted)]">
-                                {p.photo_location}
-                              </p>
-                            ) : null}
-                          </div>
-                        </Link>
+              <>
+                {/* Group photos by section. Unassigned first (always shown if
+                    there are any orphans). Then each section in sort_order.
+                    Empty sections render a small placeholder so users see
+                    that the section exists and can drop photos into it. */}
+                {(() => {
+                  const grouped: Array<{
+                    key: string;
+                    label: string | null;
+                    photos: typeof photosList;
+                  }> = [];
 
-                        {/* Concise per-finding list with edit/delete menu. */}
-                        <PhotoCardFindings
-                          inspectionId={inspection.id}
-                          photoId={p.id}
-                          findings={counts.items}
-                        />
-                      </Card>
-                    </li>
-                  );
-                })}
-              </ul>
+                  const unassigned = photosList.filter((p) => !p.section_id);
+                  if (unassigned.length > 0 || sectionsList.length === 0) {
+                    grouped.push({
+                      key: "unassigned",
+                      label: sectionsList.length > 0 ? "Unassigned" : null,
+                      photos: unassigned,
+                    });
+                  }
+
+                  for (const s of sectionsList) {
+                    grouped.push({
+                      key: s.id,
+                      label: s.name,
+                      photos: photosList.filter((p) => p.section_id === s.id),
+                    });
+                  }
+
+                  return grouped.map((g) => (
+                    <div key={g.key} className="flex flex-col gap-2.5">
+                      {g.label ? (
+                        <h3 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                          {g.label}
+                          <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
+                            · {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
+                          </span>
+                        </h3>
+                      ) : null}
+                      {g.photos.length === 0 ? (
+                        <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-center text-[11px] text-[var(--fg-subtle)]">
+                          No photos in this section yet — use the &ldquo;Move
+                          to&rdquo; menu on any photo card below to add it
+                          here.
+                        </p>
+                      ) : (
+                        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {g.photos.map((p) => {
+                            const counts =
+                              findingsByPhoto[p.id] ?? { total: 0, high: 0, items: [] };
+                            const url = photoUrls[p.id];
+                            return (
+                              <li key={p.id}>
+                                <Card padded={false} className="overflow-hidden">
+                                  <Link
+                                    href={`/inspections/${inspection.id}/photos/${p.id}`}
+                                    className="block"
+                                  >
+                                    <div
+                                      className="relative aspect-video w-full"
+                                      style={{ background: "#0a0d12" }}
+                                    >
+                                      {url ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={url} alt="" className="h-full w-full object-cover" />
+                                      ) : (
+                                        <div className="flex h-full items-center justify-center text-xs text-[var(--fg-subtle)]">
+                                          loading…
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="px-4 pb-2 pt-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium text-[var(--fg)]">
+                                          {counts.total} finding{counts.total === 1 ? "" : "s"}
+                                        </span>
+                                        {counts.high > 0 ? (
+                                          <span
+                                            className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                            style={{ background: "rgba(239,68,68,0.12)", color: "#fca5a5" }}
+                                          >
+                                            {counts.high} high
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      {p.photo_location ? (
+                                        <p className="mt-1 truncate text-xs text-[var(--fg-muted)]">
+                                          {p.photo_location}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </Link>
+
+                                  {/* Move-to-section menu lives BETWEEN the
+                                      link and the findings list so the click
+                                      target on the card stays intact while
+                                      this control is independently
+                                      interactive. Hidden when finalized. */}
+                                  {!isCompleted ? (
+                                    <div className="flex justify-end px-4 pb-2">
+                                      <PhotoMoveMenu
+                                        photoId={p.id}
+                                        inspectionId={inspection.id}
+                                        currentSectionId={p.section_id ?? null}
+                                        sections={sectionOptions}
+                                      />
+                                    </div>
+                                  ) : null}
+
+                                  <PhotoCardFindings
+                                    inspectionId={inspection.id}
+                                    photoId={p.id}
+                                    findings={counts.items}
+                                  />
+                                </Card>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  ));
+                })()}
+              </>
             )}
           </section>
 
