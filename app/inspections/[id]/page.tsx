@@ -74,6 +74,9 @@ export default async function InspectionDetailPage({
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
     const photosList = photos ?? [];
+    // Hoisted so sections / not-visible / findings stages can all reference
+    // it without re-declaring (which would also be a temporal-dead-zone error).
+    const photoIds = photosList.map((p) => p.id);
 
     stage = "sections";
     const { data: sectionsData } = await supabase
@@ -154,7 +157,7 @@ export default async function InspectionDetailPage({
     ).length;
 
     stage = "findings-counts";
-    const photoIds = photosList.map((p) => p.id);
+    // photoIds was hoisted to the photos stage above.
     let findingsByPhoto: Record<
       string,
       { total: number; high: number; items: CompactFinding[] }
