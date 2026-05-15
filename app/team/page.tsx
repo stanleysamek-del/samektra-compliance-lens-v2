@@ -129,6 +129,9 @@ export default async function TeamDashboardPage({
 
   /* =================================================================
    * Branch 3 — Team dashboard (the real new content)
+   * Layout borrows structural cues from Safety Culture's Home page:
+   * summary tiles, horizontal-scroll card rows for In Progress + Groups,
+   * sectioned content with clear headers and counts, generous whitespace.
    * ================================================================= */
   const org = currentOrg!;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -152,15 +155,35 @@ export default async function TeamDashboardPage({
       "id, facility_name, location, status, folder_id, created_by, created_at, updated_at",
     )
     .eq("organization_id", org.id)
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(500);
 
   const insps = inspections ?? [];
+
+  // --- Folders (Groups) for the horizontal row. Joined with per-folder
+  // inspection counts so we can render a meaningful card per group.
+  const { data: foldersData } = await supabase
+    .from("inspection_folders")
+    .select("id, name, sort_order")
+    .eq("organization_id", org.id)
+    .order("sort_order", { ascending: true })
+    .limit(20);
+  const folders = foldersData ?? [];
+  const folderInspectionCount = new Map<string, number>();
+  for (const i of insps) {
+    if (i.folder_id) {
+      folderInspectionCount.set(
+        i.folder_id,
+        (folderInspectionCount.get(i.folder_id) ?? 0) + 1,
+      );
+    }
+  }
   const totalInspections = insps.length;
   const inspectionsThisMonth = insps.filter(
     (i) => i.created_at >= thirtyDaysAgo,
   ).length;
-  const inProgressCount = insps.filter((i) => i.status === "in_progress").length;
+  const inProgressList = insps.filter((i) => i.status === "in_progress");
+  const inProgressCount = inProgressList.length;
   const completedCount = insps.filter((i) => i.status === "completed").length;
   const completionPct =
     totalInspections === 0
@@ -255,119 +278,327 @@ export default async function TeamDashboardPage({
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
+  // Build the interleaved activity feed once; we cap it at 12 items.
+  type ActivityItem = {
+    kind: "inspection" | "finding";
+    at: string;
+    href: string;
+    primary: string;
+    secondary: string;
+    actor: string;
+    severity?: Severity;
+  };
+  const activityItems: ActivityItem[] = [];
+  for (const i of insps.slice(0, 8)) {
+    activityItems.push({
+      kind: "inspection",
+      at: i.updated_at ?? i.created_at,
+      href: `/inspections/${i.id}`,
+      primary: i.facility_name,
+      secondary: i.location || "New inspection",
+      actor: memberNameById.get(i.created_by) ?? "—",
+    });
+  }
+  for (const f of recentFindings) {
+    activityItems.push({
+      kind: "finding",
+      at: f.created_at,
+      href: f.photo_id
+        ? `/inspections/${f.inspection_id}/photos/${f.photo_id}#finding-${f.id}`
+        : `/inspections/${f.inspection_id}`,
+      primary: f.title,
+      secondary: "Finding",
+      actor: memberNameById.get(f.created_by) ?? "—",
+      severity: f.severity,
+    });
+  }
+  activityItems.sort((a, b) => (a.at < b.at ? 1 : -1));
+  const activityCapped = activityItems.slice(0, 12);
+
   return (
     <AppShell user={userShell}>
-      <div className="flex flex-col gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
-              Team
-            </p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--fg)]">
-              {org.name}
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-              {memberCount} {memberCount === 1 ? "member" : "members"} ·{" "}
-              you are an{" "}
-              <span className="font-medium text-[var(--fg)]">{org.role}</span>
-            </p>
+      <div className="flex flex-col gap-6">
+        {/* ============== Header: org name + tabs + primary action ============== */}
+        <header className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+                Team workspace
+              </p>
+              <h1 className="mt-0.5 truncate text-2xl font-semibold tracking-tight text-[var(--fg)] sm:text-3xl">
+                {org.name}
+              </h1>
+              <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                {memberCount} {memberCount === 1 ? "member" : "members"} · you
+                are an{" "}
+                <span className="font-medium text-[var(--fg)]">{org.role}</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {allOrgs.length > 1 ? (
+                <form action={switchCurrentOrg}>
+                  <select
+                    name="organization_id"
+                    defaultValue={org.id}
+                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                    className="cl-input py-1.5 text-xs"
+                  >
+                    {allOrgs.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                    <option value="personal">Personal workspace</option>
+                  </select>
+                </form>
+              ) : null}
+              <Link href="/inspections/new" className="cl-btn-accent shrink-0">
+                + New inspection
+              </Link>
+            </div>
           </div>
 
-          {allOrgs.length > 1 ? (
-            <form action={switchCurrentOrg}>
-              <select
-                name="organization_id"
-                defaultValue={org.id}
-                onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                className="cl-input py-1 text-xs"
+          <TeamNav />
+        </header>
+
+        {/* ============== Summary tiles ============== */}
+        <section aria-labelledby="summary-h">
+          <h2
+            id="summary-h"
+            className="sr-only"
+          >
+            Summary
+          </h2>
+          <Card padded={false}>
+            <div className="grid grid-cols-2 divide-y divide-[var(--border)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+              <SummaryTile
+                icon={<InspectionsIcon />}
+                label="Inspections"
+                value={String(totalInspections)}
+                sub={
+                  inspectionsThisMonth > 0
+                    ? `${inspectionsThisMonth} this month`
+                    : "None this month"
+                }
+                href="/inspections/history"
+              />
+              <SummaryTile
+                icon={<FindingsIconSm />}
+                label="Findings"
+                value={String(findingsTotal)}
+                sub={
+                  findingsTotal === 0 ? (
+                    "None yet"
+                  ) : (
+                    <span className="flex flex-wrap gap-1">
+                      {findingsHigh > 0 ? <SevPill tone="high">{findingsHigh}H</SevPill> : null}
+                      {findingsMedium > 0 ? <SevPill tone="medium">{findingsMedium}M</SevPill> : null}
+                      {findingsLow > 0 ? <SevPill tone="low">{findingsLow}L</SevPill> : null}
+                    </span>
+                  )
+                }
+                href="/findings"
+              />
+              <SummaryTile
+                icon={<PunchListIcon />}
+                label="Punch-list"
+                value={String(openPunchListCount)}
+                sub={
+                  openPunchListCount === 0 ? (
+                    <span style={{ color: "#86efac" }}>All clear ✓</span>
+                  ) : (
+                    "items open"
+                  )
+                }
+              />
+              <SummaryTile
+                icon={<CompletionIcon />}
+                label="Completion"
+                value={completionPct === null ? "—" : `${completionPct}%`}
+                sub={`${completedCount} / ${totalInspections} done`}
+              />
+            </div>
+          </Card>
+        </section>
+
+        {/* ============== In Progress (horizontal scroll) ============== */}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+              In progress
+              <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
+                · {inProgressCount}
+              </span>
+            </h2>
+            {inProgressCount > 0 ? (
+              <Link
+                href="/inspections/history?status=in_progress"
+                className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
               >
-                {allOrgs.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-                <option value="personal">Personal workspace</option>
-              </select>
-              <noscript>
-                <button type="submit" className="cl-btn-outline">
-                  Switch
-                </button>
-              </noscript>
-            </form>
-          ) : null}
-        </div>
-
-        <TeamNav />
-
-        {/* Stat tiles */}
-        <Card padded={false}>
-          <div className="grid grid-cols-2 divide-y divide-[var(--border)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-            <StatTile
-              label="Inspections"
-              value={String(totalInspections)}
-              sub={
-                inspectionsThisMonth > 0
-                  ? `${inspectionsThisMonth} this month`
-                  : "None yet this month"
-              }
-            />
-            <StatTile
-              label="Findings"
-              value={String(findingsTotal)}
-              sub={
-                findingsTotal === 0 ? (
-                  <span className="text-[var(--fg-subtle)]">None yet</span>
-                ) : (
-                  <span className="flex flex-wrap gap-1">
-                    {findingsHigh > 0 ? (
-                      <SevPill tone="high">{findingsHigh}H</SevPill>
-                    ) : null}
-                    {findingsMedium > 0 ? (
-                      <SevPill tone="medium">{findingsMedium}M</SevPill>
-                    ) : null}
-                    {findingsLow > 0 ? (
-                      <SevPill tone="low">{findingsLow}L</SevPill>
-                    ) : null}
-                  </span>
-                )
-              }
-            />
-            <StatTile
-              label="Open punch-list"
-              value={String(openPunchListCount)}
-              sub={
-                openPunchListCount === 0 ? (
-                  <span style={{ color: "#86efac" }}>All clear ✓</span>
-                ) : (
-                  "items need re-photograph"
-                )
-              }
-            />
-            <StatTile
-              label="Completion"
-              value={completionPct === null ? "—" : `${completionPct}%`}
-              sub={`${completedCount} of ${totalInspections} done`}
-            />
+                See all
+              </Link>
+            ) : null}
           </div>
-        </Card>
+          {inProgressCount === 0 ? (
+            <Card>
+              <p className="text-center text-sm text-[var(--fg-muted)]">
+                Nothing in progress.
+              </p>
+              <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
+                Start a new inspection from the button above.
+              </p>
+            </Card>
+          ) : (
+            <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
+              {inProgressList.slice(0, 12).map((i) => (
+                <Link
+                  key={i.id}
+                  href={`/inspections/${i.id}`}
+                  className="block w-64 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-3 transition hover:border-[var(--primary)]"
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--accent)]">
+                    Inspection
+                  </p>
+                  <p className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug text-[var(--fg)]">
+                    {i.facility_name}
+                  </p>
+                  {i.location ? (
+                    <p className="mt-0.5 truncate text-[11px] text-[var(--fg-muted)]">
+                      {i.location}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-[11px] text-[var(--fg-subtle)]">
+                    Updated {fmtRelative(i.updated_at ?? i.created_at)}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
 
-        {/* Quick links */}
-        <div className="flex flex-wrap gap-2">
-          <Link href="/inspections/new" className="cl-btn-accent">
-            New inspection
-          </Link>
-          <Link href="/inspections/history" className="cl-btn-outline">
-            All inspections
-          </Link>
-          <Link href="/findings" className="cl-btn-outline">
-            Findings dashboard
-          </Link>
-          <Link href="/team/members" className="cl-btn-outline">
-            Manage members
-          </Link>
-        </div>
+        {/* ============== Groups (horizontal scroll) ============== */}
+        {folders.length > 0 ? (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between px-1">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+                Groups
+                <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
+                  · {folders.length}
+                </span>
+              </h2>
+              <Link
+                href="/inspections/history"
+                className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
+              >
+                Manage
+              </Link>
+            </div>
+            <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
+              {folders.map((f) => {
+                const count = folderInspectionCount.get(f.id) ?? 0;
+                return (
+                  <Link
+                    key={f.id}
+                    href="/inspections/history"
+                    className="flex w-52 shrink-0 flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-3 transition hover:border-[var(--primary)]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg"
+                        style={{
+                          background: "rgba(20,184,166,0.12)",
+                          color: "#5eead4",
+                        }}
+                      >
+                        <FolderIconSm />
+                      </span>
+                      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+                        Group
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--fg)]">
+                      {f.name}
+                    </p>
+                    <p className="text-[11px] text-[var(--fg-subtle)]">
+                      {count} {count === 1 ? "inspection" : "inspections"}
+                    </p>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-        {/* Top facilities + top contributors side by side on desktop */}
+        {/* ============== Recent activity ============== */}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+              Recent activity
+            </h2>
+            <Link
+              href="/findings"
+              className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
+            >
+              All findings
+            </Link>
+          </div>
+          {activityCapped.length === 0 ? (
+            <Card>
+              <p className="text-center text-sm text-[var(--fg-muted)]">
+                No activity in this team yet.
+              </p>
+            </Card>
+          ) : (
+            <Card padded={false}>
+              <ul className="divide-y divide-[var(--border)]">
+                {activityCapped.map((it, idx) => (
+                  <li key={`${it.kind}-${idx}`}>
+                    <Link
+                      href={it.href}
+                      className="block px-4 py-2.5 transition hover:bg-white/[0.02]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                          style={
+                            it.kind === "inspection"
+                              ? { background: "rgba(20,184,166,0.12)", color: "#5eead4" }
+                              : { background: "rgba(168,85,247,0.12)", color: "#d8b4fe" }
+                          }
+                        >
+                          {it.kind === "inspection" ? <InspectionsIcon /> : <FindingsIconSm />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="truncate text-sm font-medium text-[var(--fg)]">
+                              {it.primary}
+                            </p>
+                            {it.severity ? (
+                              <SevPill tone={severityTone(it.severity)}>
+                                {it.severity}
+                              </SevPill>
+                            ) : null}
+                          </div>
+                          <p className="truncate text-[11px] text-[var(--fg-subtle)]">
+                            {it.secondary} · by {it.actor}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-[var(--fg-subtle)]">
+                          {fmtRelative(it.at)}
+                        </span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </section>
+
+        {/* ============== Top facilities + contributors (compact, side by side) ============== */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card>
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
@@ -420,7 +651,7 @@ export default async function TeamDashboardPage({
                       ) : null}
                     </span>
                     <span className="shrink-0 font-mono text-[var(--fg-muted)]">
-                      {c.count} insp.
+                      {c.count}
                     </span>
                   </li>
                 ))}
@@ -428,119 +659,105 @@ export default async function TeamDashboardPage({
             )}
           </Card>
         </div>
-
-        {/* Recent activity — interleaves recent inspections + recent findings */}
-        <section className="flex flex-col gap-2">
-          <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-            Recent activity
-          </h2>
-          {insps.length === 0 && recentFindings.length === 0 ? (
-            <Card>
-              <p className="text-center text-sm text-[var(--fg-muted)]">
-                No activity in this team yet. Start an inspection to populate
-                the feed.
-              </p>
-            </Card>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {/* We interleave the 5 most-recent inspections + 10 findings,
-                  then sort by timestamp desc and cap at 15 items. */}
-              {(() => {
-                const items: Array<{
-                  kind: "inspection" | "finding";
-                  at: string;
-                  href: string;
-                  primary: string;
-                  secondary: string;
-                  actor: string;
-                  severity?: Severity;
-                }> = [];
-                for (const i of insps.slice(0, 8)) {
-                  items.push({
-                    kind: "inspection",
-                    at: i.created_at,
-                    href: `/inspections/${i.id}`,
-                    primary: i.facility_name,
-                    secondary: i.location || "New inspection started",
-                    actor: memberNameById.get(i.created_by) ?? "—",
-                  });
-                }
-                for (const f of recentFindings) {
-                  items.push({
-                    kind: "finding",
-                    at: f.created_at,
-                    href: f.photo_id
-                      ? `/inspections/${f.inspection_id}/photos/${f.photo_id}#finding-${f.id}`
-                      : `/inspections/${f.inspection_id}`,
-                    primary: f.title,
-                    secondary: "Finding",
-                    actor: memberNameById.get(f.created_by) ?? "—",
-                    severity: f.severity,
-                  });
-                }
-                items.sort((a, b) => (a.at < b.at ? 1 : -1));
-                return items.slice(0, 15).map((it, idx) => (
-                  <li key={`${it.kind}-${idx}`}>
-                    <Link
-                      href={it.href}
-                      className="block rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 transition hover:border-[var(--primary)]"
-                    >
-                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span
-                          className="rounded-full px-2 py-0.5 font-medium"
-                          style={
-                            it.kind === "inspection"
-                              ? { background: "rgba(20,184,166,0.12)", color: "#5eead4" }
-                              : { background: "rgba(168,85,247,0.12)", color: "#d8b4fe" }
-                          }
-                        >
-                          {it.kind === "inspection" ? "Inspection" : "Finding"}
-                        </span>
-                        {it.severity ? <SevPill tone={severityTone(it.severity)}>{it.severity}</SevPill> : null}
-                        <span className="text-[var(--fg-subtle)]">
-                          by {it.actor}
-                        </span>
-                        <span className="ml-auto text-[var(--fg-subtle)]">
-                          {fmtRelative(it.at)}
-                        </span>
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-[var(--fg)]">
-                        {it.primary}
-                      </p>
-                      <p className="truncate text-[11px] text-[var(--fg-muted)]">
-                        {it.secondary}
-                      </p>
-                    </Link>
-                  </li>
-                ));
-              })()}
-            </ul>
-          )}
-        </section>
       </div>
     </AppShell>
   );
 }
 
-function StatTile({
+/* ============================================================
+ * Subcomponents
+ * ============================================================ */
+
+function SummaryTile({
+  icon,
   label,
   value,
   sub,
+  href,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
   sub: React.ReactNode;
+  href?: string;
 }) {
-  return (
-    <div className="flex flex-col gap-1 px-5 py-4">
-      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-        {label}
+  const inner = (
+    <div className="flex items-start gap-3 px-5 py-4">
+      <span
+        aria-hidden
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        style={{
+          background: "rgba(20,184,166,0.10)",
+          color: "var(--primary)",
+        }}
+      >
+        {icon}
       </span>
-      <span className="text-2xl font-semibold leading-none tracking-tight text-[var(--fg)]">
-        {value}
-      </span>
-      <div className="text-[11px] text-[var(--fg-muted)]">{sub}</div>
+      <div className="min-w-0 flex-1">
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+          {label}
+        </span>
+        <div className="mt-1 text-2xl font-semibold leading-none tracking-tight text-[var(--fg)]">
+          {value}
+        </div>
+        <div className="mt-1.5 text-[11px] text-[var(--fg-muted)]">{sub}</div>
+      </div>
     </div>
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block transition hover:bg-white/[0.02]"
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return inner;
+}
+
+/* Icon helpers used in the summary tiles + activity feed.
+ * 16px stroke-only line icons that pick up the text color of the
+ * surrounding wrapper (so we can tint the wrapper per-tile). */
+function InspectionsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 9h8M8 13h8M8 17h5" />
+    </svg>
+  );
+}
+function FindingsIconSm() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3 3 8v6c0 5 4 8 9 9 5-1 9-4 9-9V8l-9-5Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+function PunchListIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 8h8M8 12h8M8 16h5" />
+    </svg>
+  );
+}
+function CompletionIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 3 3 5-6" />
+    </svg>
+  );
+}
+function FolderIconSm() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+    </svg>
   );
 }
 
