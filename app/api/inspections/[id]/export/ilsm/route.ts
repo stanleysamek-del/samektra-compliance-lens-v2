@@ -331,11 +331,15 @@ export async function GET(
 
   // ---------------------------------------------------------------
   const buffer = await wb.xlsx.writeBuffer();
-  const filename = buildExportFilename({
-    facilityName: inspection.facility_name ?? "Inspection",
-    suffix: "ILSM",
-    extension: "xlsx",
-  });
+  const filename = buildExportFilename(
+    {
+      facility_name: inspection.facility_name ?? null,
+      location: inspection.location ?? null,
+      date_of_inspection: inspection.date_of_inspection ?? null,
+    },
+    "ILSM",
+    "xlsx",
+  );
   return new NextResponse(buffer, {
     status: 200,
     headers: {

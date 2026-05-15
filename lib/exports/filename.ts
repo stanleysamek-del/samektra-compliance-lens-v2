@@ -8,7 +8,7 @@
  *   LSRA - NHD - 1st-Floor-SC-1,3-7-24.xlsx
  */
 
-export type ReportType = "EOC-LS-Inspection" | "CAP" | "LSRA";
+export type ReportType = "EOC-LS-Inspection" | "CAP" | "LSRA" | "ILSM";
 
 export type ExportInspection = {
   facility_name: string | null;
