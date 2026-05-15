@@ -1,7 +1,9 @@
+import { CountUp } from "@/components/landing/count-up";
+
 /**
  * §04 Workflow + §04½ Stats — paired section. Horizontal 4-step strip
- * showing Walk → Snap → Verify → Export, followed by a 4-up stat block.
- * Static (no count-up animation) to keep this server-renderable.
+ * showing Walk → Snap → Verify → Export, followed by a 4-up stat block
+ * with CountUp animations that trigger when scrolled into view.
  */
 const WORKFLOW = [
   ["Walk", "Officer walks the route; phone in hand."],
@@ -12,25 +14,29 @@ const WORKFLOW = [
 
 const STATS = [
   {
-    value: "8 hrs",
+    n: 8,
+    suffix: " hrs",
     label: "Typical walk-through, before",
     sub: "A 200,000 sf hospital, paper checklists, two officers.",
     gold: false,
   },
   {
-    value: "41 min",
+    n: 41,
+    suffix: " min",
     label: "Same walk-through, after",
     sub: "Photos in pocket, findings on the laptop by lunch.",
     gold: true,
   },
   {
-    value: "9",
+    n: 9,
+    suffix: "",
     label: "Codebases cross-referenced",
     sub: "Conflicts and overlaps reconciled per finding.",
     gold: false,
   },
   {
-    value: "0",
+    n: 0,
+    suffix: "",
     label: "Manual transcription steps",
     sub: "CAP / LSRA / ILSM populated from the source photo.",
     gold: false,
@@ -183,7 +189,7 @@ export function LandingWorkflow() {
                   color: s.gold ? "#b8902f" : "#0f1518",
                 }}
               >
-                {s.value}
+                <CountUp to={s.n} suffix={s.suffix} duration={1300 + i * 120} />
               </span>
               <span
                 style={{

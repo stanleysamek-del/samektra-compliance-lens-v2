@@ -2,9 +2,13 @@ import { redirect } from "next/navigation";
 import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { LandingHero } from "@/components/landing/landing-hero";
+import { LandingTicker } from "@/components/landing/landing-ticker";
 import { LandingCapabilities } from "@/components/landing/landing-capabilities";
 import { LandingWorkflow } from "@/components/landing/landing-workflow";
+import { LandingPlatforms } from "@/components/landing/landing-platforms";
+import { LandingDashboardPreview } from "@/components/landing/landing-dashboard-preview";
 import { LandingCodes } from "@/components/landing/landing-codes";
+import { LandingReportMock } from "@/components/landing/landing-report-mock";
 import { LandingPricing } from "@/components/landing/landing-pricing";
 import { LandingFAQ } from "@/components/landing/landing-faq";
 import { LandingFooter } from "@/components/landing/landing-footer";
@@ -49,12 +53,19 @@ export default async function Home() {
         }}
       />
 
+      {/* Section order matches screens.md `/` section spec. The interactive
+          4-stage demo widget (§ 02) is deliberately omitted — it's a heavy
+          stateful prototype; can be added as a focused follow-up. */}
       <div style={{ position: "relative", zIndex: 2 }}>
         <LandingNav />
         <LandingHero />
+        <LandingTicker />
         <LandingCapabilities />
         <LandingWorkflow />
+        <LandingPlatforms />
+        <LandingDashboardPreview />
         <LandingCodes />
+        <LandingReportMock />
         <LandingPricing />
         <LandingFAQ />
         <LandingFooter />
