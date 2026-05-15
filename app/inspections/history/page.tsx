@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
+import { FoldersManager, type FolderRow } from "@/components/folders-manager";
+import { InspectionMoveMenu } from "@/components/inspection-move-menu";
+import { getCurrentOrg } from "@/lib/org/current";
 
 type Sort = "newest" | "oldest" | "name" | "facility-date";
 type StatusFilter = "all" | "in_progress" | "completed" | "archived";
@@ -43,11 +46,14 @@ export default async function HistoryPage({
     .maybeSingle();
   if (!profile) redirect("/onboarding");
 
-  // Build the query
+  // Look up team context. When in an org, the page renders folders.
+  const currentOrg = await getCurrentOrg();
+
+  // Build the query — also pull folder_id so we can group inspections.
   let query = supabase
     .from("inspections")
     .select(
-      "id, facility_name, facility_address, location, status, date_of_inspection, created_at, updated_at",
+      "id, facility_name, facility_address, location, status, date_of_inspection, created_at, updated_at, folder_id, organization_id",
     );
 
   if (status !== "all") {
@@ -81,6 +87,36 @@ export default async function HistoryPage({
   }
 
   const { data: inspections } = await query.limit(200);
+  const inspectionList = inspections ?? [];
+
+  // Fetch folders for the current org so we can render the manager
+  // + group inspections by folder. Personal workspace has no folders.
+  let folders: Array<{ id: string; name: string; sort_order: number }> = [];
+  if (currentOrg) {
+    const { data: folderRows } = await supabase
+      .from("inspection_folders")
+      .select("id, name, sort_order")
+      .eq("organization_id", currentOrg.id)
+      .order("sort_order", { ascending: true });
+    folders = folderRows ?? [];
+  }
+
+  const inspectionCountByFolder = new Map<string, number>();
+  for (const row of inspectionList) {
+    if (row.folder_id) {
+      inspectionCountByFolder.set(
+        row.folder_id,
+        (inspectionCountByFolder.get(row.folder_id) ?? 0) + 1,
+      );
+    }
+  }
+  const foldersWithCounts: FolderRow[] = folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    sort_order: f.sort_order,
+    inspectionCount: inspectionCountByFolder.get(f.id) ?? 0,
+  }));
+  const folderOptions = folders.map((f) => ({ id: f.id, name: f.name }));
 
   // Counts for the filter pills (run once with no filter so the counts always
   // reflect the user's full library, not the current view).
@@ -251,38 +287,86 @@ export default async function HistoryPage({
           </p>
         ) : null}
 
+        {/* Folder manager — only shown when in a team workspace. Personal
+            workspaces don't have folders since they can't be shared. */}
+        {currentOrg ? (
+          <FoldersManager
+            organizationId={currentOrg.id}
+            folders={foldersWithCounts}
+          />
+        ) : null}
+
         {/* Results */}
-        {inspections && inspections.length > 0 ? (
-          <ul className="flex flex-col gap-2">
-            {inspections.map((row) => (
-              <li key={row.id}>
-                <Card padded={false}>
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <Link
-                      href={`/inspections/${row.id}`}
-                      className="flex min-w-0 flex-1 flex-col gap-1"
-                    >
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-medium text-[var(--fg)]">
-                          {row.facility_name}
-                        </p>
-                        <StatusPill status={row.status} />
-                      </div>
-                      <p className="truncate text-xs text-[var(--fg-muted)]">
-                        {[row.location, row.facility_address, row.date_of_inspection]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
+        {inspectionList.length > 0 ? (
+          currentOrg ? (
+            // Team workspace — group inspections by folder.
+            <>
+              {(() => {
+                const grouped: Array<{
+                  key: string;
+                  label: string | null;
+                  rows: typeof inspectionList;
+                }> = [];
+
+                const unfiled = inspectionList.filter((r) => !r.folder_id);
+                if (unfiled.length > 0 || folders.length === 0) {
+                  grouped.push({
+                    key: "unfiled",
+                    label: folders.length > 0 ? "Unfiled" : null,
+                    rows: unfiled,
+                  });
+                }
+                for (const f of folders) {
+                  grouped.push({
+                    key: f.id,
+                    label: f.name,
+                    rows: inspectionList.filter((r) => r.folder_id === f.id),
+                  });
+                }
+
+                return grouped.map((g) => (
+                  <div key={g.key} className="flex flex-col gap-2">
+                    {g.label ? (
+                      <h3 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                        {g.label}
+                        <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
+                          · {g.rows.length}{" "}
+                          {g.rows.length === 1 ? "inspection" : "inspections"}
+                        </span>
+                      </h3>
+                    ) : null}
+                    {g.rows.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-[11px] text-[var(--fg-subtle)]">
+                        No inspections in this group yet. Use the &ldquo;Move
+                        to&rdquo; menu on any inspection below.
                       </p>
-                    </Link>
-                    <InspectionRowMenu
-                      inspectionId={row.id}
-                      facilityName={row.facility_name}
-                    />
+                    ) : (
+                      <ul className="flex flex-col gap-2">
+                        {g.rows.map((row) => (
+                          <InspectionListRow
+                            key={row.id}
+                            row={row}
+                            folderOptions={folderOptions}
+                          />
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
+                ));
+              })()}
+            </>
+          ) : (
+            // Personal workspace — flat list, no folder grouping.
+            <ul className="flex flex-col gap-2">
+              {inspectionList.map((row) => (
+                <InspectionListRow
+                  key={row.id}
+                  row={row}
+                  folderOptions={[]}
+                />
+              ))}
+            </ul>
+          )
         ) : (
           <Card>
             <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
@@ -299,6 +383,62 @@ export default async function HistoryPage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * Single inspection card row. Extracted so we can render the same shape
+ * inside folder-group lists AND in the flat personal-workspace list.
+ */
+function InspectionListRow({
+  row,
+  folderOptions,
+}: {
+  row: {
+    id: string;
+    facility_name: string;
+    facility_address: string | null;
+    location: string | null;
+    status: string;
+    date_of_inspection: string | null;
+    folder_id: string | null;
+  };
+  folderOptions: Array<{ id: string; name: string }>;
+}) {
+  return (
+    <li>
+      <Card padded={false}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Link
+            href={`/inspections/${row.id}`}
+            className="flex min-w-0 flex-1 flex-col gap-1"
+          >
+            <div className="flex items-center gap-2">
+              <p className="truncate font-medium text-[var(--fg)]">
+                {row.facility_name}
+              </p>
+              <StatusPill status={row.status} />
+            </div>
+            <p className="truncate text-xs text-[var(--fg-muted)]">
+              {[row.location, row.facility_address, row.date_of_inspection]
+                .filter(Boolean)
+                .join(" · ") || "—"}
+            </p>
+          </Link>
+          {folderOptions.length > 0 ? (
+            <InspectionMoveMenu
+              inspectionId={row.id}
+              currentFolderId={row.folder_id ?? null}
+              folders={folderOptions}
+            />
+          ) : null}
+          <InspectionRowMenu
+            inspectionId={row.id}
+            facilityName={row.facility_name}
+          />
+        </div>
+      </Card>
+    </li>
   );
 }
 
