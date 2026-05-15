@@ -10,6 +10,10 @@ import {
 } from "@/components/photo-card-findings";
 import { SectionsManager, type SectionRow } from "@/components/sections-manager";
 import { PhotoMoveMenu } from "@/components/photo-move-menu";
+import {
+  NotVisibleChecklist,
+  type NotVisibleItem,
+} from "@/components/not-visible-checklist";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -97,6 +101,58 @@ export default async function InspectionDetailPage({
     }));
     const sectionOptions = sectionsList.map((s) => ({ id: s.id, name: s.name }));
 
+    // Aggregate "not visible" items across every photo in the inspection
+    // for the re-photograph punch-list. Joined with photo metadata so each
+    // row can render its source photo location + section context inline.
+    stage = "not-visible";
+    const photoMetaById = new Map<
+      string,
+      { photo_location: string | null; section_id: string | null }
+    >();
+    for (const p of photosList) {
+      photoMetaById.set(p.id, {
+        photo_location: p.photo_location ?? null,
+        section_id: p.section_id ?? null,
+      });
+    }
+    const sectionNameById = new Map<string, string>(
+      sectionsList.map((s) => [s.id, s.name]),
+    );
+
+    let notVisibleItems: NotVisibleItem[] = [];
+    if (photoIds.length > 0) {
+      const { data: nvRows } = await supabase
+        .from("not_visible")
+        .select(
+          "id, item, reason, resolved, resolved_note, resolved_at, photo_id, created_at",
+        )
+        .in("photo_id", photoIds)
+        .order("resolved", { ascending: true })
+        .order("created_at", { ascending: true });
+      notVisibleItems = (nvRows ?? []).map((r) => {
+        const meta = photoMetaById.get(r.photo_id as string) ?? {
+          photo_location: null,
+          section_id: null,
+        };
+        return {
+          id: r.id as string,
+          item: (r.item as string) ?? "",
+          reason: (r.reason as string | null) ?? null,
+          resolved: Boolean(r.resolved),
+          resolved_note: (r.resolved_note as string | null) ?? null,
+          resolved_at: (r.resolved_at as string | null) ?? null,
+          photo_id: r.photo_id as string,
+          photo_location: meta.photo_location,
+          section_name: meta.section_id
+            ? sectionNameById.get(meta.section_id) ?? null
+            : null,
+        };
+      });
+    }
+    const unresolvedNotVisibleCount = notVisibleItems.filter(
+      (n) => !n.resolved,
+    ).length;
+
     stage = "findings-counts";
     const photoIds = photosList.map((p) => p.id);
     let findingsByPhoto: Record<
@@ -177,6 +233,21 @@ export default async function InspectionDetailPage({
               <Field label="Manager" value={inspection.manager_assigned} />
               <Field label="Address" value={inspection.facility_address} />
             </dl>
+
+            {unresolvedNotVisibleCount > 0 ? (
+              <div
+                className="mt-3 inline-flex items-center gap-1.5 self-start rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                style={{
+                  borderColor: "rgba(245,158,11,0.35)",
+                  background: "rgba(245,158,11,0.08)",
+                  color: "#fde68a",
+                }}
+                title="Items Chip flagged as 'not visible' from current photos — bring this list on your next site visit"
+              >
+                ⚠ {unresolvedNotVisibleCount} item
+                {unresolvedNotVisibleCount === 1 ? "" : "s"} need re-photograph
+              </div>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
               <Link href={`/inspections/${inspection.id}/edit`} className="cl-btn-outline">
@@ -336,6 +407,20 @@ export default async function InspectionDetailPage({
               </>
             )}
           </section>
+
+          {/* Re-photograph punch-list — every "not visible" item Chip
+              flagged across all photos. Inspector resolves them as they
+              come back with better shots. Print button opens the browser
+              print dialog so the list can be taken to the site. The
+              #punch-list anchor is linked from each photo's per-photo
+              not-visible card. */}
+          <div id="punch-list" className="scroll-mt-20">
+            <NotVisibleChecklist
+              inspectionId={inspection.id}
+              items={notVisibleItems}
+              readOnly={isCompleted}
+            />
+          </div>
 
           <Card>
             {isCompleted ? (

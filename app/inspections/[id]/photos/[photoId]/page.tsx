@@ -63,7 +63,7 @@ export default async function PhotoDetailPage({
 
   const { data: notVisible } = await supabase
     .from("not_visible")
-    .select("id, item, reason, resolved")
+    .select("id, item, reason, resolved, resolved_note")
     .eq("photo_id", photoId);
 
   const { data: signed } = await supabase.storage
@@ -253,19 +253,49 @@ export default async function PhotoDetailPage({
           </Card>
         ) : null}
 
-        {/* Not visible */}
+        {/* Not visible — per-photo view. Resolution itself happens on the
+            inspection-level punch-list (NotVisibleChecklist); here we
+            just visually distinguish resolved vs unresolved so the photo
+            page stays in sync. */}
         {notVisible && notVisible.length > 0 ? (
           <Card>
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--warning)]">
-              Not visible — re-photograph
+            <h3 className="flex items-baseline justify-between gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--warning)]">
+              <span>Not visible — re-photograph</span>
+              <Link
+                href={`/inspections/${inspectionId}#punch-list`}
+                className="text-[10px] font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
+              >
+                Punch-list →
+              </Link>
             </h3>
             <ul className="mt-3 flex flex-col gap-2 text-sm">
               {notVisible.map((n) => (
-                <li key={n.id}>
-                  <p className="font-medium text-[var(--fg)]">{n.item}</p>
+                <li
+                  key={n.id}
+                  className={n.resolved ? "opacity-60" : ""}
+                >
+                  <p
+                    className={[
+                      "font-medium",
+                      n.resolved
+                        ? "text-[var(--fg-muted)] line-through"
+                        : "text-[var(--fg)]",
+                    ].join(" ")}
+                  >
+                    {n.resolved ? "✓ " : ""}
+                    {n.item}
+                  </p>
                   {n.reason ? (
                     <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
                       Reason: {n.reason}
+                    </p>
+                  ) : null}
+                  {n.resolved && n.resolved_note ? (
+                    <p
+                      className="mt-1 rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-2 py-1 text-[11px]"
+                      style={{ color: "var(--fg-muted)" }}
+                    >
+                      Resolved: {n.resolved_note}
                     </p>
                   ) : null}
                 </li>

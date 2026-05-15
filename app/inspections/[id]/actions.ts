@@ -140,6 +140,68 @@ function stringOrNull(v: FormDataEntryValue | null): string | null {
 }
 
 /* =====================================================================
+ * Re-photograph workflow — resolve / unresolve not_visible items.
+ *
+ * The not_visible table stores per-photo items Chip flagged as
+ * un-verifiable from the original angle (e.g., "gauge calibration date
+ * not legible"). Each one becomes a row on the inspection-level
+ * punch-list. The inspector resolves them as they come back with a
+ * better shot.
+ * ===================================================================== */
+
+export async function resolveNotVisible(formData: FormData) {
+  const itemId = String(formData.get("item_id") ?? "");
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  const note = stringOrNull(formData.get("note")) ?? null;
+  const photoId = stringOrNull(formData.get("resolved_photo_id")) ?? null;
+  if (!itemId || !inspectionId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("not_visible")
+    .update({
+      resolved: true,
+      resolved_at: new Date().toISOString(),
+      resolved_note: note,
+      resolved_photo_id: photoId,
+    })
+    .eq("id", itemId);
+  if (error) console.error("[resolveNotVisible]", error);
+
+  revalidatePath(`/inspections/${inspectionId}`);
+}
+
+export async function unresolveNotVisible(formData: FormData) {
+  const itemId = String(formData.get("item_id") ?? "");
+  const inspectionId = String(formData.get("inspection_id") ?? "");
+  if (!itemId || !inspectionId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("not_visible")
+    .update({
+      resolved: false,
+      resolved_at: null,
+      resolved_note: null,
+      resolved_photo_id: null,
+    })
+    .eq("id", itemId);
+  if (error) console.error("[unresolveNotVisible]", error);
+
+  revalidatePath(`/inspections/${inspectionId}`);
+}
+
+/* =====================================================================
  * Photo organization — inspection_sections CRUD + photo assignment.
  * ===================================================================== */
 
