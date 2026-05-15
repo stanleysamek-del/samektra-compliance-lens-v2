@@ -125,7 +125,28 @@ export default async function InspectionDetailPage({
 
     let notVisibleItems: NotVisibleItem[] = [];
     if (photoIds.length > 0) {
-      const { data: nvRows } = await supabase
+      // Try the full select first (includes Phase 2 skip columns).
+      // If migration 0012 or 0013 hasn't been run yet, the columns
+      // won't exist and PostgREST returns an error — we catch it and
+      // retry with just the legacy columns so at least the items
+      // render with Resolve/Skip disabled rather than silently
+      // disappearing. The error message is logged so it shows up in
+      // Vercel function logs.
+      type NvRow = {
+        id: string;
+        item: string;
+        reason: string | null;
+        resolved: boolean | null;
+        resolved_note?: string | null;
+        resolved_at?: string | null;
+        skipped?: boolean | null;
+        skipped_reason?: string | null;
+        skipped_at?: string | null;
+        photo_id: string;
+      };
+
+      let nvRows: NvRow[] | null = null;
+      const fullSelect = await supabase
         .from("not_visible")
         .select(
           "id, item, reason, resolved, resolved_note, resolved_at, skipped, skipped_reason, skipped_at, photo_id, created_at",
@@ -133,22 +154,50 @@ export default async function InspectionDetailPage({
         .in("photo_id", photoIds)
         .order("resolved", { ascending: true })
         .order("created_at", { ascending: true });
+
+      if (fullSelect.error) {
+        console.warn(
+          "[inspection] not_visible full select failed — falling back to legacy. " +
+            "Most likely cause: migration 0012 and/or 0013 hasn't been run yet. Error:",
+          fullSelect.error.message,
+        );
+        const legacy = await supabase
+          .from("not_visible")
+          .select("id, item, reason, resolved, photo_id, created_at")
+          .in("photo_id", photoIds)
+          .order("created_at", { ascending: true });
+        if (legacy.error) {
+          console.error(
+            "[inspection] not_visible legacy select ALSO failed:",
+            legacy.error.message,
+          );
+        } else {
+          nvRows = legacy.data as NvRow[] | null;
+        }
+      } else {
+        nvRows = fullSelect.data as NvRow[] | null;
+      }
+
+      console.log(
+        `[inspection ${id}] not_visible rows: ${nvRows?.length ?? 0}`,
+      );
+
       notVisibleItems = (nvRows ?? []).map((r) => {
-        const meta = photoMetaById.get(r.photo_id as string) ?? {
+        const meta = photoMetaById.get(r.photo_id) ?? {
           photo_location: null,
           section_id: null,
         };
         return {
-          id: r.id as string,
-          item: (r.item as string) ?? "",
-          reason: (r.reason as string | null) ?? null,
+          id: r.id,
+          item: r.item ?? "",
+          reason: r.reason ?? null,
           resolved: Boolean(r.resolved),
-          resolved_note: (r.resolved_note as string | null) ?? null,
-          resolved_at: (r.resolved_at as string | null) ?? null,
+          resolved_note: r.resolved_note ?? null,
+          resolved_at: r.resolved_at ?? null,
           skipped: Boolean(r.skipped),
-          skipped_reason: (r.skipped_reason as string | null) ?? null,
-          skipped_at: (r.skipped_at as string | null) ?? null,
-          photo_id: r.photo_id as string,
+          skipped_reason: r.skipped_reason ?? null,
+          skipped_at: r.skipped_at ?? null,
+          photo_id: r.photo_id,
           photo_location: meta.photo_location,
           section_name: meta.section_id
             ? sectionNameById.get(meta.section_id) ?? null

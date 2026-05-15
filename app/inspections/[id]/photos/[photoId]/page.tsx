@@ -8,6 +8,8 @@ import { PhotoEditor } from "@/components/photo-editor";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
 import { CoachTheAI } from "@/components/coach-the-ai";
 import { AddFindingForm } from "@/components/add-finding-form";
+import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
+import type { NotVisibleItem } from "@/components/not-visible-checklist";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { deletePhoto } from "./actions";
 
@@ -61,10 +63,63 @@ export default async function PhotoDetailPage({
     .select("id, item, details")
     .eq("photo_id", photoId);
 
-  const { data: notVisible } = await supabase
+  // Look up the parent inspection status so we can disable controls
+  // (Resolve/Skip/Reopen) on a finalized inspection. RLS still protects
+  // the actions, but hiding the buttons keeps the UI consistent.
+  const { data: parentInspection } = await supabase
+    .from("inspections")
+    .select("status")
+    .eq("id", inspectionId)
+    .maybeSingle();
+  const isInspectionCompleted = parentInspection?.status === "completed";
+
+  // Defensive select — if migration 0012/0013 haven't been run, the
+  // extra columns won't exist and PostgREST returns an error. Fall back
+  // to legacy columns so items still render in that case.
+  type NvRow = {
+    id: string;
+    item: string;
+    reason: string | null;
+    resolved: boolean | null;
+    resolved_note?: string | null;
+    skipped?: boolean | null;
+    skipped_reason?: string | null;
+  };
+  let notVisible: NvRow[] | null = null;
+  const nvFull = await supabase
     .from("not_visible")
     .select("id, item, reason, resolved, resolved_note, skipped, skipped_reason")
     .eq("photo_id", photoId);
+  if (nvFull.error) {
+    console.warn(
+      "[photo] not_visible full select failed — falling back to legacy. " +
+        "Likely cause: migration 0012/0013 not yet run. Error:",
+      nvFull.error.message,
+    );
+    const nvLegacy = await supabase
+      .from("not_visible")
+      .select("id, item, reason, resolved")
+      .eq("photo_id", photoId);
+    notVisible = (nvLegacy.data as NvRow[] | null) ?? null;
+  } else {
+    notVisible = nvFull.data as NvRow[] | null;
+  }
+
+  // Shape into NotVisibleItem for the shared dropdown component.
+  const notVisibleAsItems: NotVisibleItem[] = (notVisible ?? []).map((n) => ({
+    id: n.id,
+    item: n.item ?? "",
+    reason: n.reason ?? null,
+    resolved: Boolean(n.resolved),
+    resolved_note: n.resolved_note ?? null,
+    resolved_at: null,
+    skipped: Boolean(n.skipped),
+    skipped_reason: n.skipped_reason ?? null,
+    skipped_at: null,
+    photo_id: photoId,
+    photo_location: photo.photo_location ?? null,
+    section_name: null,
+  }));
 
   const { data: signed } = await supabase.storage
     .from("photos")
@@ -160,6 +215,21 @@ export default async function PhotoDetailPage({
           </Card>
         )}
 
+        {/* Per-photo "Not visible" dropdown — sits directly under the
+            photo viewer for quick reference. Collapsed by default; expand
+            to see each item and resolve/skip/reopen inline. Renders nothing
+            when Chip flagged nothing as not-visible on this photo. */}
+        {notVisibleAsItems.length > 0 ? (
+          <Card padded={false}>
+            <PhotoCardNotVisible
+              inspectionId={inspectionId}
+              photoId={photo.id}
+              items={notVisibleAsItems}
+              readOnly={isInspectionCompleted}
+            />
+          </Card>
+        ) : null}
+
         {/* Deep re-analyze (Sonnet, with optional clarifying questions) */}
         <Card variant="tinted-teal">
           <div className="flex flex-col gap-3">
@@ -253,67 +323,10 @@ export default async function PhotoDetailPage({
           </Card>
         ) : null}
 
-        {/* Not visible — per-photo view. Resolution itself happens on the
-            inspection-level punch-list (NotVisibleChecklist); here we
-            just visually distinguish resolved vs unresolved so the photo
-            page stays in sync. */}
-        {notVisible && notVisible.length > 0 ? (
-          <Card>
-            <h3 className="flex items-baseline justify-between gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--warning)]">
-              <span>Not visible — re-photograph</span>
-              <Link
-                href={`/inspections/${inspectionId}#punch-list`}
-                className="text-[10px] font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
-              >
-                Punch-list →
-              </Link>
-            </h3>
-            <ul className="mt-3 flex flex-col gap-2 text-sm">
-              {notVisible.map((n) => {
-                const isClosed = n.resolved || n.skipped;
-                return (
-                  <li
-                    key={n.id}
-                    className={isClosed ? "opacity-60" : ""}
-                  >
-                    <p
-                      className={[
-                        "font-medium",
-                        isClosed
-                          ? "text-[var(--fg-muted)] line-through"
-                          : "text-[var(--fg)]",
-                      ].join(" ")}
-                    >
-                      {n.resolved ? "✓ " : n.skipped ? "↷ " : ""}
-                      {n.item}
-                    </p>
-                    {n.reason ? (
-                      <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-                        Reason: {n.reason}
-                      </p>
-                    ) : null}
-                    {n.resolved && n.resolved_note ? (
-                      <p
-                        className="mt-1 rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-2 py-1 text-[11px]"
-                        style={{ color: "var(--fg-muted)" }}
-                      >
-                        Resolved: {n.resolved_note}
-                      </p>
-                    ) : null}
-                    {n.skipped && n.skipped_reason ? (
-                      <p
-                        className="mt-1 rounded border-l-2 border-[var(--fg-subtle)] bg-white/[0.02] px-2 py-1 text-[11px]"
-                        style={{ color: "var(--fg-muted)" }}
-                      >
-                        Skipped: {n.skipped_reason}
-                      </p>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        ) : null}
+        {/* Note: the "Not visible" card used to live here at the bottom
+            of the page as a read-only summary. It's been moved up to
+            sit directly under the photo viewer as an interactive
+            dropdown — see <PhotoCardNotVisible> above. */}
 
         {/* Delete photo */}
         <Card>
