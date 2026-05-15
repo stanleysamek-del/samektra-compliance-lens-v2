@@ -159,8 +159,8 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
 
 function SeverityPill({ severity }: { severity: "Low" | "Medium" | "High" }) {
   const map = {
-    High: { bg: "rgba(248,113,113,0.14)", fg: "#fca5a5", label: "H" },
-    Medium: { bg: "rgba(248,113,113,0.10)", fg: "#fca5a5", label: "M" },
+    High: { bg: "rgba(248,113,113,0.14)", fg: "#a8362b", label: "H" },
+    Medium: { bg: "rgba(248,113,113,0.10)", fg: "#a8362b", label: "M" },
     Low: { bg: "rgba(52,211,153,0.12)", fg: "#6ee7b7", label: "L" },
   } as const;
   const m = map[severity];
@@ -291,7 +291,7 @@ function FindingRowMenu({
               setOpen(false);
               await deleteFinding(findingId, inspectionId);
             }}
-            className="block w-full px-3 py-1.5 text-left text-xs text-[#fca5a5] transition hover:bg-[rgba(239,68,68,0.08)]"
+            className="block w-full px-3 py-1.5 text-left text-xs text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.08)]"
           >
             Delete
           </button>

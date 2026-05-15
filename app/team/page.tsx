@@ -70,7 +70,7 @@ export default async function TeamDashboardPage({
                 className="cl-input"
               />
               {error ? (
-                <p className="text-xs" style={{ color: "#fca5a5" }}>{error}</p>
+                <p className="text-xs" style={{ color: "#a8362b" }}>{error}</p>
               ) : null}
               <button type="submit" className="cl-btn-primary self-start">
                 Create team
@@ -406,7 +406,7 @@ export default async function TeamDashboardPage({
                 value={String(openPunchListCount)}
                 sub={
                   openPunchListCount === 0 ? (
-                    <span style={{ color: "#86efac" }}>All clear ✓</span>
+                    <span style={{ color: "#607a3a" }}>All clear ✓</span>
                   ) : (
                     "items open"
                   )
@@ -508,8 +508,8 @@ export default async function TeamDashboardPage({
                         aria-hidden
                         className="inline-flex h-7 w-7 items-center justify-center rounded-lg"
                         style={{
-                          background: "rgba(20,184,166,0.12)",
-                          color: "#5eead4",
+                          background: "rgba(200,155,60,0.12)",
+                          color: "#b8902f",
                         }}
                       >
                         <FolderIconSm />
@@ -565,8 +565,8 @@ export default async function TeamDashboardPage({
                           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
                           style={
                             it.kind === "inspection"
-                              ? { background: "rgba(20,184,166,0.12)", color: "#5eead4" }
-                              : { background: "rgba(168,85,247,0.12)", color: "#d8b4fe" }
+                              ? { background: "rgba(200,155,60,0.12)", color: "#b8902f" }
+                              : { background: "rgba(140,106,178,0.12)", color: "#8c6ab2" }
                           }
                         >
                           {it.kind === "inspection" ? <InspectionsIcon /> : <FindingsIconSm />}
@@ -687,7 +687,7 @@ function SummaryTile({
         aria-hidden
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
         style={{
-          background: "rgba(20,184,166,0.10)",
+          background: "rgba(200,155,60,0.10)",
           color: "var(--primary)",
         }}
       >
@@ -769,9 +769,9 @@ function SevPill({
   tone: "high" | "medium" | "low";
 }) {
   const styles = {
-    high: { bg: "rgba(239,68,68,0.12)", fg: "#fca5a5" },
-    medium: { bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" },
-    low: { bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" },
+    high: { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" },
+    medium: { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
+    low: { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
   }[tone];
   return (
     <span

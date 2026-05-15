@@ -193,7 +193,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                       type="button"
                       onClick={() => remove(s.id, s.name)}
                       disabled={isPending}
-                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#fca5a5]"
+                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
                     >
                       Delete
                     </button>

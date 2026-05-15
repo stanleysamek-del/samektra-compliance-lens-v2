@@ -72,7 +72,7 @@ type Mode =
 const COLORS = [
   { hex: "#f87171", label: "Red" },
   { hex: "#fb923c", label: "Orange" },
-  { hex: "#fbbf24", label: "Yellow" },
+  { hex: "#b8762a", label: "Yellow" },
   { hex: "#34d399", label: "Green" },
   { hex: "#60a5fa", label: "Blue" },
   { hex: "#ffffff", label: "White" },
@@ -583,7 +583,7 @@ export function PhotoEditor({
               style={{
                 background: c.hex,
                 borderColor: color === c.hex ? "#ffffff" : "transparent",
-                boxShadow: color === c.hex ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+                boxShadow: color === c.hex ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
               }}
             />
           ))}
@@ -657,10 +657,10 @@ export function PhotoEditor({
                 : "border-[var(--border-strong)]",
             ].join(" ")}
             style={{
-              boxShadow: fill === undefined ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+              boxShadow: fill === undefined ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
             }}
           >
-            <span className="absolute h-[2px] w-5 rotate-45 bg-[#fca5a5]" />
+            <span className="absolute h-[2px] w-5 rotate-45 bg-[#a8362b]" />
           </button>
           {COLORS.map((c) => (
             <button
@@ -673,7 +673,7 @@ export function PhotoEditor({
                 // 25% opacity tint, matching how the shape will render.
                 background: c.hex + "40",
                 borderColor: fill === c.hex ? "#ffffff" : c.hex,
-                boxShadow: fill === c.hex ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+                boxShadow: fill === c.hex ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
               }}
             />
           ))}
@@ -683,7 +683,7 @@ export function PhotoEditor({
             type="button"
             disabled={!selected}
             onClick={deleteSelected}
-            className="rounded-md px-2 py-1 text-xs font-medium text-[#fca5a5] disabled:opacity-30 hover:bg-[rgba(239,68,68,0.08)]"
+            className="rounded-md px-2 py-1 text-xs font-medium text-[#a8362b] disabled:opacity-30 hover:bg-[rgba(168,54,43,0.08)]"
           >
             {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
           </button>

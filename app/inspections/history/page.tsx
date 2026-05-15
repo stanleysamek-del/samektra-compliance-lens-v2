@@ -180,9 +180,9 @@ export default async function HistoryPage({
           <div
             className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
             style={{
-              borderColor: "rgba(34,197,94,0.3)",
-              background: "rgba(34,197,94,0.08)",
-              color: "#86efac",
+              borderColor: "rgba(96,122,58,0.4)",
+              background: "rgba(96,122,58,0.08)",
+              color: "#607a3a",
             }}
           >
             <span>
@@ -201,9 +201,9 @@ export default async function HistoryPage({
           <div
             className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
             style={{
-              borderColor: "rgba(239,68,68,0.3)",
-              background: "rgba(239,68,68,0.08)",
-              color: "#fca5a5",
+              borderColor: "rgba(168,54,43,0.4)",
+              background: "rgba(168,54,43,0.08)",
+              color: "#a8362b",
             }}
           >
             <span>{errorMessage}</span>
@@ -486,8 +486,8 @@ function InspectionListRow({
               title={`${counts.total} findings · ${counts.high} High`}
               style={
                 counts.high > 0
-                  ? { background: "rgba(239,68,68,0.12)", color: "#fca5a5" }
-                  : { background: "rgba(20,184,166,0.10)", color: "#5eead4" }
+                  ? { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
+                  : { background: "rgba(96,122,58,0.10)", color: "#607a3a" }
               }
             >
               {counts.high > 0 ? `${counts.high}H · ` : ""}
@@ -563,9 +563,9 @@ function FilterPill({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" },
-    completed: { label: "Completed", bg: "rgba(34,197,94,0.12)", fg: "#86efac" },
-    archived: { label: "Archived", bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" },
+    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
+    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#607a3a" },
+    archived: { label: "Archived", bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" },
   };
   const m = map[status] ?? map.archived;
   return (

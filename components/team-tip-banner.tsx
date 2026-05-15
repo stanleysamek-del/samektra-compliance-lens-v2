@@ -58,8 +58,8 @@ export function TeamTipBanner() {
     <div
       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-xs"
       style={{
-        borderColor: "rgba(20,184,166,0.3)",
-        background: "rgba(20,184,166,0.06)",
+        borderColor: "rgba(200,155,60,0.35)",
+        background: "rgba(200,155,60,0.06)",
         color: "var(--fg-muted)",
       }}
     >
@@ -67,7 +67,7 @@ export function TeamTipBanner() {
         <span
           aria-hidden
           className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-          style={{ background: "rgba(20,184,166,0.18)", color: "#5eead4" }}
+          style={{ background: "rgba(200,155,60,0.18)", color: "#b8902f" }}
         >
           💡
         </span>

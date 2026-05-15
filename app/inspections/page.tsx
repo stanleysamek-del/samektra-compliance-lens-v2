@@ -142,9 +142,9 @@ export default async function InspectionsPage() {
             role="status"
             className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
             style={{
-              borderColor: "rgba(245,158,11,0.3)",
-              background: "rgba(245,158,11,0.08)",
-              color: "#fde68a",
+              borderColor: "rgba(184,118,42,0.4)",
+              background: "rgba(184,118,42,0.08)",
+              color: "#b8762a",
             }}
           >
             <span aria-hidden>⚠</span>
@@ -197,7 +197,7 @@ export default async function InspectionsPage() {
               value={String(weeklyHighFindings ?? 0)}
               sub={
                 (weeklyHighFindings ?? 0) === 0 ? (
-                  <span style={{ color: "#86efac" }}>None this week</span>
+                  <span style={{ color: "#607a3a" }}>None this week</span>
                 ) : (
                   "open issues"
                 )
@@ -376,8 +376,8 @@ function EmptyStep({
           aria-hidden
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
           style={{
-            background: "rgba(20,184,166,0.18)",
-            color: "#5eead4",
+            background: "rgba(200,155,60,0.18)",
+            color: "#b8902f",
           }}
         >
           {n}
@@ -428,9 +428,9 @@ function HomeStat({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" },
-    completed: { label: "Completed", bg: "rgba(34,197,94,0.12)", fg: "#86efac" },
-    archived: { label: "Archived", bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" },
+    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
+    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#607a3a" },
+    archived: { label: "Archived", bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" },
   };
   const m = map[status] ?? map.archived;
   return (

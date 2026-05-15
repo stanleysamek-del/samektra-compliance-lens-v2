@@ -164,8 +164,8 @@ function Step({
         aria-hidden
         className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
         style={{
-          background: "rgba(20,184,166,0.18)",
-          color: "#5eead4",
+          background: "rgba(200,155,60,0.18)",
+          color: "#b8902f",
         }}
       >
         {n}

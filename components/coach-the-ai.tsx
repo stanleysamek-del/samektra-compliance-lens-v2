@@ -205,8 +205,8 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
           to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes cl-pulse-glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.0); }
-          50%      { box-shadow: 0 0 0 6px rgba(20, 184, 166, 0.15); }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(200,155,60,0.0); }
+          50%      { box-shadow: 0 0 0 6px rgba(200,155,60,0.18); }
         }
       `}</style>
 
@@ -216,9 +216,9 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
           <span
             className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: "rgba(20,184,166,0.12)",
-              color: "#5eead4",
-              border: "1px solid rgba(20,184,166,0.3)",
+              background: "rgba(200,155,60,0.12)",
+              color: "#b8902f",
+              border: "1px solid rgba(200,155,60,0.35)",
             }}
             title="Compliance · Hazard · Identification · Partner"
           >
@@ -302,9 +302,9 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
         <div
           className="rounded-lg border px-3 py-2 text-xs"
           style={{
-            borderColor: "rgba(239,68,68,0.3)",
-            background: "rgba(239,68,68,0.08)",
-            color: "#fca5a5",
+            borderColor: "rgba(168,54,43,0.4)",
+            background: "rgba(168,54,43,0.08)",
+            color: "#a8362b",
           }}
         >
           {status.message}
@@ -355,7 +355,7 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
                     <span
                       aria-hidden
                       className="inline-block h-2 w-2 rounded-full"
-                      style={{ background: selected ? "#0a0d12" : (a.color || "#22d3ee") }}
+                      style={{ background: selected ? "#0a0d12" : (a.color || "#b8902f") }}
                     />
                     {label}
                   </button>
@@ -429,8 +429,8 @@ function InspectorBubble({
       <div
         className="rounded-2xl rounded-tr-md border px-3 py-2 text-sm"
         style={{
-          borderColor: "rgba(20,184,166,0.35)",
-          background: "rgba(20,184,166,0.10)",
+          borderColor: "rgba(200,155,60,0.35)",
+          background: "rgba(200,155,60,0.10)",
           color: "var(--fg)",
         }}
       >
@@ -471,12 +471,12 @@ function AIBubble({
         className="rounded-2xl rounded-tl-md border px-3 py-2 text-sm"
         style={{
           borderColor: isError
-            ? "rgba(239,68,68,0.35)"
+            ? "rgba(168,54,43,0.4)"
             : "rgba(148,163,184,0.25)",
           background: isError
-            ? "rgba(239,68,68,0.08)"
+            ? "rgba(168,54,43,0.08)"
             : "var(--bg-elevated)",
-          color: isError ? "#fca5a5" : "var(--fg)",
+          color: isError ? "#a8362b" : "var(--fg)",
         }}
       >
         <p className="whitespace-pre-wrap leading-relaxed">{text}</p>
@@ -486,8 +486,8 @@ function AIBubble({
               <span
                 className="rounded-full px-2 py-0.5"
                 style={{
-                  background: "rgba(20,184,166,0.12)",
-                  color: "#5eead4",
+                  background: "rgba(200,155,60,0.12)",
+                  color: "#b8902f",
                 }}
               >
                 {meta.findingsCount} finding{meta.findingsCount === 1 ? "" : "s"}
@@ -499,7 +499,7 @@ function AIBubble({
                 className="rounded-full px-2 py-0.5"
                 style={{
                   background: "rgba(148,163,184,0.12)",
-                  color: "#cbd5e1",
+                  color: "var(--slate)",
                 }}
               >
                 {meta.findingsPreserved} preserved
@@ -510,8 +510,8 @@ function AIBubble({
               <span
                 className="rounded-full px-2 py-0.5"
                 style={{
-                  background: "rgba(168,85,247,0.12)",
-                  color: "#d8b4fe",
+                  background: "rgba(140,106,178,0.12)",
+                  color: "#8c6ab2",
                 }}
                 title="Inspector thumbs ratings carried forward by title match"
               >
@@ -522,8 +522,8 @@ function AIBubble({
               <span
                 className="rounded-full px-2 py-0.5"
                 style={{
-                  background: "rgba(245,158,11,0.12)",
-                  color: "#fde68a",
+                  background: "rgba(184,118,42,0.10)",
+                  color: "#b8762a",
                 }}
               >
                 {Math.round(meta.confidence * 100)}% confidence
@@ -552,15 +552,15 @@ function AIBubble({
         <div
           className="mt-1 flex w-full flex-col gap-2 rounded-xl border px-3 py-2.5 text-sm"
           style={{
-            borderColor: "rgba(20,184,166,0.35)",
-            background: "rgba(20,184,166,0.06)",
+            borderColor: "rgba(200,155,60,0.35)",
+            background: "rgba(200,155,60,0.06)",
           }}
         >
           <div className="flex items-start gap-2">
             <span
               aria-hidden
               className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-              style={{ background: "rgba(20,184,166,0.18)", color: "#5eead4" }}
+              style={{ background: "rgba(200,155,60,0.18)", color: "#b8902f" }}
             >
               ?
             </span>

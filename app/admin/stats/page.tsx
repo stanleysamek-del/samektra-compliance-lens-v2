@@ -289,8 +289,8 @@ export default async function AdminStatsPage() {
                             className="rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider"
                             style={
                               c.status === "success"
-                                ? { background: "rgba(34,197,94,0.12)", color: "#86efac" }
-                                : { background: "rgba(239,68,68,0.12)", color: "#fca5a5" }
+                                ? { background: "rgba(96,122,58,0.10)", color: "#607a3a" }
+                                : { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
                             }
                           >
                             {c.status}
@@ -316,7 +316,7 @@ export default async function AdminStatsPage() {
                           </span>
                         </div>
                         {c.error_message ? (
-                          <p className="mt-0.5 truncate text-xs text-[#fca5a5]">
+                          <p className="mt-0.5 truncate text-xs text-[#a8362b]">
                             {c.error_message}
                           </p>
                         ) : (

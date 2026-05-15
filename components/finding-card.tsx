@@ -124,7 +124,7 @@ export function FindingCard({
           <div className="flex flex-wrap items-center gap-2">
             <span
               className="rounded px-1.5 py-0.5 font-mono text-[11px] font-medium"
-              style={{ background: "rgba(148,163,184,0.1)", color: "var(--fg-muted)" }}
+              style={{ background: "rgba(15,21,24,0.06)", color: "var(--slate)" }}
             >
               #{index + 1}
             </span>
@@ -175,7 +175,7 @@ export function FindingCard({
                 className={[
                   "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
                   localRating === 1
-                    ? "text-[#5eead4] scale-110"
+                    ? "text-[#607a3a] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >
@@ -194,7 +194,7 @@ export function FindingCard({
                 className={[
                   "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
                   localRating === -1
-                    ? "text-[#fca5a5] scale-110"
+                    ? "text-[#a8362b] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >
@@ -212,7 +212,7 @@ export function FindingCard({
                 type="button"
                 disabled={isPending}
                 onClick={remove}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[#fca5a5]"
+                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[#a8362b]"
               >
                 Delete
               </button>
@@ -340,7 +340,7 @@ export function FindingCard({
                       <button
                         type="button"
                         onClick={() => setBboxDraft(null)}
-                        className="rounded-full px-2 py-0.5 text-[var(--fg-muted)] underline-offset-2 hover:text-[#fca5a5] hover:underline"
+                        className="rounded-full px-2 py-0.5 text-[var(--fg-muted)] underline-offset-2 hover:text-[#a8362b] hover:underline"
                       >
                         Remove box
                       </button>
@@ -402,9 +402,9 @@ function Field({
 }
 
 function severityStyles(s: "Low" | "Medium" | "High") {
-  if (s === "High") return { bg: "rgba(239,68,68,0.12)", fg: "#fca5a5" };
-  if (s === "Medium") return { bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" };
-  return { bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" };
+  if (s === "High") return { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" };
+  if (s === "Medium") return { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" };
+  return { bg: "rgba(96,122,58,0.10)", fg: "#607a3a" };
 }
 
 function ThumbsUpIcon({ filled }: { filled: boolean }) {

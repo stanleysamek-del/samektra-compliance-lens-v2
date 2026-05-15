@@ -161,9 +161,9 @@ export default async function NewInspectionPage({
               <p
                 className="rounded-lg border px-3 py-2 text-sm"
                 style={{
-                  borderColor: "rgba(239,68,68,0.3)",
-                  background: "rgba(239,68,68,0.08)",
-                  color: "#fca5a5",
+                  borderColor: "rgba(168,54,43,0.4)",
+                  background: "rgba(168,54,43,0.08)",
+                  color: "#a8362b",
                 }}
               >
                 {params.error}

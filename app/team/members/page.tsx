@@ -117,9 +117,9 @@ export default async function TeamMembersPage({
           <div
             className="rounded-lg border px-3 py-2 text-xs"
             style={{
-              borderColor: "rgba(239,68,68,0.3)",
-              background: "rgba(239,68,68,0.08)",
-              color: "#fca5a5",
+              borderColor: "rgba(168,54,43,0.4)",
+              background: "rgba(168,54,43,0.08)",
+              color: "#a8362b",
             }}
           >
             {error}
@@ -187,7 +187,7 @@ export default async function TeamMembersPage({
                         <input type="hidden" name="invite_id" value={inv.id} />
                         <button
                           type="submit"
-                          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#fca5a5]"
+                          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
                         >
                           Revoke
                         </button>
@@ -260,7 +260,7 @@ export default async function TeamMembersPage({
                             />
                             <button
                               type="submit"
-                              className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#fca5a5]"
+                              className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
                             >
                               Leave team
                             </button>
@@ -271,7 +271,7 @@ export default async function TeamMembersPage({
                           <input type="hidden" name="member_id" value={m.id} />
                           <button
                             type="submit"
-                            className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#fca5a5]"
+                            className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
                           >
                             Remove
                           </button>

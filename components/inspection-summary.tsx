@@ -98,7 +98,7 @@ export function InspectionSummary({
             punchTotal === 0 ? (
               <span className="text-[var(--fg-subtle)]">Nothing flagged</span>
             ) : punchList.open === 0 ? (
-              <span style={{ color: "#86efac" }}>All clear ✓</span>
+              <span style={{ color: "#607a3a" }}>All clear ✓</span>
             ) : (
               <span>
                 {punchClosedPct}% done
@@ -126,8 +126,8 @@ export function InspectionSummary({
               <span className="text-[var(--fg-subtle)]">No ratings yet</span>
             ) : (
               <span className="flex gap-2">
-                <span style={{ color: "#5eead4" }}>👍 {ratings.thumbsUp}</span>
-                <span style={{ color: "#fca5a5" }}>👎 {ratings.thumbsDown}</span>
+                <span style={{ color: "#b8902f" }}>👍 {ratings.thumbsUp}</span>
+                <span style={{ color: "#a8362b" }}>👎 {ratings.thumbsDown}</span>
               </span>
             )
           }
@@ -193,9 +193,9 @@ function SevPill({
   tone: "high" | "medium" | "low";
 }) {
   const styles = {
-    high: { bg: "rgba(239,68,68,0.12)", fg: "#fca5a5" },
-    medium: { bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" },
-    low: { bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" },
+    high: { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" },
+    medium: { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
+    low: { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
   }[tone];
   return (
     <span
@@ -221,7 +221,7 @@ function TimelineItem({
       ? "var(--fg-subtle)"
       : dot === "updated"
         ? "var(--primary)"
-        : "#86efac";
+        : "#607a3a";
   return (
     <span className="inline-flex items-center gap-1.5" title={full}>
       <span

@@ -232,13 +232,13 @@ export default async function FindingsDashboardPage({
               <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
                 Feedback
               </span>
-              <span style={{ color: "#5eead4" }}>
+              <span style={{ color: "#b8902f" }}>
                 👍 {thumbsUp}{" "}
                 <span className="text-[var(--fg-subtle)]">
                   ({pct(thumbsUp, totalCount)})
                 </span>
               </span>
-              <span style={{ color: "#fca5a5" }}>
+              <span style={{ color: "#a8362b" }}>
                 👎 {thumbsDown}{" "}
                 <span className="text-[var(--fg-subtle)]">
                   ({pct(thumbsDown, totalCount)})
@@ -284,7 +284,7 @@ export default async function FindingsDashboardPage({
                         <div
                           style={{
                             height: `${Math.max(pctL, 2)}%`,
-                            background: "#cbd5e1",
+                            background: "var(--slate)",
                           }}
                           className="rounded-b-sm"
                         />
@@ -293,7 +293,7 @@ export default async function FindingsDashboardPage({
                         <div
                           style={{
                             height: `${Math.max(pctM, 2)}%`,
-                            background: "#fbbf24",
+                            background: "#b8762a",
                           }}
                         />
                       ) : null}
@@ -329,8 +329,8 @@ export default async function FindingsDashboardPage({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-[var(--fg-subtle)]">
               <Legend color="#ef4444" label="High" />
-              <Legend color="#fbbf24" label="Medium" />
-              <Legend color="#cbd5e1" label="Low" />
+              <Legend color="#b8762a" label="Medium" />
+              <Legend color="var(--slate)" label="Low" />
               <span className="ml-auto">
                 Total in window:{" "}
                 {weekBuckets.reduce(
@@ -452,9 +452,9 @@ export default async function FindingsDashboardPage({
                         {r.code ? ` · ${r.code}` : ""}
                       </span>
                       {r.user_rating === 1 ? (
-                        <span style={{ color: "#5eead4", fontSize: 11 }}>👍</span>
+                        <span style={{ color: "#b8902f", fontSize: 11 }}>👍</span>
                       ) : r.user_rating === -1 ? (
-                        <span style={{ color: "#fca5a5", fontSize: 11 }}>👎</span>
+                        <span style={{ color: "#a8362b", fontSize: 11 }}>👎</span>
                       ) : null}
                       <span className="ml-auto text-[10px] text-[var(--fg-subtle)]">
                         {new Date(r.created_at).toLocaleDateString(undefined, {
@@ -545,11 +545,11 @@ function SummaryTile({
 }) {
   const valueColor =
     tone === "high"
-      ? "#fca5a5"
+      ? "#a8362b"
       : tone === "medium"
-        ? "#fbbf24"
+        ? "#b8762a"
         : tone === "low"
-          ? "#cbd5e1"
+          ? "var(--slate)"
           : "var(--fg)";
   return (
     <div className="flex flex-col gap-1 px-5 py-4">
@@ -607,10 +607,10 @@ function FilterGroup({
 function SeverityPill({ severity }: { severity: Severity }) {
   const styles =
     severity === "High"
-      ? { bg: "rgba(239,68,68,0.12)", fg: "#fca5a5" }
+      ? { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" }
       : severity === "Medium"
-        ? { bg: "rgba(245,158,11,0.12)", fg: "#fbbf24" }
-        : { bg: "rgba(148,163,184,0.12)", fg: "#cbd5e1" };
+        ? { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" }
+        : { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" };
   return (
     <span
       className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"

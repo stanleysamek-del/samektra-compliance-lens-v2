@@ -18,7 +18,7 @@ type Mode =
 const COLORS = [
   { hex: "#f87171", label: "Red" },
   { hex: "#fb923c", label: "Orange" },
-  { hex: "#fbbf24", label: "Yellow" },
+  { hex: "#b8762a", label: "Yellow" },
   { hex: "#34d399", label: "Green" },
   { hex: "#60a5fa", label: "Blue" },
   { hex: "#ffffff", label: "White" },
@@ -348,7 +348,7 @@ export function PhotoAnnotator({
             style={{
               background: c.hex,
               borderColor: color === c.hex ? "#ffffff" : "transparent",
-              boxShadow: color === c.hex ? "0 0 0 2px rgba(20,184,166,0.6)" : "none",
+              boxShadow: color === c.hex ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
             }}
             aria-pressed={color === c.hex}
           />
@@ -360,7 +360,7 @@ export function PhotoAnnotator({
           type="button"
           disabled={!sel}
           onClick={deleteSelected}
-          className="rounded-md px-2 py-1 text-xs font-medium text-[#fca5a5] disabled:opacity-30 hover:bg-[rgba(239,68,68,0.08)]"
+          className="rounded-md px-2 py-1 text-xs font-medium text-[#a8362b] disabled:opacity-30 hover:bg-[rgba(168,54,43,0.08)]"
         >
           Delete
         </button>

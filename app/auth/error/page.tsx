@@ -14,9 +14,9 @@ export default async function AuthErrorPage({
         <p
           className="rounded-lg border px-3 py-3 text-sm"
           style={{
-            borderColor: "rgba(239,68,68,0.3)",
-            background: "rgba(239,68,68,0.08)",
-            color: "#fca5a5",
+            borderColor: "rgba(168,54,43,0.4)",
+            background: "rgba(168,54,43,0.08)",
+            color: "#a8362b",
           }}
         >
           {message ?? "Something went wrong while signing you in."}

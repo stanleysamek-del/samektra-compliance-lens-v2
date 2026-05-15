@@ -135,7 +135,7 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
               s === "High"
                 ? "#f87171"
                 : s === "Medium"
-                  ? "#fbbf24"
+                  ? "#b8762a"
                   : "#34d399";
             return (
               <button

@@ -84,7 +84,7 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
             />
             <button
               type="submit"
-              className="block w-full border-t border-[var(--border)] px-4 py-2.5 text-left text-sm text-[#fca5a5] transition hover:bg-[rgba(239,68,68,0.06)]"
+              className="block w-full border-t border-[var(--border)] px-4 py-2.5 text-left text-sm text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.06)]"
             >
               Delete
             </button>

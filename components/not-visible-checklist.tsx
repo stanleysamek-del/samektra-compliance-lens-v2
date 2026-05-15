@@ -86,9 +86,9 @@ export function NotVisibleChecklist({
         <div
           className="rounded-lg border px-3 py-2.5 text-xs"
           style={{
-            borderColor: "rgba(34,197,94,0.3)",
-            background: "rgba(34,197,94,0.08)",
-            color: "#86efac",
+            borderColor: "rgba(96,122,58,0.4)",
+            background: "rgba(96,122,58,0.08)",
+            color: "#607a3a",
           }}
         >
           ✓ Nothing left on the punch-list. Good job.

@@ -213,7 +213,7 @@ export function PhotoUploader({ inspectionId }: Props) {
         className={[
           "mt-3 hidden items-center justify-center rounded-lg border border-dashed py-6 text-sm transition lg:flex",
           isDragging
-            ? "border-[var(--primary)] bg-[rgba(20,184,166,0.06)] text-[var(--fg)]"
+            ? "border-[var(--primary)] bg-[rgba(200,155,60,0.06)] text-[var(--fg)]"
             : "border-[var(--border-strong)] text-[var(--fg-muted)]",
         ].join(" ")}
       >
@@ -261,8 +261,8 @@ export function PhotoUploader({ inspectionId }: Props) {
                 className="absolute left-0 right-0 h-[2px]"
                 style={{
                   background:
-                    "linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.85), transparent)",
-                  boxShadow: "0 0 16px 4px rgba(20, 184, 166, 0.55)",
+                    "linear-gradient(90deg, transparent, rgba(200,155,60,0.85), transparent)",
+                  boxShadow: "0 0 16px 4px rgba(200,155,60,0.55)",
                   animation: "cl-scan 2.4s ease-in-out infinite",
                 }}
               />
@@ -287,9 +287,9 @@ export function PhotoUploader({ inspectionId }: Props) {
         <div
           className="mt-4 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
           style={{
-            borderColor: "rgba(239,68,68,0.3)",
-            background: "rgba(239,68,68,0.08)",
-            color: "#fca5a5",
+            borderColor: "rgba(168,54,43,0.4)",
+            background: "rgba(168,54,43,0.08)",
+            color: "#a8362b",
           }}
         >
           <span className="min-w-0">{status.message}</span>

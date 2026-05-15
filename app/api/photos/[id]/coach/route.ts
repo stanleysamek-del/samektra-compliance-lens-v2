@@ -234,7 +234,7 @@ export async function POST(
         {
           id: `coach-${inspectorTurnIndex}`,
           type: (annotationRef.type as "rect" | "circle" | "arrow" | "text") ?? "rect",
-          color: annotationRef.color ?? "#22d3ee",
+          color: annotationRef.color ?? "#b8902f",
           x1: annotationRef.x1,
           y1: annotationRef.y1,
           x2: annotationRef.x2,
