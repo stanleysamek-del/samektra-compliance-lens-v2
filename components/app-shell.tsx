@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
     icon: <UploadIcon />,
     accent: true,
   },
+  { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
 ];
 
@@ -284,6 +285,30 @@ function ProfileIcon() {
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function FindingsIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 5h16v14H4z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 9h16M9 5v14"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="m11 13 1.5 1.5L16 11"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );

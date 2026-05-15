@@ -15,6 +15,7 @@ import {
   type NotVisibleItem,
 } from "@/components/not-visible-checklist";
 import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
+import { InspectionSummary } from "@/components/inspection-summary";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -53,7 +54,7 @@ export default async function InspectionDetailPage({
     const { data: inspection, error: inspectionErr } = await supabase
       .from("inspections")
       .select(
-        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at",
+        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at, updated_at, inspector_signed_at, manager_signed_at",
       )
       .eq("id", id)
       .maybeSingle();
@@ -226,16 +227,32 @@ export default async function InspectionDetailPage({
       string,
       { total: number; high: number; items: CompactFinding[] }
     > = {};
+    // Roll-up counters for the summary card. Same loop as the per-photo
+    // breakdown, just kept at inspection-scope so we don't iterate twice.
+    let totalFindings = 0;
+    let highFindings = 0;
+    let mediumFindings = 0;
+    let lowFindings = 0;
+    let thumbsUp = 0;
+    let thumbsDown = 0;
+
     if (photoIds.length > 0) {
       try {
         const { data: findings } = await supabase
           .from("findings")
-          .select("id, photo_id, title, severity, created_at")
+          .select("id, photo_id, title, severity, user_rating, created_at")
           .in("photo_id", photoIds)
           .order("created_at", { ascending: true });
         findingsByPhoto = (findings ?? []).reduce<typeof findingsByPhoto>(
           (acc, f) => {
             const pid = f.photo_id as string | null;
+            totalFindings += 1;
+            if (f.severity === "High") highFindings += 1;
+            else if (f.severity === "Medium") mediumFindings += 1;
+            else if (f.severity === "Low") lowFindings += 1;
+            if (f.user_rating === 1) thumbsUp += 1;
+            else if (f.user_rating === -1) thumbsDown += 1;
+
             if (!pid) return acc;
             const bucket = (acc[pid] ??= { total: 0, high: 0, items: [] });
             bucket.total += 1;
@@ -253,6 +270,15 @@ export default async function InspectionDetailPage({
         console.error("[inspection] findings query", err);
       }
     }
+
+    // Same lifecycle counts the punch-list pill uses, exposed for the
+    // summary card too.
+    const resolvedNotVisibleCount = notVisibleItems.filter(
+      (n) => n.resolved,
+    ).length;
+    const skippedNotVisibleCount = notVisibleItems.filter(
+      (n) => n.skipped && !n.resolved,
+    ).length;
 
     stage = "signed-urls";
     const photoUrls: Record<string, string> = {};
@@ -322,6 +348,32 @@ export default async function InspectionDetailPage({
               </Link>
             </div>
           </Card>
+
+          {/* Stat-grid summary — photos, findings by severity, punch-list
+              progress, feedback ratings, and a compact timeline strip. */}
+          <InspectionSummary
+            photoCount={photosList.length}
+            findings={{
+              total: totalFindings,
+              high: highFindings,
+              medium: mediumFindings,
+              low: lowFindings,
+            }}
+            punchList={{
+              open: unresolvedNotVisibleCount,
+              resolved: resolvedNotVisibleCount,
+              skipped: skippedNotVisibleCount,
+            }}
+            ratings={{ thumbsUp, thumbsDown }}
+            status={inspection.status}
+            createdAt={inspection.created_at}
+            updatedAt={inspection.updated_at}
+            finalizedAt={
+              inspection.status === "completed"
+                ? inspection.inspector_signed_at ?? inspection.updated_at
+                : null
+            }
+          />
 
           {!isCompleted ? <PhotoUploader inspectionId={inspection.id} /> : null}
 
