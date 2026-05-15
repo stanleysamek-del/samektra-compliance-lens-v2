@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { SamektraMark } from "@/components/logo";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { OrgSwitcher } from "@/components/org-switcher";
 
 /* =====================================================================
  * AppShell
@@ -63,7 +64,10 @@ export function AppShell({ user, children }: Props) {
             </div>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Compact org switcher — self-fetches via /api/team/context,
+                renders nothing for users with no teams. */}
+            <OrgSwitcher />
             <div className="hidden flex-col items-end leading-tight sm:flex">
               <span className="text-sm font-medium text-[var(--fg)]">
                 {user.fullName}
