@@ -6,14 +6,28 @@ import {
   renameFolder,
   deleteFolder,
   moveFolder,
+  setFolderColor,
 } from "@/app/inspections/folders/actions";
 
 export type FolderRow = {
   id: string;
   name: string;
   sort_order: number;
+  color: string | null;
   inspectionCount: number;
 };
+
+const PALETTE = [
+  null,
+  "#14b8a6", // teal
+  "#f97316", // orange
+  "#ef4444", // red
+  "#f59e0b", // amber
+  "#a855f7", // purple
+  "#3b82f6", // blue
+  "#10b981", // emerald
+  "#64748b", // slate
+] as const;
 
 type Props = {
   organizationId: string;
@@ -75,6 +89,15 @@ export function FoldersManager({ organizationId, folders }: Props) {
     fd.append("folder_id", folderId);
     startTransition(async () => {
       await deleteFolder(fd);
+    });
+  }
+
+  function applyColor(folderId: string, color: string | null) {
+    const fd = new FormData();
+    fd.append("folder_id", folderId);
+    fd.append("color", color ?? "");
+    startTransition(async () => {
+      await setFolderColor(fd);
     });
   }
 
@@ -140,7 +163,11 @@ export function FoldersManager({ organizationId, folders }: Props) {
                     />
                   ) : (
                     <div className="flex items-center gap-2">
-                      <FolderIcon />
+                      <ColorSwatchPicker
+                        currentColor={f.color}
+                        onPick={(c) => applyColor(f.id, c)}
+                        disabled={isPending}
+                      />
                       <span className="truncate text-sm font-medium text-[var(--fg)]">
                         {f.name}
                       </span>
@@ -240,11 +267,102 @@ export function FoldersManager({ organizationId, folders }: Props) {
   );
 }
 
-function FolderIcon() {
+function FolderIcon({ color }: { color?: string | null }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill={color ?? "none"}
+      stroke={color ?? "currentColor"}
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
     </svg>
+  );
+}
+
+/**
+ * Compact color picker shown as a swatch on each folder row. Click opens
+ * a small palette; selecting writes the new color via setFolderColor.
+ */
+function ColorSwatchPicker({
+  currentColor,
+  onPick,
+  disabled,
+}: {
+  currentColor: string | null;
+  onPick: (color: string | null) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        disabled={disabled}
+        className="inline-flex h-5 w-5 items-center justify-center rounded transition hover:bg-white/[0.05]"
+        title={currentColor ? `Color: ${currentColor}` : "Set a color"}
+        aria-label="Pick folder color"
+      >
+        <FolderIcon color={currentColor} />
+      </button>
+      {open ? (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
+          <div
+            className="absolute left-0 z-50 mt-1 flex flex-wrap gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-2 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+            role="menu"
+          >
+            {PALETTE.map((c) => (
+              <button
+                key={c ?? "none"}
+                type="button"
+                onClick={() => {
+                  onPick(c);
+                  setOpen(false);
+                }}
+                className={[
+                  "h-5 w-5 rounded-md border transition hover:scale-110",
+                  currentColor === c
+                    ? "border-[var(--fg)]"
+                    : "border-[var(--border)]",
+                ].join(" ")}
+                style={{
+                  background: c ?? "transparent",
+                  position: "relative",
+                }}
+                title={c ?? "No color"}
+                aria-label={c ?? "No color"}
+              >
+                {c === null ? (
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 m-auto h-3 w-3 rotate-45"
+                    style={{
+                      borderTop: "1.5px solid var(--fg-subtle)",
+                    }}
+                  />
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 function UpIcon() {

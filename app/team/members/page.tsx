@@ -144,6 +144,7 @@ export default async function TeamMembersPage({
               <select name="role" defaultValue="member" className="cl-input sm:w-32">
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
+                <option value="viewer">Viewer (read-only)</option>
               </select>
               <button type="submit" className="cl-btn-accent shrink-0">
                 Send invite

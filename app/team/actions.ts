@@ -83,7 +83,7 @@ export async function inviteMember(formData: FormData) {
   const emailRaw = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "member");
   if (!orgId || !emailRaw) return;
-  if (role !== "admin" && role !== "member") return;
+  if (role !== "admin" && role !== "member" && role !== "viewer") return;
   if (!emailRaw.includes("@")) {
     redirect(
       `/team?error=${encodeURIComponent("Enter a valid email address")}`,

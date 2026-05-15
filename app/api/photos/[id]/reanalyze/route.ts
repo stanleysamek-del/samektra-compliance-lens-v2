@@ -8,6 +8,7 @@ import {
   snapshotRatings,
   reapplyRatings,
 } from "@/lib/findings/preserve-ratings";
+import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -203,13 +204,28 @@ export async function POST(
   // every thumbs-up / thumbs-down the inspector had set.
   const ratingSnapshot = await snapshotRatings(supabase, photo.id);
 
+  // Auto-resolve punch-list items the fresh AI pass no longer flags.
+  // Must run BEFORE the delete so we can read the OPEN set.
+  const autoResolvedCount = await autoResolveClearedPunchListItems(
+    supabase,
+    photo.id,
+    analysis.notVisible.map((n) => ({ item: n.item })),
+  );
+
   await supabase
     .from("findings")
     .delete()
     .eq("photo_id", photo.id)
     .or("edited.is.null,edited.eq.false");
   await supabase.from("what_to_look_for").delete().eq("photo_id", photo.id);
-  await supabase.from("not_visible").delete().eq("photo_id", photo.id);
+  // Wipe only the still-open not_visible rows so we preserve the audit
+  // trail of just-auto-resolved + previously-resolved/skipped items.
+  await supabase
+    .from("not_visible")
+    .delete()
+    .eq("photo_id", photo.id)
+    .eq("resolved", false)
+    .eq("skipped", false);
 
   if (analysis.violations.length > 0) {
     await supabase.from("findings").insert(
@@ -295,5 +311,6 @@ export async function POST(
     contextUsed: answers.length,
     preservedUserFindings: preservedCount ?? 0,
     ratingsRestored: restoredRatings,
+    autoResolvedPunchList: autoResolvedCount,
   });
 }

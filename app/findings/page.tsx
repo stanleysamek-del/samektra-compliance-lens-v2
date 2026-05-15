@@ -122,13 +122,40 @@ export default async function FindingsDashboardPage({
   let thumbsUp = 0;
   let thumbsDown = 0;
   let unrated = 0;
+  // 12-week severity time-series. Index 0 = oldest week, 11 = this week.
+  const WEEKS = 12;
+  const now = new Date();
+  // Start-of-week boundary (Monday 00:00 UTC) for the most recent week.
+  const thisWeekStart = startOfWeek(now);
+  const weekBuckets = Array.from({ length: WEEKS }, () => ({
+    high: 0,
+    medium: 0,
+    low: 0,
+  }));
   for (const r of rows) {
     sevCounts[r.severity] = (sevCounts[r.severity] ?? 0) + 1;
     catCounts.set(r.category, (catCounts.get(r.category) ?? 0) + 1);
     if (r.user_rating === 1) thumbsUp += 1;
     else if (r.user_rating === -1) thumbsDown += 1;
     else unrated += 1;
+
+    const created = new Date(r.created_at);
+    const weeksAgo = Math.floor(
+      (thisWeekStart.getTime() - startOfWeek(created).getTime()) /
+        (7 * 24 * 60 * 60 * 1000),
+    );
+    if (weeksAgo >= 0 && weeksAgo < WEEKS) {
+      const idx = WEEKS - 1 - weeksAgo;
+      if (r.severity === "High") weekBuckets[idx].high += 1;
+      else if (r.severity === "Medium") weekBuckets[idx].medium += 1;
+      else weekBuckets[idx].low += 1;
+    }
   }
+  // Max stack height for relative scaling of the bars.
+  const maxWeekTotal = Math.max(
+    1,
+    ...weekBuckets.map((b) => b.high + b.medium + b.low),
+  );
   // Sort categories by count desc for the bar chart.
   const sortedCats = Array.from(catCounts.entries()).sort(
     (a, b) => b[1] - a[1],
@@ -144,13 +171,33 @@ export default async function FindingsDashboardPage({
       }}
     >
       <div className="flex flex-col gap-5">
-        <div className="px-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
-            Findings
-          </h1>
-          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
-            Every finding across every inspection in one place.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3 px-1">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
+              Findings
+            </h1>
+            <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
+              Every finding across every inspection in one place.
+            </p>
+          </div>
+          {/* CSV export respects current filters via the same query string. */}
+          <a
+            href={`/api/findings/export/csv${
+              filters.severity || filters.category || filters.rating
+                ? `?${new URLSearchParams(
+                    Object.entries({
+                      severity: filters.severity,
+                      category: filters.category,
+                      rating: filters.rating,
+                    }).filter(([, v]) => v !== null) as [string, string][],
+                  ).toString()}`
+                : ""
+            }`}
+            className="cl-btn-outline"
+            title="Download all findings (matching current filters) as a CSV file"
+          >
+            Download CSV
+          </a>
         </div>
 
         {/* Summary tiles */}
@@ -202,6 +249,94 @@ export default async function FindingsDashboardPage({
                 <span className="text-[var(--fg-subtle)]">
                   ({pct(unrated, totalCount)})
                 </span>
+              </span>
+            </div>
+          </Card>
+        ) : null}
+
+        {/* Time-series — last 12 weeks, stacked severity bars. Built from
+            in-memory aggregation; no extra query. */}
+        {totalCount > 0 ? (
+          <Card>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+              Last 12 weeks
+            </h2>
+            <div className="mt-3 flex h-32 items-end gap-1">
+              {weekBuckets.map((b, idx) => {
+                const total = b.high + b.medium + b.low;
+                const pctH = total === 0 ? 0 : (b.high / maxWeekTotal) * 100;
+                const pctM = total === 0 ? 0 : (b.medium / maxWeekTotal) * 100;
+                const pctL = total === 0 ? 0 : (b.low / maxWeekTotal) * 100;
+                // Labels — show every 2nd week to avoid clutter.
+                const weekDate = new Date(thisWeekStart);
+                weekDate.setUTCDate(
+                  weekDate.getUTCDate() - (WEEKS - 1 - idx) * 7,
+                );
+                const showLabel = idx % 2 === 0 || idx === WEEKS - 1;
+                return (
+                  <div
+                    key={idx}
+                    className="flex flex-1 flex-col items-center justify-end gap-1"
+                    title={`Week of ${weekDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · ${b.high}H / ${b.medium}M / ${b.low}L`}
+                  >
+                    <div className="flex w-full flex-col-reverse">
+                      {b.low > 0 ? (
+                        <div
+                          style={{
+                            height: `${Math.max(pctL, 2)}%`,
+                            background: "#cbd5e1",
+                          }}
+                          className="rounded-b-sm"
+                        />
+                      ) : null}
+                      {b.medium > 0 ? (
+                        <div
+                          style={{
+                            height: `${Math.max(pctM, 2)}%`,
+                            background: "#fbbf24",
+                          }}
+                        />
+                      ) : null}
+                      {b.high > 0 ? (
+                        <div
+                          style={{
+                            height: `${Math.max(pctH, 2)}%`,
+                            background: "#ef4444",
+                          }}
+                          className="rounded-t-sm"
+                        />
+                      ) : null}
+                      {/* Floor so empty weeks still occupy space. */}
+                      {total === 0 ? (
+                        <div
+                          style={{ height: "2%", background: "var(--border)" }}
+                          className="rounded-sm"
+                        />
+                      ) : null}
+                    </div>
+                    <span
+                      className="h-3 text-[9px] text-[var(--fg-subtle)]"
+                      style={{ visibility: showLabel ? "visible" : "hidden" }}
+                    >
+                      {weekDate.toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-[var(--fg-subtle)]">
+              <Legend color="#ef4444" label="High" />
+              <Legend color="#fbbf24" label="Medium" />
+              <Legend color="#cbd5e1" label="Low" />
+              <span className="ml-auto">
+                Total in window:{" "}
+                {weekBuckets.reduce(
+                  (acc, b) => acc + b.high + b.medium + b.low,
+                  0,
+                )}
               </span>
             </div>
           </Card>
@@ -345,6 +480,34 @@ export default async function FindingsDashboardPage({
       </div>
     </AppShell>
   );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        aria-hidden
+        className="inline-block h-2 w-2 rounded-sm"
+        style={{ background: color }}
+      />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Normalize a Date to the start of its ISO week (Monday 00:00 UTC) so
+ * findings created at different times within a week land in the same
+ * bucket on the time-series chart.
+ */
+function startOfWeek(d: Date): Date {
+  const out = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+  const day = out.getUTCDay(); // 0=Sun..6=Sat
+  const diff = (day + 6) % 7; // back to Monday
+  out.setUTCDate(out.getUTCDate() - diff);
+  return out;
 }
 
 function pct(n: number, total: number): string {

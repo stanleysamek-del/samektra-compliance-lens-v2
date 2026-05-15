@@ -67,13 +67,17 @@ export function AppShell({ user, children }: Props) {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Persistent primary action — same intent as SC's "+ Create"
-                button. Always one click away from anywhere in the app. */}
+                button. Always one click away from anywhere in the app.
+                Collapses to just the icon on the narrowest viewports so
+                the header doesn't crowd. */}
             <Link
               href="/inspections/new"
-              className="hidden items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-[#0a0d12] transition hover:bg-[var(--accent-hover)] sm:inline-flex"
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-[#0a0d12] transition hover:bg-[var(--accent-hover)] sm:px-2.5"
               title="Start a new inspection"
+              aria-label="New inspection"
             >
-              <PlusGlyph /> New
+              <PlusGlyph />
+              <span className="hidden sm:inline">New</span>
             </Link>
             <OrgSwitcher />
             <HelpDrawer />

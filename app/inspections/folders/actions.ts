@@ -35,6 +35,30 @@ export async function createFolder(formData: FormData) {
   revalidatePath("/inspections/history");
 }
 
+export async function setFolderColor(formData: FormData) {
+  const folderId = String(formData.get("folder_id") ?? "");
+  const colorRaw = String(formData.get("color") ?? "").trim();
+  if (!folderId) return;
+
+  // Accept 7-char hex (#RRGGBB) or empty/none → null. Anything else is
+  // silently discarded to keep arbitrary CSS out of the DB column.
+  const color = /^#[0-9a-fA-F]{6}$/.test(colorRaw) ? colorRaw : null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  await supabase
+    .from("inspection_folders")
+    .update({ color })
+    .eq("id", folderId);
+
+  revalidatePath("/inspections");
+  revalidatePath("/inspections/history");
+}
+
 export async function renameFolder(formData: FormData) {
   const folderId = String(formData.get("folder_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();

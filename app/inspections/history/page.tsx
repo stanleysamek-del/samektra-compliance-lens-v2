@@ -114,14 +114,24 @@ export default async function HistoryPage({
 
   // Fetch folders for the current org so we can render the manager
   // + group inspections by folder. Personal workspace has no folders.
-  let folders: Array<{ id: string; name: string; sort_order: number }> = [];
+  let folders: Array<{
+    id: string;
+    name: string;
+    sort_order: number;
+    color: string | null;
+  }> = [];
   if (currentOrg) {
     const { data: folderRows } = await supabase
       .from("inspection_folders")
-      .select("id, name, sort_order")
+      .select("id, name, sort_order, color")
       .eq("organization_id", currentOrg.id)
       .order("sort_order", { ascending: true });
-    folders = folderRows ?? [];
+    folders = (folderRows ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      sort_order: f.sort_order,
+      color: (f.color as string | null) ?? null,
+    }));
   }
 
   const inspectionCountByFolder = new Map<string, number>();
@@ -137,6 +147,7 @@ export default async function HistoryPage({
     id: f.id,
     name: f.name,
     sort_order: f.sort_order,
+    color: f.color,
     inspectionCount: inspectionCountByFolder.get(f.id) ?? 0,
   }));
   const folderOptions = folders.map((f) => ({ id: f.id, name: f.name }));
@@ -347,10 +358,25 @@ export default async function HistoryPage({
                   });
                 }
 
-                return grouped.map((g) => (
+                return grouped.map((g) => {
+                  const folderColor =
+                    g.key !== "unfiled"
+                      ? folders.find((f) => f.id === g.key)?.color ?? null
+                      : null;
+                  return (
                   <div key={g.key} className="flex flex-col gap-2">
                     {g.label ? (
-                      <h3 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                      <h3
+                        className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-[0.14em]"
+                        style={{ color: folderColor ?? "var(--accent)" }}
+                      >
+                        {folderColor ? (
+                          <span
+                            aria-hidden
+                            className="inline-block h-2 w-2 rounded-full"
+                            style={{ background: folderColor }}
+                          />
+                        ) : null}
                         {g.label}
                         <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
                           · {g.rows.length}{" "}
@@ -376,7 +402,8 @@ export default async function HistoryPage({
                       </ul>
                     )}
                   </div>
-                ));
+                  );
+                });
               })()}
             </>
           ) : (

@@ -7,6 +7,7 @@ import {
   snapshotRatings,
   reapplyRatings,
 } from "@/lib/findings/preserve-ratings";
+import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export const runtime = "nodejs";
@@ -355,13 +356,30 @@ export async function POST(
   // would silently vanish on every re-analysis.
   const ratingSnapshot = await snapshotRatings(supabase, photo.id);
 
+  // Auto-resolve any punch-list items the fresh AI pass no longer flags
+  // (Chip can now see what it couldn't before). Do this BEFORE deleting
+  // the not_visible rows — the function reads the OPEN set + checks
+  // which titles are present in the new analysis.notVisible array.
+  const autoResolvedCount = await autoResolveClearedPunchListItems(
+    supabase,
+    photo.id,
+    analysis.notVisible.map((n) => ({ item: n.item })),
+  );
+
   await supabase
     .from("findings")
     .delete()
     .eq("photo_id", photo.id)
     .or("edited.is.null,edited.eq.false");
   await supabase.from("what_to_look_for").delete().eq("photo_id", photo.id);
-  await supabase.from("not_visible").delete().eq("photo_id", photo.id);
+  // Only delete the NOT-already-resolved/skipped/just-auto-resolved rows.
+  // Otherwise we'd wipe the audit trail we just created.
+  await supabase
+    .from("not_visible")
+    .delete()
+    .eq("photo_id", photo.id)
+    .eq("resolved", false)
+    .eq("skipped", false);
 
   if (analysis.violations.length > 0) {
     await supabase.from("findings").insert(
@@ -429,6 +447,7 @@ export async function POST(
     findingsCount: analysis.violations.length,
     findingsPreserved: preservedCount ?? 0,
     ratingsRestored: restoredRatings,
+    autoResolvedPunchList: autoResolvedCount,
     whatToLookForCount: analysis.whatToLookFor.length,
     notVisibleCount: analysis.notVisible.length,
     confidence: analysis.summary?.confidence ?? null,

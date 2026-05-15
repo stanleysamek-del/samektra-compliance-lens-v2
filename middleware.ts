@@ -1,12 +1,5 @@
-import { type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
-
-export async function middleware(request: NextRequest) {
-  return await updateSession(request);
-}
-
-export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
-};
+// Renamed to proxy.ts per the Next.js 16 convention. This stub stays
+// empty so the file change shows up clean in git history; delete it
+// once the deploy succeeds with proxy.ts in place. Both files
+// co-existing is harmless — Next.js prefers proxy.ts when present.
+export {};
