@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
+import { DeleteTeamDialog } from "@/components/delete-team-dialog";
 import { getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import {
   inviteMember,
@@ -11,6 +12,8 @@ import {
   removeMember,
   leaveOrganization,
   switchCurrentOrg,
+  deleteOrganization,
+  transferAdminRole,
 } from "../actions";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://compliancelens.app";
@@ -68,6 +71,14 @@ export default async function TeamMembersPage({
     : { data: [] as never[] };
 
   const adminCount = (members ?? []).filter((m) => m.role === "admin").length;
+
+  // Eligible targets for "transfer admin role": members of this org who
+  // are not the current user. Includes existing admins (transferring to
+  // them just no-ops the promote step, then demotes the caller — useful
+  // when you want to step down without leaving outright).
+  const transferTargets = (members ?? []).filter(
+    (m) => m.user_id !== user.id,
+  );
 
   return (
     <AppShell user={userShell}>
@@ -285,6 +296,51 @@ export default async function TeamMembersPage({
           </ul>
         </section>
 
+        {/* Transfer admin role — admins only, requires another member */}
+        {isAdmin && transferTargets.length > 0 ? (
+          <Card>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+              Transfer admin role
+            </h2>
+            <p className="mt-1 text-[11px] text-[var(--fg-muted)]">
+              Promote another member to admin and step down to member in
+              one operation.{" "}
+              {adminCount === 1
+                ? "You're the only admin right now, so this is the way to unblock leaving the team."
+                : "Useful when handing off the team or rotating ownership."}
+            </p>
+            <form
+              action={transferAdminRole}
+              className="mt-3 flex flex-col gap-2 sm:flex-row"
+            >
+              <input type="hidden" name="organization_id" value={org.id} />
+              <select
+                name="member_id"
+                defaultValue=""
+                required
+                className="cl-input flex-1"
+              >
+                <option value="" disabled>
+                  Select a member…
+                </option>
+                {transferTargets.map((m) => {
+                  const p = m.profiles as unknown as {
+                    full_name: string;
+                  } | null;
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {p?.full_name ?? "—"} ({m.role})
+                    </option>
+                  );
+                })}
+              </select>
+              <button type="submit" className="cl-btn-outline shrink-0">
+                Transfer &amp; step down
+              </button>
+            </form>
+          </Card>
+        ) : null}
+
         <Card>
           <form action={switchCurrentOrg} className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -302,6 +358,28 @@ export default async function TeamMembersPage({
             </button>
           </form>
         </Card>
+
+        {/* Danger zone — admins only */}
+        {isAdmin ? (
+          <section className="mt-2 flex flex-col gap-2">
+            <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: "#a8362b" }}>
+              Danger zone
+            </h2>
+            <div
+              className="rounded-lg border px-4 py-4"
+              style={{
+                borderColor: "rgba(168,54,43,0.35)",
+                background: "rgba(168,54,43,0.03)",
+              }}
+            >
+              <DeleteTeamDialog
+                orgId={org.id}
+                orgName={org.name}
+                action={deleteOrganization}
+              />
+            </div>
+          </section>
+        ) : null}
       </div>
     </AppShell>
   );

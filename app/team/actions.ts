@@ -267,6 +267,155 @@ export async function leaveOrganization(formData: FormData) {
   redirect("/team");
 }
 
+/**
+ * Transfer admin role: promote the target member to admin AND demote the
+ * acting user to member, in one operation. Useful when the sole admin
+ * wants to leave the team — they hand off, then the "Leave team" button
+ * unblocks (since adminCount is no longer 1 and they are no longer admin).
+ *
+ * Not strictly atomic (two updates, not a transaction), but ordering is
+ * safe: we promote the target FIRST so the org always has at least one
+ * admin throughout the operation. If the demote-self step fails, the
+ * caller can re-run the demote manually via the role dropdown.
+ */
+export async function transferAdminRole(formData: FormData) {
+  const targetMemberId = String(formData.get("member_id") ?? "");
+  const orgId = String(formData.get("organization_id") ?? "");
+  if (!targetMemberId || !orgId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Look up the target row to make sure it belongs to this org and to
+  // grab the user_id (so we can reject self-transfer cleanly).
+  const { data: target } = await supabase
+    .from("organization_members")
+    .select("id, user_id, organization_id, role")
+    .eq("id", targetMemberId)
+    .maybeSingle();
+
+  if (!target || target.organization_id !== orgId) {
+    redirect(
+      `/team/members?error=${encodeURIComponent("Member not found in this team")}`,
+    );
+  }
+
+  if (target!.user_id === user.id) {
+    redirect(
+      `/team/members?error=${encodeURIComponent("Pick someone else to transfer admin role to")}`,
+    );
+  }
+
+  // Step 1: promote target to admin.
+  const { error: promoteErr } = await supabase
+    .from("organization_members")
+    .update({ role: "admin" })
+    .eq("id", targetMemberId);
+  if (promoteErr) {
+    console.error("[transferAdminRole:promote]", promoteErr);
+    redirect(
+      `/team/members?error=${encodeURIComponent(
+        promoteErr.message || "Couldn't promote member. Are you an admin?",
+      )}`,
+    );
+  }
+
+  // Step 2: demote self to member.
+  const { error: demoteErr } = await supabase
+    .from("organization_members")
+    .update({ role: "member" })
+    .eq("organization_id", orgId)
+    .eq("user_id", user.id);
+  if (demoteErr) {
+    // Promote already succeeded, so the org isn't admin-less. Surface
+    // the partial state instead of failing silently.
+    console.error("[transferAdminRole:demote]", demoteErr);
+    redirect(
+      `/team/members?error=${encodeURIComponent(
+        "Promoted them to admin, but couldn't step down. Use the role dropdown to demote yourself.",
+      )}`,
+    );
+  }
+
+  revalidatePath("/team");
+  revalidatePath("/team/members");
+  redirect("/team/members");
+}
+
+/**
+ * Permanently delete an organization. Admin-only — RLS policy
+ * `orgs_admin_delete` enforces this server-side. Cascade FKs handle
+ * organization_members, organization_invites, and inspection_folders.
+ * Inspections previously assigned to the org have their organization_id
+ * set to NULL by the FK (so they become personal-workspace items for
+ * whoever created them) — they are NOT destroyed.
+ *
+ * Type-to-confirm: the form must include `confirm_name` matching the
+ * org name exactly. This prevents reflexive clicks on the wrong row.
+ */
+export async function deleteOrganization(formData: FormData) {
+  const orgId = String(formData.get("organization_id") ?? "");
+  const confirmName = String(formData.get("confirm_name") ?? "").trim();
+  if (!orgId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Re-fetch the org to verify the typed name matches. Doing this
+  // server-side prevents a stale client-side comparison from passing.
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (!org) {
+    redirect(
+      `/team/members?error=${encodeURIComponent("Team not found or you don't have access")}`,
+    );
+  }
+
+  if (confirmName !== org!.name) {
+    redirect(
+      `/team/members?error=${encodeURIComponent(
+        `Type the team name exactly to confirm: ${org!.name}`,
+      )}`,
+    );
+  }
+
+  const { error } = await supabase
+    .from("organizations")
+    .delete()
+    .eq("id", orgId);
+
+  if (error) {
+    console.error("[deleteOrganization]", error);
+    redirect(
+      `/team/members?error=${encodeURIComponent(
+        error.message || "Couldn't delete team. You must be an admin.",
+      )}`,
+    );
+  }
+
+  // If the deleted org was the active one, drop the cookie so the user
+  // falls back to personal workspace rather than a dangling reference.
+  const store = await cookies();
+  if (store.get(CURRENT_ORG_COOKIE)?.value === orgId) {
+    await setCurrentOrgCookie(null);
+  }
+
+  revalidatePath("/team");
+  revalidatePath("/team/members");
+  revalidatePath("/inspections");
+  redirect("/team");
+}
+
 /* =====================================================================
  * Org switcher
  * ===================================================================== */
