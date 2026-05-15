@@ -51,28 +51,59 @@ export function AppShell({ user, children }: Props) {
   return (
     <div className="min-h-dvh">
       {/* ===== Header ===== */}
-      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg-raised)]/80 backdrop-blur supports-[backdrop-filter]:bg-[var(--bg-raised)]/70">
+      <header
+        className="sticky top-0 z-30 border-b border-[var(--ink)]"
+        style={{
+          background: "rgba(236, 232, 218, 0.92)",
+          backdropFilter: "blur(8px) saturate(120%)",
+          WebkitBackdropFilter: "blur(8px) saturate(120%)",
+        }}
+      >
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4 sm:px-6 lg:pl-72">
-          <Link href="/inspections" className="flex items-center gap-2">
-            <SamektraMark size={28} />
-            <div className="flex flex-col leading-none">
-              <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
-                Samektra
-              </span>
-              <span className="text-sm font-semibold tracking-tight text-[var(--fg)]">
-                Compliance Lens
-              </span>
-            </div>
+          {/* Editorial wordmark — replaces the old SamektraMark glyph */}
+          <Link
+            href="/inspections"
+            className="inline-flex items-baseline gap-2"
+            style={{ color: "var(--ink)", textDecoration: "none" }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-jetbrains-mono)",
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "var(--slate)",
+              }}
+            >
+              Samektra
+            </span>
+            <span aria-hidden style={{ color: "var(--rule-paper)", fontSize: 12 }}>·</span>
+            <span
+              style={{
+                fontFamily: "var(--font-instrument-serif)",
+                fontSize: 18,
+                letterSpacing: "-0.01em",
+                lineHeight: 1,
+              }}
+            >
+              Compliance{" "}
+              <em style={{ fontStyle: "italic", color: "var(--gold-soft)" }}>
+                Lens
+              </em>
+            </span>
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Persistent primary action — same intent as SC's "+ Create"
-                button. Always one click away from anywhere in the app.
-                Collapses to just the icon on the narrowest viewports so
-                the header doesn't crowd. */}
+            {/* Persistent primary action — always one click away. */}
             <Link
               href="/inspections/new"
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-[#0a0d12] transition hover:bg-[var(--accent-hover)] sm:px-2.5"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold transition sm:px-2.5"
+              style={{
+                background: "var(--gold)",
+                color: "var(--ink)",
+                border: "1px solid var(--gold)",
+                fontFamily: "var(--font-geist-sans)",
+              }}
               title="Start a new inspection"
               aria-label="New inspection"
             >
@@ -82,10 +113,17 @@ export function AppShell({ user, children }: Props) {
             <OrgSwitcher />
             <HelpDrawer />
             <div className="hidden flex-col items-end leading-tight sm:flex">
-              <span className="text-sm font-medium text-[var(--fg)]">
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>
                 {user.fullName}
               </span>
-              <span className="text-xs text-[var(--fg-muted)]">
+              <span
+                style={{
+                  fontFamily: "var(--font-jetbrains-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  color: "var(--slate)",
+                }}
+              >
                 {user.organization || user.email || ""}
               </span>
             </div>
@@ -96,13 +134,31 @@ export function AppShell({ user, children }: Props) {
 
       <div className="mx-auto flex max-w-screen-2xl">
         {/* ===== Sidebar (desktop only) ===== */}
-        <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-64 shrink-0 border-r border-[var(--border)] px-4 py-6 lg:block">
+        <aside
+          className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-64 shrink-0 px-4 py-6 lg:block"
+          style={{ borderRight: "1px solid var(--ink)" }}
+        >
           <SidebarNav />
-          <div className="mt-6 border-t border-[var(--border)] pt-4">
+          <div
+            className="mt-6 pt-4"
+            style={{ borderTop: "1px solid var(--rule-paper)" }}
+          >
             <form action="/auth/sign-out" method="post">
               <button
                 type="submit"
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-[var(--fg-muted)] transition hover:bg-white/[0.03] hover:text-[var(--fg)]"
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-sm transition"
+                style={{
+                  color: "var(--slate)",
+                  background: "transparent",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(15, 21, 24, 0.04)";
+                  e.currentTarget.style.color = "var(--ink)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--slate)";
+                }}
               >
                 <SignOutIcon />
                 <span>Sign out</span>
@@ -131,7 +187,7 @@ export function AppShell({ user, children }: Props) {
 function SidebarNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-1">
+    <nav className="flex flex-col gap-0.5">
       {NAV.map((item) => {
         const active =
           pathname === item.href ||
@@ -140,22 +196,31 @@ function SidebarNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={[
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-              active
-                ? "bg-white/[0.04] text-[var(--fg)]"
-                : "text-[var(--fg-muted)] hover:bg-white/[0.03] hover:text-[var(--fg)]",
-              item.accent && !active ? "text-[var(--accent)]" : "",
-            ].join(" ")}
+            className="group flex items-center gap-3 px-3 py-2.5 transition"
+            style={{
+              background: active ? "rgba(15, 21, 24, 0.04)" : "transparent",
+              color: active
+                ? "var(--ink)"
+                : item.accent
+                  ? "var(--gold-soft)"
+                  : "var(--slate)",
+              borderLeft: active
+                ? "2px solid var(--gold)"
+                : "2px solid transparent",
+              fontFamily: "var(--font-geist-sans)",
+              fontSize: 13,
+              fontWeight: active ? 600 : 500,
+              textDecoration: "none",
+            }}
           >
             <span
-              className={
-                item.accent
-                  ? "text-[var(--accent)]"
+              style={{
+                color: item.accent
+                  ? "var(--gold-soft)"
                   : active
-                    ? "text-[var(--primary)]"
-                    : "text-current"
-              }
+                    ? "var(--gold-soft)"
+                    : "var(--slate)",
+              }}
             >
               {item.icon}
             </span>
@@ -172,8 +237,14 @@ function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--bg-raised)]/90 backdrop-blur lg:hidden"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
+      className="fixed inset-x-0 bottom-0 z-30 lg:hidden"
+      style={{
+        borderTop: "1px solid var(--ink)",
+        background: "rgba(236, 232, 218, 0.94)",
+        backdropFilter: "blur(8px) saturate(120%)",
+        WebkitBackdropFilter: "blur(8px) saturate(120%)",
+        paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+      }}
     >
       <div className="mx-auto grid max-w-screen-sm grid-cols-4">
         {NAV.map((item) => {
@@ -182,18 +253,19 @@ function BottomTabBar() {
             (item.href !== "/inspections" && pathname.startsWith(item.href));
 
           if (item.accent) {
-            // Raised orange Upload button — middle slot
+            // Raised gold Upload button — middle slot, square-edged.
             return (
               <div key={item.href} className="flex justify-center">
                 <Link
                   href={item.href}
                   aria-label={item.label}
-                  className="-mt-5 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg transition active:translate-y-px"
+                  className="-mt-5 flex h-14 w-14 items-center justify-center transition active:translate-y-px"
                   style={{
-                    background:
-                      "linear-gradient(180deg, #fb923c 0%, #ea580c 100%)",
+                    background: "var(--gold)",
+                    color: "var(--ink)",
+                    border: "1px solid var(--gold-soft)",
                     boxShadow:
-                      "0 12px 30px -10px rgba(249,115,22,0.55), 0 0 0 1px rgba(249,115,22,0.35)",
+                      "0 12px 24px -10px rgba(200, 155, 60, 0.55)",
                   }}
                 >
                   {item.icon}
@@ -207,12 +279,11 @@ function BottomTabBar() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              className={[
-                "flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition",
-                active
-                  ? "text-[var(--primary)]"
-                  : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
-              ].join(" ")}
+              className="flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition"
+              style={{
+                color: active ? "var(--ink)" : "var(--slate)",
+                fontFamily: "var(--font-geist-sans)",
+              }}
             >
               {item.icon}
               <span>{item.label}</span>
@@ -234,7 +305,18 @@ function UserAvatar({ name }: { name: string }) {
       .join("")
       .toUpperCase() || "·";
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-elevated)] text-xs font-semibold text-[var(--fg)]">
+    <div
+      className="flex h-9 w-9 items-center justify-center text-xs"
+      style={{
+        background: "var(--gold)",
+        color: "var(--ink)",
+        border: "1px solid var(--ink)",
+        fontFamily: "var(--font-instrument-serif)",
+        fontSize: 13,
+        lineHeight: 1,
+      }}
+      title={name}
+    >
       {initials}
     </div>
   );

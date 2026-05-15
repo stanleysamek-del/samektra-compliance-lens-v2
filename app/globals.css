@@ -1,118 +1,162 @@
 @import "tailwindcss";
 
+/* =====================================================================
+ *  Editorial design tokens — applied app-wide.
+ *  Cream paper + ink + gold-italic accent. Rectangular by intent.
+ *
+ *  Legacy token names (--bg, --fg, --primary, etc.) are kept as aliases
+ *  so existing components that key off them remap automatically. New code
+ *  should prefer the brand-aligned names (--ink, --paper, --gold).
+ * ===================================================================== */
 :root {
-  --bg:           #07090d;
-  --bg-elevated:  #0d1117;
-  --bg-raised:    #11161f;
-  --bg-input:     #0a0d12;
+  /* === Brand palette === */
+  --ink:           #0f1518;
+  --ink-2:         #1a2226;
+  --paper:         #ece8da;
+  --paper-2:       #f3efe3;
+  --paper-3:       #d9d3c0;
+  --rule-paper:    #b9b39e;
+  --gold:          #c89b3c;
+  --gold-soft:     #b8902f;
+  --slate:         #5f6b72;
+  --slate-2:       #8a9097;
 
-  --border:       rgba(148, 163, 184, 0.12);
-  --border-strong:rgba(148, 163, 184, 0.22);
-  --ring:         rgba(20, 184, 166, 0.35);
+  /* Severity — paper variants for the cream background */
+  --severity-high: #a8362b;
+  --severity-med:  #b8762a;
+  --severity-low:  #607a3a;
 
-  --fg:           #f1f5f9;
-  --fg-muted:     #94a3b8;
-  --fg-subtle:    #64748b;
+  /* === Legacy aliases (do not remove — many existing components key off these) === */
+  --bg:            var(--paper);
+  --bg-elevated:   var(--paper-2);
+  --bg-raised:     var(--paper);
+  --bg-input:      var(--paper-2);
 
-  --primary:      #14b8a6;
-  --primary-hover:#0d9488;
-  --primary-fg:   #022c22;
-  --accent:       #f97316;
-  --accent-hover: #ea580c;
+  --border:        var(--rule-paper);
+  --border-strong: var(--ink);
+  --ring:          rgba(200, 155, 60, 0.35);
 
-  --success:      #22c55e;
-  --warning:      #f59e0b;
-  --danger:       #ef4444;
+  --fg:            var(--ink);
+  --fg-muted:      var(--slate);
+  --fg-subtle:     var(--slate);
 
-  --radius:       14px;
-  --radius-sm:    10px;
-  --radius-lg:    20px;
+  --primary:       var(--ink);
+  --primary-hover: var(--ink-2);
+  --primary-fg:    var(--paper);
+  --accent:        var(--gold);
+  --accent-hover:  var(--gold-soft);
 
-  color-scheme: dark;
+  --success:       #607a3a;
+  --warning:       #b8762a;
+  --danger:        #a8362b;
+
+  /* Editorial design is rectangular — radii collapse to 0. */
+  --radius:        0;
+  --radius-sm:     0;
+  --radius-lg:    0;
+
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--bg);
-  --color-foreground: var(--fg);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans:   var(--font-geist-sans);
+  --font-mono:   var(--font-jetbrains-mono);
+  --font-serif:  var(--font-instrument-serif);
 }
 
 html, body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Subtle paper grain — replaces the old dark gradient overlay. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: -1;
-  background:
-    radial-gradient(60vw 50vh at 12% -10%,  rgba(20, 184, 166, 0.10), transparent 60%),
-    radial-gradient(50vw 45vh at 92% -8%,   rgba(249, 115, 22, 0.08), transparent 60%),
-    radial-gradient(120vw 80vh at 50% 110%, rgba(2, 6, 23, 1),         transparent 70%);
+  background-image:
+    radial-gradient(rgba(15, 21, 24, 0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: 0.6;
+}
+
+/* Headings default to the editorial serif. Components can opt out by
+ * applying their own font-family inline. */
+h1, h2 {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* Italic accent on serif headings = brand. Use <em> inside h1/h2. */
+h1 em, h2 em {
+  font-style: italic;
+  color: var(--gold-soft);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--ink);
 }
 
 button, [role="button"], a.btn {
   min-height: 44px;
 }
 
+/* =====================================================================
+ *  .cl-card — editorial paper card with hairline ink border.
+ *  No radius. Subtle paper-stack offset shadow for elevation.
+ * ===================================================================== */
 .cl-card {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 40%),
-    var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.03) inset,
-    0 12px 40px -16px rgba(0,0,0,0.6);
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+  border-radius: 0;
 }
 
 .cl-card-tinted-orange {
   background:
-    radial-gradient(120% 120% at 0% 0%, rgba(249, 115, 22, 0.10), transparent 55%),
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 40%),
-    var(--bg-elevated);
-  border: 1px solid rgba(249, 115, 22, 0.20);
-  border-radius: var(--radius);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.03) inset,
-    0 12px 40px -16px rgba(0,0,0,0.6);
+    radial-gradient(120% 120% at 0% 0%, rgba(200, 155, 60, 0.10), transparent 55%),
+    var(--paper-2);
+  border: 1px solid var(--ink);
+  border-radius: 0;
 }
 
 .cl-card-tinted-teal {
   background:
-    radial-gradient(120% 120% at 100% 0%, rgba(20, 184, 166, 0.10), transparent 55%),
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 40%),
-    var(--bg-elevated);
-  border: 1px solid rgba(20, 184, 166, 0.20);
-  border-radius: var(--radius);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.03) inset,
-    0 12px 40px -16px rgba(0,0,0,0.6);
+    radial-gradient(120% 120% at 100% 0%, rgba(96, 122, 58, 0.10), transparent 55%),
+    var(--paper-2);
+  border: 1px solid var(--ink);
+  border-radius: 0;
 }
 
+/* =====================================================================
+ *  Buttons — black ink rectangle with gold-italic arrow on primary.
+ *  Rectangular, no radius. Hover transitions to ink-2.
+ * ===================================================================== */
 .cl-btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
+  gap: 10px;
+  padding: 0 22px;
   height: 44px;
-  border-radius: var(--radius-sm);
-  background: var(--primary);
-  color: white;
-  font-weight: 600;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 500;
   font-size: 14px;
   letter-spacing: 0.01em;
   transition: background 120ms ease, transform 120ms ease;
 }
-.cl-btn-primary:hover { background: var(--primary-hover); }
+.cl-btn-primary:hover { background: var(--ink-2); }
 .cl-btn-primary:active { transform: translateY(1px); }
 .cl-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -120,65 +164,113 @@ button, [role="button"], a.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
+  gap: 10px;
+  padding: 0 22px;
   height: 44px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  font-family: var(--font-geist-sans), sans-serif;
   font-weight: 500;
   font-size: 14px;
   transition: background 120ms ease, border-color 120ms ease;
 }
 .cl-btn-outline:hover {
-  background: rgba(255,255,255,0.03);
-  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 21, 24, 0.04);
 }
 
 .cl-btn-accent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
+  gap: 10px;
+  padding: 0 22px;
   height: 44px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: white;
-  font-weight: 600;
+  border-radius: 0;
+  background: var(--gold);
+  color: var(--ink);
+  border: 1px solid var(--gold);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 500;
   font-size: 14px;
   transition: background 120ms ease, transform 120ms ease;
 }
-.cl-btn-accent:hover { background: var(--accent-hover); }
+.cl-btn-accent:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
 .cl-btn-accent:active { transform: translateY(1px); }
 
+/* =====================================================================
+ *  Inputs — paper background, 1px ink border, gold focus ring.
+ * ===================================================================== */
 .cl-input {
   width: 100%;
   height: 44px;
   padding: 0 14px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  font-size: 15px;
+  border-radius: 0;
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
-.cl-input::placeholder { color: var(--fg-subtle); }
+.cl-input::placeholder { color: var(--rule-paper); }
 .cl-input:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--ring);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.25);
 }
 .cl-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
+textarea.cl-input {
+  height: auto;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
+/* =====================================================================
+ *  Labels — mono uppercase small-caps. Brand pattern for field titles.
+ * ===================================================================== */
 .cl-label {
   display: block;
-  font-size: 13px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
   font-weight: 500;
-  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--slate);
   margin-bottom: 6px;
-  letter-spacing: 0.01em;
+}
+
+/* =====================================================================
+ *  Editorial primitives — useful across the app
+ * ===================================================================== */
+.cl-eyebrow {
+  display: inline-block;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.cl-hairline {
+  height: 1px;
+  background: var(--ink);
+  opacity: 0.85;
+}
+
+.cl-stamp {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid var(--gold);
+  background: rgba(200, 155, 60, 0.04);
+  color: var(--gold-soft);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .cl-status-dot {
@@ -187,15 +279,18 @@ button, [role="button"], a.btn {
   border-radius: 50%;
   display: inline-block;
 }
-.cl-status-dot.online { background: var(--success); box-shadow: 0 0 8px rgba(34,197,94,0.6); }
+.cl-status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(96, 122, 58, 0.5);
+}
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: rgba(15, 21, 24, 0.25) transparent;
 }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
+  background: rgba(15, 21, 24, 0.25);
+  border-radius: 0;
 }
 *::-webkit-scrollbar-track { background: transparent; }

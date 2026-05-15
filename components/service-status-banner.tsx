@@ -72,11 +72,13 @@ export function ServiceStatusBanner() {
   return (
     <div
       role="status"
-      className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b px-4 py-2 text-xs font-medium backdrop-blur"
+      className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b px-4 py-2 text-xs font-medium"
       style={{
-        borderColor: isDown ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.35)",
-        background: isDown ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.10)",
-        color: isDown ? "#fca5a5" : "#fde68a",
+        borderColor: isDown ? "rgba(168,54,43,0.45)" : "rgba(184,118,42,0.45)",
+        background: isDown ? "rgba(168,54,43,0.10)" : "rgba(184,118,42,0.10)",
+        color: isDown ? "#a8362b" : "#b8762a",
+        fontFamily: "var(--font-jetbrains-mono)",
+        letterSpacing: "0.04em",
       }}
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -84,10 +86,7 @@ export function ServiceStatusBanner() {
           aria-hidden
           className="inline-block h-2 w-2 shrink-0 rounded-full"
           style={{
-            background: isDown ? "#ef4444" : "#f59e0b",
-            boxShadow: isDown
-              ? "0 0 8px 2px rgba(239,68,68,0.5)"
-              : "0 0 8px 2px rgba(245,158,11,0.4)",
+            background: isDown ? "#a8362b" : "#b8762a",
           }}
         />
         <span className="truncate">{message}</span>
