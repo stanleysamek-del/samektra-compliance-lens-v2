@@ -772,7 +772,7 @@ export function PhotoEditor({
           >
             {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
           </button>
-          {selected?.kind === "annotation" && selected.type === "text" ? (
+          {selected && selected.kind === "annotation" && selected.type === "text" ? (
             <button
               type="button"
               onClick={editSelectedText}
@@ -986,9 +986,9 @@ export function PhotoEditor({
               Cancel
             </button>
             <span className="text-[11px] text-white/50">
-              {selected?.kind === "bbox"
+              {selected && selected.kind === "bbox"
                 ? `AI finding #${selected.index + 1} selected`
-                : selected?.kind === "annotation"
+                : selected && selected.kind === "annotation"
                   ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected`
                   : "Pick a tool, drag on the photo"}
             </span>
@@ -1144,7 +1144,7 @@ export function PhotoEditor({
               >
                 {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
               </button>
-              {selected?.kind === "annotation" && selected.type === "text" ? (
+              {selected && selected.kind === "annotation" && selected.type === "text" ? (
                 <button
                   type="button"
                   onClick={editSelectedText}
