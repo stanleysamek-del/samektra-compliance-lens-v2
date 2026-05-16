@@ -103,6 +103,27 @@ export function PhotoEditor({
   const [editing, setEditing] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
+  // While editing we render as a fullscreen overlay with the toolbar
+  // pinned to the bottom — the mobile-thumb-zone-friendly pattern that
+  // every photo annotation app converges on. Lock body scroll so the
+  // page doesn't move underneath, and ESC cancels back to view mode.
+  useEffect(() => {
+    if (!editing) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") cancelEditing();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+    // cancelEditing is stable (function declaration); intentionally omit
+    // it from deps so the lock setup runs exactly once per editing toggle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
   // Build the "shapes" working set when editing starts (we keep view-mode and
   // edit-mode state separate so cancelling fully discards drafts).
   const initialShapes: EditableShape[] = [
@@ -553,9 +574,73 @@ export function PhotoEditor({
   const selected = editing ? shapes.find((s) => s.id === selectedId) : null;
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Toolbar — only when editing */}
+    <div
+      className={
+        editing
+          ? "fixed inset-0 z-[60] flex flex-col bg-[var(--ink)]"
+          : "flex flex-col gap-3"
+      }
+      style={
+        editing
+          ? {
+              // Honor iOS home-indicator inset so the Save button isn't
+              // hidden behind it on phones with the bottom bar.
+              paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+            }
+          : undefined
+      }
+    >
+      {/* Fullscreen header — only when editing. Close X on the right,
+          short title on the left so the user knows where they are. */}
       {editing ? (
+        <header
+          className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3 sm:px-4"
+          style={{ background: "rgba(15,21,24,0.95)" }}
+        >
+          <div className="flex flex-col">
+            <span
+              className="text-[10px] uppercase tracking-[0.18em]"
+              style={{
+                fontFamily: "var(--font-jetbrains-mono)",
+                color: "rgba(255,255,255,0.5)",
+              }}
+            >
+              Annotate
+            </span>
+            <span className="text-xs text-white">
+              Tap a tool below, draw on the photo
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={cancelEditing}
+            aria-label="Close (cancels unsaved changes)"
+            className="flex h-9 w-9 items-center justify-center text-white/70 transition hover:bg-white/10 hover:text-white"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="m6 6 12 12M6 18 18 6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </header>
+      ) : null}
+
+      {/* Photo wrap: takes remaining height in fullscreen, intrinsic-sized inline. */}
+      <div
+        className={
+          editing
+            ? "flex min-h-0 flex-1 items-center justify-center overflow-auto p-2 sm:p-3"
+            : ""
+        }
+      >
+      {/* Toolbar renders BELOW the photo in fullscreen edit mode — see
+          after the photo-wrap close below. The original top-anchored
+          toolbar has been moved there. */}
+      {false ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2">
           <ToolBtn label="Select" active={tool === "select"} onClick={() => setTool("select")}>
             <SelectIcon />
@@ -748,7 +833,11 @@ export function PhotoEditor({
           if (!editing || e.touches.length === 0) return;
           onDown(e.touches[0].clientX, e.touches[0].clientY);
         }}
-        className="relative w-full overflow-hidden rounded-lg border border-[var(--border)] bg-black"
+        className={
+          editing
+            ? "relative inline-block max-h-full max-w-full overflow-hidden bg-black"
+            : "relative w-full overflow-hidden rounded-lg border border-[var(--border)] bg-black"
+        }
         style={{
           touchAction: editing ? "none" : "auto",
           cursor: editing ? (tool === "select" ? "default" : "crosshair") : "default",
@@ -760,7 +849,13 @@ export function PhotoEditor({
           alt=""
           draggable={false}
           onLoad={() => setImgLoaded(true)}
-          className="block w-full h-auto select-none"
+          // In edit mode: contain inside the available wrap (centered).
+          // In view mode: stretch to the card width as before.
+          className={
+            editing
+              ? "block max-h-[calc(100dvh-12rem)] w-auto max-w-full select-none object-contain"
+              : "block w-full h-auto select-none"
+          }
         />
 
         {imgLoaded ? (
@@ -867,8 +962,205 @@ export function PhotoEditor({
           </>
         ) : null}
       </div>
+      {/* /Photo container — close the photo-wrap div we opened above. */}
+      </div>
 
-      {/* Bottom action row: Annotate button (view mode) or hint (edit mode) */}
+      {/* ============== BOTTOM TOOLBAR (edit mode only) ==============
+          Sticks to the bottom of the fullscreen overlay so the controls
+          are in the thumb zone on phones. Horizontally scrollable on
+          narrow screens so every tool stays one tap away. */}
+      {editing ? (
+        <div
+          className="shrink-0 border-t border-white/10 px-2 py-2"
+          style={{ background: "rgba(15,21,24,0.95)" }}
+        >
+          {/* Save/Cancel row — primary actions on top, always visible
+              even on smallest viewports. */}
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={cancelEditing}
+              disabled={isPending}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <span className="text-[11px] text-white/50">
+              {selected?.kind === "bbox"
+                ? `AI finding #${selected.index + 1} selected`
+                : selected?.kind === "annotation"
+                  ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected`
+                  : "Pick a tool, drag on the photo"}
+            </span>
+            <button
+              type="button"
+              onClick={saveAndExit}
+              disabled={isPending}
+              className="cl-btn-accent !px-4 !py-1.5 !text-xs"
+            >
+              {isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+
+          {/* Tools strip — horizontally scrollable on small screens.
+              Each tool gets a 44px touch target (iOS minimum). */}
+          <div className="-mx-2 overflow-x-auto px-2">
+            <div className="flex min-w-max items-center gap-2 pb-1">
+              <ToolBtn label="Select" active={tool === "select"} onClick={() => setTool("select")}>
+                <SelectIcon />
+              </ToolBtn>
+              <ToolBtn label="Rectangle" active={tool === "rect"} onClick={() => setTool("rect")}>
+                <RectIcon />
+              </ToolBtn>
+              <ToolBtn label="Circle" active={tool === "circle"} onClick={() => setTool("circle")}>
+                <CircleIcon />
+              </ToolBtn>
+              <ToolBtn label="Arrow" active={tool === "arrow"} onClick={() => setTool("arrow")}>
+                <ArrowIcon />
+              </ToolBtn>
+              <ToolBtn label="Text" active={tool === "text"} onClick={() => setTool("text")}>
+                <TextIcon />
+              </ToolBtn>
+
+              <span className="h-7 w-px shrink-0 bg-white/15" />
+
+              {/* Color swatches */}
+              {COLORS.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  title={c.label}
+                  onClick={() => changeSelectedColor(c.hex)}
+                  className="h-8 w-8 shrink-0 rounded-full border-2"
+                  style={{
+                    background: c.hex,
+                    borderColor: color === c.hex ? "#ffffff" : "transparent",
+                    boxShadow:
+                      color === c.hex ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
+                  }}
+                />
+              ))}
+
+              <span className="h-7 w-px shrink-0 bg-white/15" />
+
+              {/* Line thickness */}
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-white/50">
+                Width
+              </span>
+              {[1, 2, 3].map((sw) => (
+                <button
+                  key={`sw-${sw}`}
+                  type="button"
+                  title={sw === 1 ? "Thin" : sw === 2 ? "Medium" : "Thick"}
+                  onClick={() => changeSelectedStrokeWidth(sw)}
+                  className={[
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition",
+                    strokeWidth === sw
+                      ? "border-[var(--gold)] bg-white/10"
+                      : "border-white/20 hover:bg-white/5",
+                  ].join(" ")}
+                >
+                  <span
+                    className="block w-5 rounded-full bg-white"
+                    style={{ height: sw === 1 ? 1 : sw === 2 ? 2 : 4 }}
+                  />
+                </button>
+              ))}
+
+              <span className="h-7 w-px shrink-0 bg-white/15" />
+
+              {/* Text size */}
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-white/50">
+                Text
+              </span>
+              {[
+                { v: 1, label: "S", size: "text-[10px]" },
+                { v: 2, label: "M", size: "text-xs" },
+                { v: 3, label: "L", size: "text-sm" },
+              ].map(({ v, label, size }) => (
+                <button
+                  key={`fs-${v}`}
+                  type="button"
+                  title={`Text ${label}`}
+                  onClick={() => changeSelectedFontSize(v)}
+                  className={[
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border font-bold transition",
+                    size,
+                    fontSize === v
+                      ? "border-[var(--gold)] bg-white/10 text-white"
+                      : "border-white/20 text-white/70 hover:bg-white/5 hover:text-white",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+
+              <span className="h-7 w-px shrink-0 bg-white/15" />
+
+              {/* Fill */}
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-white/50">
+                Fill
+              </span>
+              <button
+                key="fill-none"
+                type="button"
+                title="No fill"
+                onClick={() => changeSelectedFill(undefined)}
+                className={[
+                  "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 bg-transparent",
+                  fill === undefined ? "border-white" : "border-white/30",
+                ].join(" ")}
+                style={{
+                  boxShadow:
+                    fill === undefined ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
+                }}
+              >
+                <span className="absolute h-[2px] w-5 rotate-45 bg-[#a8362b]" />
+              </button>
+              {COLORS.map((c) => (
+                <button
+                  key={`fill-${c.hex}`}
+                  type="button"
+                  title={`Fill ${c.label}`}
+                  onClick={() => changeSelectedFill(c.hex)}
+                  className="h-8 w-8 shrink-0 rounded-full border-2"
+                  style={{
+                    background: c.hex + "40",
+                    borderColor: fill === c.hex ? "#ffffff" : c.hex,
+                    boxShadow:
+                      fill === c.hex ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
+                  }}
+                />
+              ))}
+
+              <span className="h-7 w-px shrink-0 bg-white/15" />
+
+              {/* Delete + Edit text */}
+              <button
+                type="button"
+                disabled={!selected}
+                onClick={deleteSelected}
+                className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-[#fca5a5] transition hover:bg-[rgba(168,54,43,0.18)] disabled:opacity-30"
+              >
+                {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
+              </button>
+              {selected?.kind === "annotation" && selected.type === "text" ? (
+                <button
+                  type="button"
+                  onClick={editSelectedText}
+                  className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white"
+                >
+                  Edit text
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bottom action row — view mode only. The hint paragraph that
+          used to live here for edit mode has moved into the fullscreen
+          header subtitle. */}
       {!editing ? (
         <div className="flex items-center justify-between gap-2 px-1 text-xs">
           <span className="text-[var(--fg-subtle)]">
@@ -890,14 +1182,7 @@ export function PhotoEditor({
             Annotate
           </button>
         </div>
-      ) : (
-        <p className="px-1 text-[11px] text-[var(--fg-subtle)]">
-          Pick a tool, click and drag on the photo. Switch to <strong>Select</strong> to
-          drag any shape (AI bboxes included) or grab a corner to resize.
-          Selected AI bbox + Delete → clears the bbox on that finding.
-          Save to persist.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
