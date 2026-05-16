@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { switchCurrentOrg } from "@/app/team/actions";
+import { useOutsideClick } from "@/lib/use-outside-click";
 
 type Org = { id: string; name: string; role: "admin" | "member" };
 
@@ -41,16 +42,8 @@ export function OrgSwitcher() {
     };
   }, []);
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
+  // Close on outside click — touch-aware so iOS taps close the menu.
+  useOutsideClick(menuRef, open, () => setOpen(false));
 
   if (!ctx) return null;
   if (ctx.all.length === 0) return null;

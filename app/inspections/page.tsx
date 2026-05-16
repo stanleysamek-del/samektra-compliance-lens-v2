@@ -411,12 +411,12 @@ function HomeStat({
         ? "var(--warning)"
         : "var(--fg)";
   return (
-    <div className="flex flex-col gap-1 px-5 py-4">
+    <div className="flex flex-col gap-1 px-3 py-3 sm:px-5 sm:py-4">
       <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
         {label}
       </span>
       <span
-        className="text-2xl font-semibold leading-none tracking-tight"
+        className="text-xl font-semibold leading-none tracking-tight sm:text-2xl"
         style={{ color: accent }}
       >
         {value}

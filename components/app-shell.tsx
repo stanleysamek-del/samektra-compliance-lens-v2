@@ -39,6 +39,26 @@ const NAV: NavItem[] = [
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
 ];
 
+/**
+ * Mobile tab bar shows 5 items max, with Upload in the center as the
+ * raised gold button. Profile lives in the header avatar dropdown on
+ * mobile, so it's omitted here — desktop sidebar still shows it via NAV.
+ * Order matters: the .accent item MUST be at index 2 (the middle slot)
+ * for the raised-button styling to position correctly.
+ */
+const MOBILE_NAV: NavItem[] = [
+  { href: "/inspections", label: "Home", icon: <HomeIcon /> },
+  { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
+  {
+    href: "/inspections/new",
+    label: "Upload",
+    icon: <UploadIcon />,
+    accent: true,
+  },
+  { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
+  { href: "/team", label: "Team", icon: <TeamIcon /> },
+];
+
 type Props = PropsWithChildren<{
   user: {
     fullName: string;
@@ -60,13 +80,17 @@ export function AppShell({ user, children }: Props) {
         }}
       >
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4 sm:px-6 lg:pl-72">
-          {/* Editorial wordmark — replaces the old SamektraMark glyph */}
+          {/* Editorial wordmark — replaces the old SamektraMark glyph.
+              On phones <640px we hide the "Samektra ·" eyebrow so the
+              wordmark fits next to the action cluster on the right
+              without pushing the OrgSwitcher off-screen. */}
           <Link
             href="/inspections"
-            className="inline-flex items-baseline gap-2"
+            className="inline-flex min-w-0 items-baseline gap-2"
             style={{ color: "var(--ink)", textDecoration: "none" }}
           >
             <span
+              className="hidden sm:inline"
               style={{
                 fontFamily: "var(--font-jetbrains-mono)",
                 fontSize: 10,
@@ -77,8 +101,15 @@ export function AppShell({ user, children }: Props) {
             >
               Samektra
             </span>
-            <span aria-hidden style={{ color: "var(--rule-paper)", fontSize: 12 }}>·</span>
             <span
+              aria-hidden
+              className="hidden sm:inline"
+              style={{ color: "var(--rule-paper)", fontSize: 12 }}
+            >
+              ·
+            </span>
+            <span
+              className="truncate"
               style={{
                 fontFamily: "var(--font-instrument-serif)",
                 fontSize: 18,
@@ -246,8 +277,8 @@ function BottomTabBar() {
         paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
       }}
     >
-      <div className="mx-auto grid max-w-screen-sm grid-cols-4">
-        {NAV.map((item) => {
+      <div className="mx-auto grid max-w-screen-sm grid-cols-5">
+        {MOBILE_NAV.map((item) => {
           const active =
             pathname === item.href ||
             (item.href !== "/inspections" && pathname.startsWith(item.href));

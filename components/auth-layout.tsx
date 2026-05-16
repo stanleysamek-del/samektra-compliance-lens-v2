@@ -117,15 +117,13 @@ export function AuthLayout({ title, subtitle, eyebrow, children }: Props) {
 
       {/* ============== Center card ============== */}
       <main className="relative z-10 flex flex-1 items-center justify-center px-5 pb-16 pt-4 sm:px-8">
-        <div className="w-full" style={{ maxWidth: 440 }}>
+        <div className="auth-card-wrap w-full" style={{ maxWidth: 440 }}>
           <div
+            className="auth-card"
             style={{
               background: "#f3efe3",
               border: "1px solid #0f1518",
-              padding: "36px 32px 32px",
               position: "relative",
-              // Paper-stack offset shadow per design spec
-              boxShadow: "20px 20px 0 -16px #d9d3c0",
             }}
           >
             {/* Eyebrow */}

@@ -215,7 +215,11 @@ function FindingRowMenu({
     };
     place();
 
-    const onDown = (e: MouseEvent) => {
+    // Touch-aware outside-click: iOS Safari doesn't reliably synthesize
+    // mousedown from a tap, so we listen for both event types. The
+    // handler skips clicks/taps inside the menu OR the toggle button so
+    // the same tap that opens the menu doesn't immediately close it.
+    const onDown = (e: MouseEvent | TouchEvent) => {
       const t = e.target as Node;
       if (
         menuRef.current?.contains(t) ||
@@ -231,11 +235,13 @@ function FindingRowMenu({
     const onScrollOrResize = () => place();
 
     document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown, { passive: true });
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);

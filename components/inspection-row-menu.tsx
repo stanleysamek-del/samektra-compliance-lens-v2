@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { deleteInspection } from "@/app/inspections/[id]/actions";
+import { useOutsideClick } from "@/lib/use-outside-click";
 
 type Props = {
   inspectionId: string;
@@ -16,17 +17,9 @@ type Props = {
 export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
+  // Listens for both mousedown AND touchstart so taps close the menu on
+  // iOS — the naive mousedown-only pattern misses touch events.
+  useOutsideClick(ref, open, () => setOpen(false));
 
   return (
     <div ref={ref} className="relative">

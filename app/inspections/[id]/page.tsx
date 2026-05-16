@@ -320,7 +320,7 @@ export default async function InspectionDetailPage({
               <StatusPill status={inspection.status} />
             </div>
 
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <Field label="Inspector" value={inspection.inspector_name} />
               <Field label="Date" value={inspection.date_of_inspection} />
               <Field label="Manager" value={inspection.manager_assigned} />
