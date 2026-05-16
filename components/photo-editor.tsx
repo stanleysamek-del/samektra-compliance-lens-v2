@@ -573,6 +573,20 @@ export function PhotoEditor({
 
   const selected = editing ? shapes.find((s) => s.id === selectedId) : null;
 
+  // Narrow `selected` once into typed variants so JSX can use them without
+  // re-checking. The chained `selected && selected.kind === ...` pattern
+  // inside JSX expressions wasn't narrowing reliably in Vercel's tsc
+  // (different version than local), so we hoist the narrowing here where
+  // standard control-flow analysis is unambiguous.
+  const selectedBbox =
+    selected && selected.kind === "bbox" ? selected : null;
+  const selectedAnnotation =
+    selected && selected.kind === "annotation" ? selected : null;
+  const selectedTextAnnotation =
+    selectedAnnotation && selectedAnnotation.type === "text"
+      ? selectedAnnotation
+      : null;
+
   return (
     <div
       className={
@@ -772,7 +786,7 @@ export function PhotoEditor({
           >
             {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
           </button>
-          {selected && selected.kind === "annotation" && selected.type === "text" ? (
+          {selectedTextAnnotation ? (
             <button
               type="button"
               onClick={editSelectedText}
@@ -986,10 +1000,10 @@ export function PhotoEditor({
               Cancel
             </button>
             <span className="text-[11px] text-white/50">
-              {selected && selected.kind === "bbox"
-                ? `AI finding #${selected.index + 1} selected`
-                : selected && selected.kind === "annotation"
-                  ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected`
+              {selectedBbox
+                ? `AI finding #${selectedBbox.index + 1} selected`
+                : selectedAnnotation
+                  ? `${selectedAnnotation.type[0].toUpperCase()}${selectedAnnotation.type.slice(1)} selected`
                   : "Pick a tool, drag on the photo"}
             </span>
             <button
@@ -1144,7 +1158,7 @@ export function PhotoEditor({
               >
                 {selected?.kind === "bbox" ? "Clear bbox" : "Delete"}
               </button>
-              {selected && selected.kind === "annotation" && selected.type === "text" ? (
+              {selectedTextAnnotation ? (
                 <button
                   type="button"
                   onClick={editSelectedText}
