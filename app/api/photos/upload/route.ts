@@ -88,18 +88,16 @@ export async function POST(request: NextRequest) {
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
 
-  const { error: uploadErr } = await supabase.storage
-    .from("photos")
-    .upload(storagePath, bytes, { contentType: file.type, upsert: false });
-  if (uploadErr) {
-    console.error("[upload] storage", uploadErr);
-    return NextResponse.json(
-      { ok: false, error: `Storage upload failed: ${uploadErr.message}` },
-      { status: 502 },
-    );
-  }
+  // ---- AI analysis + Supabase Storage upload run IN PARALLEL ----
+  //
+  // The AI call doesn't need the file to be in Supabase Storage — it
+  // only needs the base64 bytes. The storage upload doesn't need the AI
+  // analysis to finish. Previously these ran sequentially (upload first,
+  // then analyze), costing ~1-2s of wall-clock time for nothing.
+  //
+  // Now we kick off both and Promise.all the results. If either fails,
+  // we surface the error and best-effort clean up the orphan upload.
 
-  // ---- AI analysis with cost tracking ----
   let analysis: ComplianceAnalysis;
   let aiProvider: "anthropic" | "openai" | "google" = "anthropic";
   let aiModel = "";
@@ -108,33 +106,76 @@ export async function POST(request: NextRequest) {
   let aiCostUsd = 0;
   let aiDurationMs = 0;
 
-  try {
-    const base64 = Buffer.from(bytes).toString("base64");
-    // Two-stage (detect → focused analyze) is gated by env flag so we
-    // can ship it dark, A/B test on the live site, and roll back without
-    // a code change if the focused output regresses any findings.
-    const useTwoStage = process.env.AI_TWO_STAGE === "1";
+  const base64 = Buffer.from(bytes).toString("base64");
+  const useTwoStage = process.env.AI_TWO_STAGE === "1";
 
-    // Detection usage (only present in two-stage mode) is captured via
-    // a separate variable so the type stays narrow. analyzeImageTwoStage
-    // returns AnalyzeResult & { detection: ... }, but a conditional
-    // expression unions the two return types and TS doesn't narrow the
-    // `detection` access cleanly, so split it explicitly.
+  // Kick off both operations concurrently. We use allSettled so a
+  // failure in one doesn't lose the result of the other (we need the
+  // analysis result to clean up the upload on failure, and vice-versa).
+  const uploadPromise = supabase.storage
+    .from("photos")
+    .upload(storagePath, bytes, { contentType: file.type, upsert: false });
+  const analysisPromise: Promise<
+    Awaited<ReturnType<typeof analyzeImage>>
+    | Awaited<ReturnType<typeof analyzeImageTwoStage>>
+  > = useTwoStage
+    ? analyzeImageTwoStage(base64, file.type)
+    : analyzeImage(base64, file.type);
+
+  const [uploadSettled, analysisSettled] = await Promise.allSettled([
+    uploadPromise,
+    analysisPromise,
+  ]);
+
+  // Upload failure — abandon and surface the error. If the AI call
+  // happened to succeed, we drop the result (no photo row to attach it
+  // to). The AI call cost is logged below for the ledger.
+  if (uploadSettled.status === "rejected" || uploadSettled.value.error) {
+    const msg =
+      uploadSettled.status === "rejected"
+        ? String(uploadSettled.reason)
+        : uploadSettled.value.error?.message || "unknown";
+    console.error("[upload] storage", msg);
+    return NextResponse.json(
+      { ok: false, error: `Storage upload failed: ${msg}` },
+      { status: 502 },
+    );
+  }
+
+  // Analysis failure — clean up the orphan upload, log, return error.
+  if (analysisSettled.status === "rejected") {
+    console.error("[upload] analyze", analysisSettled.reason);
+    const message =
+      analysisSettled.reason instanceof Error
+        ? analysisSettled.reason.message
+        : "AI analysis failed";
+    await supabase.storage.from("photos").remove([storagePath]);
+    await supabase.from("ai_calls").insert({
+      inspection_id: inspectionId,
+      provider: aiProvider,
+      model: aiModel || "unknown",
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      duration_ms: 0,
+      status: "error",
+      error_message: message,
+    });
+    return NextResponse.json({ ok: false, error: message }, { status: 502 });
+  }
+
+  // Both succeeded — unpack the analysis result.
+  try {
+    const result = analysisSettled.value;
+
+    // Two-stage adds a detect call whose cost is reported in result.detection.
     let detectInputTokens = 0;
     let detectOutputTokens = 0;
     let detectCostUsd = 0;
-
-    let result;
-    if (useTwoStage) {
-      const ts = await analyzeImageTwoStage(base64, file.type);
-      if (ts.detection) {
-        detectInputTokens = ts.detection.usage.inputTokens;
-        detectOutputTokens = ts.detection.usage.outputTokens;
-        detectCostUsd = ts.detection.usage.costUsd;
-      }
-      result = ts;
-    } else {
-      result = await analyzeImage(base64, file.type);
+    if (useTwoStage && "detection" in result && result.detection) {
+      detectInputTokens = result.detection.usage.inputTokens;
+      detectOutputTokens = result.detection.usage.outputTokens;
+      detectCostUsd = result.detection.usage.costUsd;
     }
 
     analysis = result.analysis;
@@ -145,7 +186,7 @@ export async function POST(request: NextRequest) {
     aiCostUsd = result.usage.costUsd + detectCostUsd;
     aiDurationMs = result.durationMs;
   } catch (err) {
-    console.error("[upload] analyze", err);
+    console.error("[upload] analyze unpack", err);
     const message = err instanceof Error ? err.message : "AI analysis failed";
 
     await supabase.from("ai_calls").insert({

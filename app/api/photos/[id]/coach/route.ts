@@ -279,7 +279,15 @@ export async function POST(
   let aiDurationMs = 0;
 
   try {
-    const result = await analyzeImage(base64, mimeType, "deep", coachContext);
+    // Coach turns use HAIKU by default — they are clarifications layered on
+    // top of a previous analysis, not a fresh deep look, so Haiku's speed
+    // (~3x faster than Sonnet) is more valuable than Sonnet's extra reasoning.
+    // Users who want the deep model can run /api/photos/[id]/reanalyze
+    // explicitly. Env override AI_COACH_TIER=deep restores the old behavior
+    // for A/B testing.
+    const coachTier =
+      process.env.AI_COACH_TIER === "deep" ? "deep" : "default";
+    const result = await analyzeImage(base64, mimeType, coachTier, coachContext);
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
