@@ -267,8 +267,15 @@ export function PhotoUploader({ inspectionId }: Props) {
                 }}
               />
             </div>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--primary)]">
+            {/* Status overlay — sits on top of the dark photo preview.
+                The gradient was made stronger and the text is forced to
+                white because var(--primary) is now ink (#0f1518) under the
+                editorial palette and was invisible against the dark photo. */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-6">
+              <div
+                className="flex items-center gap-2 text-xs font-medium text-white"
+                style={{ textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}
+              >
                 <Spinner small />
                 {status.kind === "uploading" ? (
                   <span>Uploading {status.filename}…</span>
@@ -334,10 +341,14 @@ function LibraryIcon() {
 }
 function Spinner({ small = false }: { small?: boolean }) {
   const size = small ? 14 : 22;
+  // Gold stroke so the spinner stays visible on BOTH light (drop-zone)
+  // and dark (photo-preview) surfaces. Previously the active arc used
+  // var(--primary) which remaps to ink (#0f1518) under the editorial
+  // palette and disappeared against the dark photo backdrop.
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className="animate-spin">
-      <circle cx="12" cy="12" r="9" stroke="rgba(148,163,184,0.25)" strokeWidth="2.4"/>
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="var(--primary)" strokeWidth="2.4" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.25)" strokeWidth="2.4"/>
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="var(--gold)" strokeWidth="2.4" strokeLinecap="round"/>
     </svg>
   );
 }
