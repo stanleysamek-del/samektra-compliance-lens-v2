@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
   const { data: inspection } = await supabase
     .from("inspections")
-    .select("id, status")
+    .select("id, status, organization_id")
     .eq("id", inspectionId)
     .maybeSingle();
   if (!inspection) {
@@ -57,6 +57,28 @@ export async function POST(request: NextRequest) {
   }
   if (inspection.status === "completed") {
     return NextResponse.json({ ok: false, error: "Inspection is finalized" }, { status: 409 });
+  }
+
+  // Fetch the org's active learned rules (Chip's memory). Personal-
+  // workspace inspections have no organization_id, so we skip the lookup
+  // for those. RLS limits the SELECT to active rules on orgs the caller
+  // is a member of.
+  let orgRules: string[] = [];
+  let orgRuleIds: string[] = [];
+  if (inspection.organization_id) {
+    const { data: ruleRows } = await supabase
+      .from("learned_rules")
+      .select("id, rule_text")
+      .eq("organization_id", inspection.organization_id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      // Hard cap so a runaway rule library doesn't blow up the prompt.
+      // 50 rules at 2 KB each = 100 KB of extra prompt — already a lot.
+      .limit(50);
+    orgRules = (ruleRows ?? [])
+      .map((r) => String(r.rule_text ?? "").trim())
+      .filter((s) => s.length > 0);
+    orgRuleIds = (ruleRows ?? []).map((r) => r.id as string);
   }
 
   const file = formData.get("image");
@@ -119,8 +141,8 @@ export async function POST(request: NextRequest) {
     Awaited<ReturnType<typeof analyzeImage>>
     | Awaited<ReturnType<typeof analyzeImageTwoStage>>
   > = useTwoStage
-    ? analyzeImageTwoStage(base64, file.type)
-    : analyzeImage(base64, file.type);
+    ? analyzeImageTwoStage(base64, file.type, "default", [], orgRules)
+    : analyzeImage(base64, file.type, "default", [], [], orgRules);
 
   const [uploadSettled, analysisSettled] = await Promise.allSettled([
     uploadPromise,
@@ -239,6 +261,20 @@ export async function POST(request: NextRequest) {
     duration_ms: aiDurationMs,
     status: "success",
   });
+
+  // Bump times_applied on every rule that contributed to this analysis.
+  // Done as a single RPC so it's one round-trip regardless of rule count.
+  // Best-effort — failure here doesn't break the upload flow.
+  if (orgRuleIds.length > 0) {
+    await supabase
+      .rpc("increment_learned_rules_applied", { _rule_ids: orgRuleIds })
+      .then(
+        () => undefined,
+        (err) => {
+          console.warn("[upload] increment_learned_rules_applied", err);
+        },
+      );
+  }
 
   if (analysis.violations.length > 0) {
     await supabase.from("findings").insert(

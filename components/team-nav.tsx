@@ -13,6 +13,7 @@ export function TeamNav() {
   const tabs = [
     { href: "/team", label: "Dashboard" },
     { href: "/team/members", label: "Members" },
+    { href: "/team/rules", label: "Chip's rules" },
   ];
 
   return (

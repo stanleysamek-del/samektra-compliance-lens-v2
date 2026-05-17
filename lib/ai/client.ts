@@ -24,6 +24,7 @@ import {
   CONTEXT_QUESTIONS_SYSTEM,
   CONTEXT_QUESTIONS_USER,
   formatUserContext,
+  formatOrgRules,
   type ContextAnswer,
 } from "@/lib/prompts/compliance";
 import {
@@ -93,15 +94,19 @@ export async function analyzeImage(
   tier: Tier = "default",
   userContext: ContextAnswer[] = [],
   focusCategories: DetectCategory[] = [],
+  orgRules: string[] = [],
 ): Promise<AnalyzeResult> {
   const start = Date.now();
-  // Order: schema/instructions → focus hint → inspector context.
-  // Focus hint helps the model skip irrelevant rule blocks and emit
-  // tighter, faster output; inspector context comes last because it's
-  // authoritative ground truth and should be the most-recent thing in
-  // the prompt the model reads.
+  // Order: schema/instructions → focus hint → org house rules →
+  // inspector context. Inspector context comes LAST because it's
+  // authoritative for this specific photo and should be the freshest
+  // information the model reads. House rules apply to the whole org so
+  // they sit higher up. Focus hint helps skip irrelevant rule blocks.
   const userPrompt =
-    USER_QUERY + formatFocusHint(focusCategories) + formatUserContext(userContext);
+    USER_QUERY +
+    formatFocusHint(focusCategories) +
+    formatOrgRules(orgRules) +
+    formatUserContext(userContext);
 
   // Resolve the per-tier model id for each provider.
   const anthropicModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
@@ -1128,6 +1133,7 @@ export async function analyzeImageTwoStage(
   mimeType: string,
   tier: Tier = "default",
   userContext: ContextAnswer[] = [],
+  orgRules: string[] = [],
 ): Promise<TwoStageResult> {
   const start = Date.now();
   let detection: TwoStageResult["detection"] = null;
@@ -1151,7 +1157,14 @@ export async function analyzeImageTwoStage(
     );
   }
 
-  const result = await analyzeImage(imageBase64, mimeType, tier, userContext, focus);
+  const result = await analyzeImage(
+    imageBase64,
+    mimeType,
+    tier,
+    userContext,
+    focus,
+    orgRules,
+  );
   // Override durationMs with the wall-clock time across BOTH stages so
   // callers see honest total latency, not just stage 2.
   return { ...result, durationMs: Date.now() - start, detection };

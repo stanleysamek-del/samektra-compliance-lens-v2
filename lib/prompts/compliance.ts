@@ -409,3 +409,22 @@ export function formatUserContext(answers: ContextAnswer[]): string {
     .join("\n");
   return `\n\nINSPECTOR-PROVIDED CONTEXT (treat as authoritative ground truth — override any assumption you would otherwise make from the photo alone):\n${lines}\n`;
 }
+
+/**
+ * Format the organization's accumulated "house rules" — corrections the
+ * inspectors have taught Chip via the "Teach Chip this" button — as a
+ * prompt block. The model is told to apply each rule alongside (not in
+ * place of) the standard SPECIAL INSTRUCTIONS. Rules are deliberately
+ * appended to the user message (not the cached system prompt) so each
+ * org's rules don't pollute another org's prompt cache.
+ *
+ * Returns empty string when no rules so callers can concatenate safely.
+ */
+export function formatOrgRules(rules: string[]): string {
+  const valid = rules
+    .map((r) => (r ?? "").trim())
+    .filter((r) => r.length > 0);
+  if (valid.length === 0) return "";
+  const lines = valid.map((r, i) => `${i + 1}. ${r}`).join("\n");
+  return `\n\nORG-SPECIFIC HOUSE RULES (taught by this organization's inspectors — apply alongside the SPECIAL INSTRUCTIONS above whenever the photo's contents match the rule's premise. These represent accumulated experience from past inspections and should be treated as authoritative for this organization):\n${lines}\n`;
+}

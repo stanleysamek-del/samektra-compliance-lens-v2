@@ -111,7 +111,7 @@ export async function POST(
 
   const { data: inspection } = await supabase
     .from("inspections")
-    .select("id, status")
+    .select("id, status, organization_id")
     .eq("id", photo.inspection_id)
     .maybeSingle();
   if (!inspection) {
@@ -278,6 +278,23 @@ export async function POST(
   let aiCostUsd = 0;
   let aiDurationMs = 0;
 
+  // Fetch org house rules so Chip applies team-taught knowledge on every
+  // coach turn too, not just on the initial photo upload. RLS limits the
+  // select to rules on orgs the caller is a member of.
+  let orgRules: string[] = [];
+  if (inspection.organization_id) {
+    const { data: ruleRows } = await supabase
+      .from("learned_rules")
+      .select("rule_text")
+      .eq("organization_id", inspection.organization_id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .limit(50);
+    orgRules = (ruleRows ?? [])
+      .map((r) => String(r.rule_text ?? "").trim())
+      .filter((s) => s.length > 0);
+  }
+
   try {
     // Coach turns use HAIKU by default — they are clarifications layered on
     // top of a previous analysis, not a fresh deep look, so Haiku's speed
@@ -287,7 +304,14 @@ export async function POST(
     // for A/B testing.
     const coachTier =
       process.env.AI_COACH_TIER === "deep" ? "deep" : "default";
-    const result = await analyzeImage(base64, mimeType, coachTier, coachContext);
+    const result = await analyzeImage(
+      base64,
+      mimeType,
+      coachTier,
+      coachContext,
+      [], // no two-stage focus hint for coach turns (already focused via conversation)
+      orgRules,
+    );
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;

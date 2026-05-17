@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithRetry } from "@/lib/retry";
+import { TeachChipButton } from "@/components/teach-chip-button";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
 type Turn = {
@@ -257,6 +258,14 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
               t.role === "ai" &&
               idx === turns.length - 1 &&
               status.kind !== "sending";
+            // The inspector hint that immediately preceded this Chip turn
+            // — used as the "Teach Chip this" pre-fill. We look at the
+            // previous turn; if it's an inspector turn, use its text;
+            // otherwise (very rare — Chip turn first) leave empty.
+            const priorInspectorHint =
+              t.role === "ai" && idx > 0 && turns[idx - 1].role === "inspector"
+                ? turns[idx - 1].text
+                : "";
             return (
               <li
                 key={t.id}
@@ -275,6 +284,8 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
                       // reads it via state.
                       requestAnimationFrame(() => send(answer));
                     }}
+                    priorInspectorHint={priorInspectorHint}
+                    photoId={photoId}
                   />
                 )}
               </li>
@@ -450,6 +461,11 @@ function AIBubble({
   meta,
   canAnswerClarification = false,
   onAnswerClarification,
+  // The most recent inspector hint preceding this Chip turn — used as
+  // the pre-fill for the "Teach Chip this" composer so the inspector
+  // doesn't retype what they just said. Empty when no prior turn exists.
+  priorInspectorHint = "",
+  photoId,
 }: {
   text: string;
   meta: Turn["ai_meta"];
@@ -457,6 +473,8 @@ function AIBubble({
    *  render as text but their chips are not actionable (already answered). */
   canAnswerClarification?: boolean;
   onAnswerClarification?: (answer: string) => void;
+  priorInspectorHint?: string;
+  photoId?: string;
 }) {
   const isError = meta?.error === true;
   const cq = meta?.clarifyingQuestion;
@@ -603,6 +621,19 @@ function AIBubble({
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {/* "Teach Chip this" — only on successful Chip turns where Chip
+          actually produced findings AND the inspector had a hint to
+          generalize from. Lets the inspector save their correction as a
+          permanent org-wide rule that Chip applies on every future photo. */}
+      {!isError &&
+      typeof meta?.findingsCount === "number" &&
+      priorInspectorHint.trim().length > 0 ? (
+        <TeachChipButton
+          suggestion={priorInspectorHint}
+          sourcePhotoId={photoId}
+        />
       ) : null}
     </div>
   );
