@@ -70,7 +70,11 @@ export function PhotoCardNotVisible({
       </button>
 
       {expanded ? (
-        <ul className="flex flex-col gap-1.5 border-t border-[var(--border)] bg-[#0a0d12]/40 px-3 py-2.5">
+        // No dark backdrop — the parent card is already a paper-2 surface
+        // and the old bg-[#0a0d12]/40 turned into a low-contrast gray
+        // wash on the editorial palette. A subtle hairline divider on top
+        // is enough to separate the panel from the photo card above it.
+        <ul className="flex flex-col gap-1.5 border-t border-[var(--border)] px-3 py-2.5">
           {open.map((it) => (
             <CompactRow
               key={it.id}
@@ -235,7 +239,15 @@ function CompactRow({
                 setMode("resolving");
               }}
               disabled={isPending}
-              className="rounded border border-[var(--primary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--primary)] transition active:scale-[0.97] hover:bg-[var(--primary)] hover:text-[#0a0d12]"
+              // Gold border + ink text so the Resolve action reads as the
+              // primary on the cream paper backdrop. var(--primary) was
+              // ink-on-ink under the editorial palette and was invisible.
+              className="rounded border px-2 py-0.5 text-[10px] font-medium transition active:scale-[0.97]"
+              style={{
+                borderColor: "var(--gold)",
+                color: "var(--ink)",
+                background: "rgba(200,155,60,0.10)",
+              }}
               title="Mark resolved — verified via re-photograph"
             >
               ✓ Resolve
@@ -247,7 +259,11 @@ function CompactRow({
                 setMode("skipping");
               }}
               disabled={isPending}
-              className="rounded border border-[var(--border-strong)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--fg-muted)] transition active:scale-[0.97] hover:bg-white/[0.05] hover:text-[var(--fg)]"
+              className="rounded border px-2 py-0.5 text-[10px] font-medium transition active:scale-[0.97]"
+              style={{
+                borderColor: "var(--rule-paper)",
+                color: "var(--slate)",
+              }}
               title="Skip — no re-photograph needed (false positive, out of scope, won't fix)"
             >
               ↷ Skip
@@ -307,11 +323,25 @@ function CompactRow({
               }}
               disabled={isPending}
               className={[
-                "rounded px-2 py-0.5 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+                "rounded px-2.5 py-1 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                 mode === "resolving"
-                  ? "bg-[var(--primary)] text-[#0a0d12] hover:bg-[var(--primary-hover)]"
-                  : "border border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.05] hover:text-[var(--fg)]",
+                  // Gold primary so the Confirm button is the obvious next
+                  // step on the cream backdrop. var(--primary) → ink read
+                  // as a flat dark block previously.
+                  ? ""
+                  : "border",
               ].join(" ")}
+              style={
+                mode === "resolving"
+                  ? {
+                      background: "var(--gold)",
+                      color: "var(--ink)",
+                    }
+                  : {
+                      borderColor: "var(--rule-paper)",
+                      color: "var(--slate)",
+                    }
+              }
             >
               {isPending
                 ? "Saving…"
