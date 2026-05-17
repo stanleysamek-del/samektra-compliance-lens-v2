@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/card";
 import { resizeImageForUpload } from "@/lib/resize-image";
 import { fetchWithRetry } from "@/lib/retry";
+import { formatDuration } from "@/lib/format-duration";
 
 type Props = {
   inspectionId: string;
@@ -45,6 +46,11 @@ export function PhotoUploader({ inspectionId }: Props) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [isDragging, setIsDragging] = useState(false);
   const [thinkingIdx, setThinkingIdx] = useState(0);
+  // Live elapsed-seconds counter shown over the photo preview while the
+  // upload + AI analysis run. Resets when status returns to idle. Driven
+  // by a separate effect from the rotating thinking message so neither
+  // clobbers the other's interval.
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   // Rotate the thinking message every 2.2s while analyzing.
   useEffect(() => {
@@ -53,6 +59,23 @@ export function PhotoUploader({ inspectionId }: Props) {
     const interval = setInterval(() => {
       setThinkingIdx((i) => (i + 1) % THINKING_MESSAGES.length);
     }, 2200);
+    return () => clearInterval(interval);
+  }, [status.kind]);
+
+  // Tick the elapsed-time counter every 100ms while busy. Starts when
+  // the status first transitions away from "idle" and stops the moment
+  // we reach a terminal state (back to idle on success, or error).
+  useEffect(() => {
+    const isBusy = status.kind === "uploading" || status.kind === "analyzing";
+    if (!isBusy) {
+      setElapsedMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setElapsedMs(0);
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 100);
     return () => clearInterval(interval);
   }, [status.kind]);
 
@@ -268,9 +291,10 @@ export function PhotoUploader({ inspectionId }: Props) {
               />
             </div>
             {/* Status overlay — sits on top of the dark photo preview.
-                The gradient was made stronger and the text is forced to
-                white because var(--primary) is now ink (#0f1518) under the
-                editorial palette and was invisible against the dark photo. */}
+                Two rows: top row = spinner + rotating status text. Bottom
+                row = LIVE elapsed-time counter so the user can watch the
+                seconds tick up while waiting for the AI. The gold timer
+                contrasts cleanly against the dark backdrop and white text. */}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-6">
               <div
                 className="flex items-center gap-2 text-xs font-medium text-white"
@@ -278,12 +302,43 @@ export function PhotoUploader({ inspectionId }: Props) {
               >
                 <Spinner small />
                 {status.kind === "uploading" ? (
-                  <span>Uploading {status.filename}…</span>
+                  <span className="truncate">Uploading {status.filename}…</span>
                 ) : (
                   <span className="truncate">
                     {THINKING_MESSAGES[thinkingIdx]}
                   </span>
                 )}
+              </div>
+              {/* Live elapsed timer — gold so it pops against the dark
+                  photo and reads even when the message text is wrapped.
+                  Shown for both "uploading" and "analyzing" phases. */}
+              <div
+                className="mt-1.5 flex items-baseline gap-1.5 tabular-nums"
+                style={{
+                  fontFamily: "var(--font-jetbrains-mono)",
+                  textShadow: "0 1px 3px rgba(0,0,0,0.7)",
+                }}
+              >
+                <span
+                  className="text-[9px] uppercase tracking-[0.18em]"
+                  style={{ color: "rgba(255,255,255,0.55)" }}
+                >
+                  Elapsed
+                </span>
+                <span
+                  className="text-base font-semibold"
+                  style={{ color: "var(--gold)" }}
+                >
+                  {formatDuration(elapsedMs)}
+                </span>
+                {status.kind === "analyzing" ? (
+                  <span
+                    className="text-[10px]"
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                  >
+                    · most analyses finish in 4–10s
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
