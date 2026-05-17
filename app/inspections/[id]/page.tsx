@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { formatDuration } from "@/lib/format-duration";
 import {
   PhotoCardFindings,
   type CompactFinding,
@@ -236,13 +237,45 @@ export default async function InspectionDetailPage({
     let thumbsUp = 0;
     let thumbsDown = 0;
 
+    // Per-photo AI analysis duration. We pick the LATEST successful
+    // ai_call per photo so re-analyses (Coach, deep re-run) overwrite
+    // the original upload's number. The map is consumed by photo cards
+    // to render a small "Analyzed in X.Xs" badge.
+    const aiDurationByPhoto = new Map<string, number>();
+    let totalAiDurationMs = 0;
+
     if (photoIds.length > 0) {
-      try {
-        const { data: findings } = await supabase
+      // Fetch findings + ai_calls in parallel — they're both keyed on
+      // photoIds and independent of each other.
+      const [findingsResult, aiCallsResult] = await Promise.all([
+        supabase
           .from("findings")
           .select("id, photo_id, title, severity, user_rating, created_at")
           .in("photo_id", photoIds)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("ai_calls")
+          .select("photo_id, duration_ms, created_at, status")
+          .in("photo_id", photoIds)
+          .eq("status", "success")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      // Build the per-photo latest-duration map. Because ai_calls is
+      // sorted desc by created_at, the FIRST hit per photo_id is the
+      // most recent successful call.
+      for (const call of aiCallsResult.data ?? []) {
+        const pid = call.photo_id as string | null;
+        if (!pid) continue;
+        const dur = Number(call.duration_ms ?? 0);
+        if (!aiDurationByPhoto.has(pid)) {
+          aiDurationByPhoto.set(pid, dur);
+          totalAiDurationMs += dur;
+        }
+      }
+
+      try {
+        const findings = findingsResult.data;
         findingsByPhoto = (findings ?? []).reduce<typeof findingsByPhoto>(
           (acc, f) => {
             const pid = f.photo_id as string | null;
@@ -375,6 +408,22 @@ export default async function InspectionDetailPage({
             }
           />
 
+          {/* Aggregate AI-time footnote — sum of the latest successful
+              analysis duration across every photo on this inspection.
+              Renders nothing if no photos have been analyzed yet. */}
+          {totalAiDurationMs > 0 ? (
+            <p
+              className="px-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
+              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+              title="Total time the AI spent analyzing photos on this inspection (most recent run per photo)"
+            >
+              ⏱ Total AI analysis time · {formatDuration(totalAiDurationMs)}
+              {aiDurationByPhoto.size > 0
+                ? ` · avg ${formatDuration(totalAiDurationMs / aiDurationByPhoto.size)} per photo`
+                : ""}
+            </p>
+          ) : null}
+
           {!isCompleted ? <PhotoUploader inspectionId={inspection.id} /> : null}
 
           {/* Photo-organization manager — sits above the photo grid so it's
@@ -488,6 +537,21 @@ export default async function InspectionDetailPage({
                                       {p.photo_location ? (
                                         <p className="mt-1 truncate text-xs text-[var(--fg-muted)]">
                                           {p.photo_location}
+                                        </p>
+                                      ) : null}
+                                      {/* AI analysis time — small mono caption so the user can
+                                          see how long each examination took. Reads the latest
+                                          successful ai_calls.duration_ms for this photo. */}
+                                      {aiDurationByPhoto.get(p.id) ? (
+                                        <p
+                                          className="mt-1 text-[10px] uppercase tracking-[0.14em]"
+                                          style={{
+                                            fontFamily: "var(--font-jetbrains-mono)",
+                                            color: "var(--fg-subtle)",
+                                          }}
+                                          title="Time the AI spent analyzing this photo (most recent run)"
+                                        >
+                                          ⏱ {formatDuration(aiDurationByPhoto.get(p.id)!)}
                                         </p>
                                       ) : null}
                                     </div>
@@ -687,3 +751,6 @@ function Field({ label, value }: { label: string; value: string | null }) {
     </div>
   );
 }
+
+// formatDuration moved to lib/format-duration.ts so the photo detail
+// page and admin stats can share it.

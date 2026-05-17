@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { formatDuration, shortModelName } from "@/lib/format-duration";
 import { FindingCard, type FindingRow } from "@/components/finding-card";
 import { PhotoEditor } from "@/components/photo-editor";
 import { DeepReanalyzeFlow } from "@/components/deep-reanalyze-flow";
@@ -43,6 +44,7 @@ export default async function PhotoDetailPage({
     { data: wtlf },
     { data: parentInspection },
     nvFull,
+    { data: aiCallRows },
   ] = await Promise.all([
     supabase
       .from("photos")
@@ -78,7 +80,31 @@ export default async function PhotoDetailPage({
         "id, item, reason, resolved, resolved_note, skipped, skipped_reason",
       )
       .eq("photo_id", photoId),
+    // AI call history for this photo — used to surface analysis duration
+    // (latest successful call) in the summary line. Bounded to recent
+    // entries so we don't pull a long history on hot photos.
+    supabase
+      .from("ai_calls")
+      .select("duration_ms, model, created_at, status")
+      .eq("photo_id", photoId)
+      .eq("status", "success")
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
+
+  // Latest successful AI duration + model for this photo, for the
+  // header summary line. `aiCallRows` is sorted desc so [0] is most recent.
+  const latestAiCall = (aiCallRows ?? [])[0];
+  const latestAiDurationMs = latestAiCall
+    ? Number(latestAiCall.duration_ms ?? 0)
+    : 0;
+  const latestAiModel = latestAiCall?.model ?? null;
+  // Cumulative across every successful run on this photo (initial + re-analyses + coach turns).
+  const cumulativeAiMs = (aiCallRows ?? []).reduce(
+    (sum, c) => sum + Number(c.duration_ms ?? 0),
+    0,
+  );
+  const totalAiRuns = (aiCallRows ?? []).length;
 
   if (!photo) notFound();
 
@@ -206,6 +232,13 @@ export default async function PhotoDetailPage({
               {typeof summary.confidence === "number"
                 ? ` · AI confidence ${Math.round(summary.confidence * 100)}%`
                 : ""}
+              {latestAiDurationMs > 0
+                ? ` · analyzed in ${formatDuration(latestAiDurationMs)}`
+                : ""}
+              {totalAiRuns > 1
+                ? ` · ${totalAiRuns} runs (${formatDuration(cumulativeAiMs)} total)`
+                : ""}
+              {latestAiModel ? ` · ${shortModelName(latestAiModel)}` : ""}
             </p>
           ) : null}
         </div>
