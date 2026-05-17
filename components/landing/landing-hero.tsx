@@ -1,13 +1,14 @@
 import Link from "next/link";
+import Image from "next/image";
 
 /**
  * Editorial "inspection record" hero. Cream paper card with metadata
  * strip, oversized serif headline with italic gold accent, body copy,
  * platform pills, CTA pair, signature block, codebase coverage strip.
  *
- * Right column is a static document-preview card (a simplified version
- * of the auto-cycling iPhone in the reference) — keeps things lightweight
- * and server-renderable. Can be upgraded to the animated phone later.
+ * Right column shows the actual product on an iPhone (public/hero-iphone.png)
+ * — replaces the earlier abstract dark mock card. The floating
+ * "auto-cited" footnote stamp is preserved below the device for character.
  */
 export function LandingHero() {
   const today = new Date();
@@ -360,9 +361,13 @@ export function LandingHero() {
 }
 
 /**
- * Static mock of an inspection finding card — stands in for the
- * auto-cycling iPhone preview in the JSX reference. Renders without
- * any client-side state so it's pure SSR.
+ * Hero preview — real iPhone screenshot of Compliance Lens in action,
+ * served from /public/hero-iphone.png. Replaces the earlier abstract
+ * dark mock card. The "auto-cited" floating footnote stamp is preserved
+ * below the device because it adds the editorial-letter character.
+ *
+ * The image is marked `priority` so Next.js prioritizes it for LCP —
+ * this is the hero asset on the landing page.
  */
 function HeroPreviewCard() {
   return (
@@ -370,142 +375,37 @@ function HeroPreviewCard() {
       style={{
         position: "relative",
         width: "100%",
-        maxWidth: 340,
+        maxWidth: 360,
       }}
     >
-      {/* Main card */}
-      <div
+      {/* iPhone product shot */}
+      <Image
+        src="/hero-iphone.png"
+        alt="Compliance Lens on iPhone — a fire-extinguisher photo with an AI-detected NFPA 10 finding overlaid"
+        width={720}
+        height={1480}
+        priority
+        sizes="(max-width: 900px) 280px, 360px"
         style={{
-          background: "#0f1518",
-          color: "#ece8da",
-          padding: "18px 18px 16px",
-          border: "1px solid #0f1518",
-          boxShadow: "0 24px 50px -28px rgba(0,0,0,0.4)",
+          display: "block",
+          width: "100%",
+          height: "auto",
+          // Subtle drop shadow so the phone reads as a real object against
+          // the paper card behind it, without competing with the cream
+          // editorial palette.
+          filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))",
         }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span
-            style={{
-              fontFamily: "var(--font-jetbrains-mono)",
-              fontSize: 9,
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-              color: "#8a9097",
-            }}
-          >
-            CAPTURE · LIVE
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-jetbrains-mono)",
-              fontSize: 9,
-              letterSpacing: "0.12em",
-              color: "#c89b3c",
-            }}
-          >
-            ● 0.94 CONF
-          </span>
-        </div>
+      />
 
-        {/* Photo placeholder — abstract gradient stand-in for the on-screen image */}
-        <div
-          style={{
-            position: "relative",
-            aspectRatio: "4 / 3",
-            background:
-              "linear-gradient(135deg, #1a2226 0%, #2a363c 45%, #1a2226 100%)",
-            marginBottom: 12,
-            overflow: "hidden",
-            border: "1px solid rgba(236,232,218,0.1)",
-          }}
-        >
-          {/* Bbox overlay */}
-          <div
-            style={{
-              position: "absolute",
-              top: "32%",
-              left: "20%",
-              width: "44%",
-              height: "38%",
-              border: "1.5px solid #ef4d3f",
-              boxShadow: "0 0 0 1px rgba(239,77,63,0.25)",
-            }}
-          >
-            <span
-              style={{
-                position: "absolute",
-                top: -18,
-                left: -1,
-                background: "#ef4d3f",
-                color: "#0f1518",
-                fontFamily: "var(--font-jetbrains-mono)",
-                fontSize: 8,
-                letterSpacing: "0.14em",
-                padding: "2px 5px",
-                textTransform: "uppercase",
-              }}
-            >
-              High · NFPA 101
-            </span>
-          </div>
-          {/* Vignette */}
-          <div
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "radial-gradient(ellipse at 50% 55%, transparent 50%, rgba(10,16,19,0.55) 100%)",
-              pointerEvents: "none",
-            }}
-          />
-        </div>
-
-        {/* Finding strip */}
-        <div style={{ borderTop: "1px solid rgba(236,232,218,0.18)", paddingTop: 10 }}>
-          <span
-            style={{
-              fontFamily: "var(--font-jetbrains-mono)",
-              fontSize: 9,
-              letterSpacing: "0.14em",
-              color: "#c89b3c",
-              textTransform: "uppercase",
-            }}
-          >
-            NFPA 101 §7.1.10.1
-          </span>
-          <p
-            style={{
-              fontFamily: "var(--font-instrument-serif)",
-              fontSize: 18,
-              lineHeight: 1.2,
-              margin: "6px 0 4px",
-              color: "#ece8da",
-            }}
-          >
-            Egress obstructed
-          </p>
-          <p
-            style={{
-              fontFamily: "var(--font-jetbrains-mono)",
-              fontSize: 9,
-              letterSpacing: "0.06em",
-              color: "#8a9097",
-              margin: 0,
-            }}
-          >
-            severity HIGH · auto-cited
-          </p>
-        </div>
-      </div>
-
-      {/* Floating "auto-cited" stamp lower-left */}
+      {/* Floating "auto-cited" stamp — anchored to the lower-left of the
+          device. Kept from the previous design because the editorial
+          footnote-card pattern is a brand signature for the landing. */}
       <div
         className="hero-float-stamp"
         style={{
           position: "absolute",
-          bottom: -24,
-          left: -32,
+          bottom: -8,
+          left: -40,
           background: "#ece8da",
           color: "#0f1518",
           border: "1px solid #0f1518",

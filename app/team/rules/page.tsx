@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
+import { HelpTip } from "@/components/help-tip";
 import { getCurrentOrg } from "@/lib/org/current";
 import {
   createLearnedRule,
@@ -189,17 +190,35 @@ export default async function TeamRulesPage({
                       {r.source_finding_id ? " · taught from a finding" : ""}
                     </p>
                     {isAdmin ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <form action={archiveLearnedRule}>
                           <input type="hidden" name="rule_id" value={r.id} />
                           <button
                             type="submit"
                             className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
-                            title="Archive — Chip stops applying this rule but the entry is kept for audit"
                           >
                             Archive
                           </button>
                         </form>
+                        <HelpTip title="What does Archive do?">
+                          <p>
+                            Stops Chip from applying this rule on new
+                            analyses — effective immediately, no redeploy
+                            needed. The rule itself isn&apos;t deleted; it
+                            moves to the Archived section below where
+                            admins can review the history.
+                          </p>
+                          <p className="mt-1.5">
+                            From archived you can{" "}
+                            <span className="font-medium">Restore</span> the
+                            rule (it goes back to active) or{" "}
+                            <span className="font-medium">Delete</span> it
+                            permanently. Use Archive when you&apos;re not
+                            sure whether a rule is still right —
+                            you can always restore it later. Use Delete
+                            only after you&apos;re certain.
+                          </p>
+                        </HelpTip>
                       </div>
                     ) : null}
                   </div>
@@ -233,7 +252,7 @@ export default async function TeamRulesPage({
                       {r.times_applied === 1 ? "time" : "times"} ·{" "}
                       {authorNames.get(r.created_by as string) ?? "—"}
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <form action={unarchiveLearnedRule}>
                         <input type="hidden" name="rule_id" value={r.id} />
                         <button
@@ -243,6 +262,18 @@ export default async function TeamRulesPage({
                           Restore
                         </button>
                       </form>
+                      <HelpTip title="What does Restore do?">
+                        <p>
+                          Flips the rule&apos;s status back to{" "}
+                          <span className="font-medium">Active</span>.
+                          Chip will start applying it again on the next
+                          photo analyzed by this team — no redeploy
+                          needed. The{" "}
+                          <span className="font-medium">times applied</span>{" "}
+                          counter resumes from where it left off so the
+                          history stays continuous.
+                        </p>
+                      </HelpTip>
                       {/* Delete is a server-action form. Archive-first is
                           the recommended flow (the dashed/strikethrough
                           state above already makes the rule inactive), so
@@ -254,11 +285,27 @@ export default async function TeamRulesPage({
                           type="submit"
                           className="rounded px-2 py-1 text-[11px] font-medium transition hover:bg-[rgba(168,54,43,0.08)]"
                           style={{ color: "#a8362b" }}
-                          title="Permanently delete this archived rule"
                         >
                           Delete
                         </button>
                       </form>
+                      <HelpTip title="What does Delete do?">
+                        <p>
+                          <span className="font-medium" style={{ color: "#a8362b" }}>
+                            Permanent.
+                          </span>{" "}
+                          Removes the rule row entirely — author, history,
+                          times-applied counter, all gone. There&apos;s no
+                          undo and no audit trail afterward.
+                        </p>
+                        <p className="mt-1.5">
+                          Only delete if you&apos;re sure the rule was a
+                          mistake you don&apos;t want recorded. Archive is
+                          almost always the better choice — it stops the
+                          rule from firing but keeps the history for
+                          future review.
+                        </p>
+                      </HelpTip>
                     </div>
                   </div>
                 </li>
