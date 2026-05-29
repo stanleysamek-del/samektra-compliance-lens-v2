@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { SamektraMark } from "@/components/logo";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { SessionGuard } from "@/components/session-guard";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { HelpDrawer } from "@/components/help-drawer";
 
@@ -70,6 +71,7 @@ type Props = PropsWithChildren<{
 export function AppShell({ user, children }: Props) {
   return (
     <div className="min-h-dvh">
+      <SessionGuard />
       {/* ===== Header ===== */}
       <header
         className="sticky top-0 z-30 border-b border-[var(--ink)]"
