@@ -306,7 +306,7 @@ export function LandingHero() {
 
 function HeroPreviewCard({ device }: { device: Device }) {
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: device === "web" ? 480 : device === "ipad" ? 420 : 360 }}>
+    <div style={{ position: "relative", width: "100%", maxWidth: device === "iphone" ? 360 : 480 }}>
       <DeviceMockup device={device} />
 
       {/* Floating stamp — professional outcome copy */}
@@ -314,8 +314,8 @@ function HeroPreviewCard({ device }: { device: Device }) {
         className="hero-float-stamp"
         style={{
           position: "absolute",
-          bottom: device === "web" ? 32 : -8,
-          left: device === "web" ? -24 : -40,
+          bottom: device === "iphone" ? -8 : 32,
+          left: device === "iphone" ? -40 : -24,
           background: "#ece8da",
           color: "#0f1518",
           border: "1px solid #0f1518",
@@ -362,85 +362,24 @@ function DeviceMockup({ device }: { device: Device }) {
   }
 
   if (device === "ipad") {
-    // iPad frame drawn in CSS — same screenshot scaled/letterboxed inside
     return (
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))",
-          transition: "opacity 0.25s ease",
-        }}
-      >
-        {/* iPad body */}
-        <div
-          style={{
-            background: "#1a1a1f",
-            borderRadius: 20,
-            border: "2px solid #2a2a32",
-            padding: "18px 12px",
-            position: "relative",
-          }}
-        >
-          {/* Home bar top */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+      <div style={{ position: "relative", width: "100%", filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
+        {/* iPad bezel */}
+        <div style={{ background: "#1a1a1f", borderRadius: 20, border: "2px solid #2a2a32", padding: "14px 10px" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3a3a44" }} />
           </div>
-          {/* Screen */}
-          <div
-            style={{
-              background: "#0a0d12",
-              borderRadius: 10,
-              overflow: "hidden",
-              position: "relative",
-              aspectRatio: "4/3",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "center",
-            }}
-          >
+          <div style={{ borderRadius: 8, overflow: "hidden" }}>
             <Image
-              src="/hero-iphone.png"
+              src="/hero-ipad.png"
               alt="Compliance Lens on iPad"
-              width={720}
-              height={1480}
-              sizes="420px"
-              style={{
-                height: "100%",
-                width: "auto",
-                display: "block",
-                objectFit: "cover",
-                objectPosition: "top",
-              }}
+              width={1448}
+              height={1086}
+              sizes="(max-width: 900px) 340px, 480px"
+              style={{ display: "block", width: "100%", height: "auto" }}
             />
-            {/* iPad UI chrome overlay — split-view hint */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "linear-gradient(90deg, transparent 55%, rgba(10,13,18,0.85) 55%)",
-                display: "flex",
-                alignItems: "stretch",
-              }}
-            >
-              {/* Right panel — inspection list sidebar */}
-              <div style={{ marginLeft: "55%", flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                <p style={{ fontFamily: "var(--font-jetbrains-mono)", fontSize: 8, letterSpacing: "0.14em", color: "#5f6b72", textTransform: "uppercase", margin: 0 }}>Inspections</p>
-                {[
-                  ["Gwinnett Med.", "In Progress", "#c89b3c"],
-                  ["St. Anselm Hosp.", "Finalized", "#607a3a"],
-                  ["Northside Campus", "Draft", "#5f6b72"],
-                ].map(([name, status, color]) => (
-                  <div key={name} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", padding: "8px 10px", borderRadius: 4 }}>
-                    <p style={{ fontFamily: "var(--font-geist-sans)", fontSize: 10, color: "#ece8da", margin: "0 0 3px" }}>{name}</p>
-                    <p style={{ fontFamily: "var(--font-jetbrains-mono)", fontSize: 8, color: color as string, letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>{status}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
-          {/* Home indicator */}
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
             <div style={{ width: 40, height: 4, borderRadius: 2, background: "#3a3a44" }} />
           </div>
         </div>
@@ -448,91 +387,30 @@ function DeviceMockup({ device }: { device: Device }) {
     );
   }
 
-  // Web / browser chrome
+  // Web / Mac — browser chrome around the real screenshot
   return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))",
-        transition: "opacity 0.25s ease",
-      }}
-    >
-      {/* Browser window */}
+    <div style={{ position: "relative", width: "100%", filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
       <div style={{ background: "#1a1a1f", borderRadius: 10, border: "2px solid #2a2a32", overflow: "hidden" }}>
         {/* Title bar */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderBottom: "1px solid #2a2a32", background: "#141418" }}>
-          {/* Traffic lights */}
           {["#e05252","#e09a2a","#4caf50"].map((c) => (
             <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />
           ))}
-          {/* Address bar */}
-          <div
-            style={{
-              flex: 1,
-              marginLeft: 8,
-              background: "#0a0d12",
-              borderRadius: 4,
-              padding: "4px 10px",
-              fontFamily: "var(--font-jetbrains-mono)",
-              fontSize: 9,
-              color: "#5f6b72",
-              letterSpacing: "0.05em",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <span style={{ color: "#607a3a", fontSize: 8 }}>🔒</span>
+          <div style={{ flex: 1, marginLeft: 8, background: "#0a0d12", borderRadius: 4, padding: "4px 10px", fontFamily: "var(--font-jetbrains-mono)", fontSize: 9, color: "#5f6b72", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "#607a3a" }}>🔒</span>
             compliancelens.app/inspections
           </div>
         </div>
-        {/* Screen content */}
-        <div style={{ position: "relative", aspectRatio: "16/10", overflow: "hidden", background: "#0a0d12" }}>
+        {/* Real Mac screenshot */}
+        <div style={{ overflow: "hidden" }}>
           <Image
-            src="/hero-iphone.png"
-            alt="Compliance Lens on desktop browser"
-            width={720}
-            height={1480}
-            sizes="480px"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: "50%",
-              transform: "translateX(-50%)",
-              height: "130%",
-              width: "auto",
-              objectFit: "cover",
-              objectPosition: "top center",
-            }}
+            src="/hero-Mac.png"
+            alt="Compliance Lens on Mac — desktop browser view"
+            width={1448}
+            height={1086}
+            sizes="(max-width: 900px) 340px, 480px"
+            style={{ display: "block", width: "100%", height: "auto" }}
           />
-          {/* Desktop sidebar overlay */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(90deg, rgba(10,13,18,0.92) 200px, transparent 200px)",
-              display: "flex",
-            }}
-          >
-            <div style={{ width: 200, padding: "14px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
-              <p style={{ fontFamily: "var(--font-geist-sans)", fontSize: 11, fontWeight: 600, color: "#ece8da", margin: "0 0 12px", letterSpacing: "0.02em" }}>
-                Compliance <span style={{ color: "#c89b3c" }}>Lens</span>
-              </p>
-              {[
-                ["🏠", "Dashboard"],
-                ["📋", "Inspections"],
-                ["🔍", "Findings"],
-                ["👥", "Team"],
-                ["📊", "Reports"],
-              ].map(([icon, label]) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 4, background: label === "Inspections" ? "rgba(200,155,60,0.12)" : "transparent" }}>
-                  <span style={{ fontSize: 10 }}>{icon}</span>
-                  <span style={{ fontFamily: "var(--font-geist-sans)", fontSize: 10, color: label === "Inspections" ? "#c89b3c" : "#8a9097" }}>{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
