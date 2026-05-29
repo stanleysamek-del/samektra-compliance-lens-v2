@@ -12,6 +12,20 @@ export async function requestPasswordReset(formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  // Tell the visitor when no account exists for that email and point them to
+  // sign-up (product decision — note this trades away account-enumeration
+  // protection). Backed by the public.email_exists() SECURITY DEFINER RPC
+  // (migration 0018). If the RPC is missing/errors, fail open and proceed to
+  // the normal "sent" flow rather than blocking a legitimate reset.
+  const { data: exists, error: lookupError } = await supabase.rpc(
+    "email_exists",
+    { p_email: email },
+  );
+  if (!lookupError && exists === false) {
+    redirect(`/forgot-password?notfound=${encodeURIComponent(email)}`);
+  }
+
   const headerList = await headers();
   const origin = headerList.get("origin") ?? `https://${headerList.get("host")}`;
 
@@ -25,9 +39,11 @@ export async function requestPasswordReset(formData: FormData) {
   });
 
   if (error) {
-    redirect(`/forgot-password?error=${encodeURIComponent(error.message)}`);
+    const message =
+      error.message?.trim() ||
+      "Couldn't send the reset email. Please try again.";
+    redirect(`/forgot-password?error=${encodeURIComponent(message)}`);
   }
 
-  // Always go to "sent" state, even if email didn't exist — prevents account enumeration.
   redirect(`/forgot-password?sent=1`);
 }

@@ -5,7 +5,7 @@ import { AuthLayout } from "@/components/auth-layout";
 export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; notfound?: string }>;
 }) {
   const params = await searchParams;
 
@@ -19,6 +19,7 @@ export default async function ForgotPasswordPage({
         action={requestPasswordReset}
         error={params.error}
         sent={params.sent === "1"}
+        notFoundEmail={params.notfound}
       />
     </AuthLayout>
   );
