@@ -363,56 +363,30 @@ function DeviceMockup({ device }: { device: Device }) {
 
   if (device === "ipad") {
     return (
-      <div style={{ position: "relative", width: "100%", filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
-        {/* iPad bezel */}
-        <div style={{ background: "#1a1a1f", borderRadius: 20, border: "2px solid #2a2a32", padding: "14px 10px" }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3a3a44" }} />
-          </div>
-          <div style={{ borderRadius: 8, overflow: "hidden" }}>
-            <Image
-              src="/hero-ipad.png"
-              alt="Compliance Lens on iPad"
-              width={1448}
-              height={1086}
-              sizes="(max-width: 900px) 340px, 480px"
-              style={{ display: "block", width: "100%", height: "auto" }}
-            />
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: "#3a3a44" }} />
-          </div>
-        </div>
+      <div style={{ filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
+        <Image
+          src="/hero-ipad.png"
+          alt="Compliance Lens on iPad"
+          width={1448}
+          height={1086}
+          sizes="(max-width: 900px) 340px, 480px"
+          style={{ display: "block", width: "100%", height: "auto" }}
+        />
       </div>
     );
   }
 
-  // Web / Mac — browser chrome around the real screenshot
+  // Web / Mac
   return (
-    <div style={{ position: "relative", width: "100%", filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
-      <div style={{ background: "#1a1a1f", borderRadius: 10, border: "2px solid #2a2a32", overflow: "hidden" }}>
-        {/* Title bar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderBottom: "1px solid #2a2a32", background: "#141418" }}>
-          {["#e05252","#e09a2a","#4caf50"].map((c) => (
-            <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />
-          ))}
-          <div style={{ flex: 1, marginLeft: 8, background: "#0a0d12", borderRadius: 4, padding: "4px 10px", fontFamily: "var(--font-jetbrains-mono)", fontSize: 9, color: "#5f6b72", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: "#607a3a" }}>🔒</span>
-            compliancelens.app/inspections
-          </div>
-        </div>
-        {/* Real Mac screenshot */}
-        <div style={{ overflow: "hidden" }}>
-          <Image
-            src="/hero-Mac.png"
-            alt="Compliance Lens on Mac — desktop browser view"
-            width={1448}
-            height={1086}
-            sizes="(max-width: 900px) 340px, 480px"
-            style={{ display: "block", width: "100%", height: "auto" }}
-          />
-        </div>
-      </div>
+    <div style={{ filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
+      <Image
+        src="/hero-Mac.png"
+        alt="Compliance Lens on Mac"
+        width={1448}
+        height={1086}
+        sizes="(max-width: 900px) 340px, 480px"
+        style={{ display: "block", width: "100%", height: "auto" }}
+      />
     </div>
   );
 }
