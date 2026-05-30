@@ -351,8 +351,8 @@ function DeviceMockup({ device }: { device: Device }) {
         <Image
           src="/hero-iphone.png"
           alt="Compliance Lens on iPhone — AI-detected compliance findings overlaid on a site photo"
-          width={720}
-          height={1480}
+          width={640}
+          height={1294}
           priority
           sizes="(max-width: 900px) 280px, 360px"
           style={{ display: "block", width: "100%", height: "auto" }}
@@ -367,8 +367,8 @@ function DeviceMockup({ device }: { device: Device }) {
         <Image
           src="/hero-ipad.png"
           alt="Compliance Lens on iPad"
-          width={1448}
-          height={1086}
+          width={1212}
+          height={1001}
           sizes="(max-width: 900px) 340px, 480px"
           style={{ display: "block", width: "100%", height: "auto" }}
         />
@@ -382,8 +382,8 @@ function DeviceMockup({ device }: { device: Device }) {
       <Image
         src="/hero-Mac.png"
         alt="Compliance Lens on Mac"
-        width={1448}
-        height={1086}
+        width={1341}
+        height={956}
         sizes="(max-width: 900px) 340px, 480px"
         style={{ display: "block", width: "100%", height: "auto" }}
       />
