@@ -255,14 +255,15 @@ export function LandingHero() {
               </div>
             </div>
 
-            {/* Right: device preview */}
+            {/* Right: device preview — fixed height so switching devices never resizes the hero */}
             <div
               className="hero-preview-wrap"
               style={{
                 display: "flex",
+                alignItems: "center",
                 justifyContent: "center",
                 position: "relative",
-                minHeight: 480,
+                height: 520,
               }}
             >
               <HeroPreviewCard device={device} />
@@ -289,7 +290,7 @@ export function LandingHero() {
       <style>{`
         @media (max-width: 900px) {
           .hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
-          .hero-preview-wrap { min-height: 360px !important; }
+          .hero-preview-wrap { height: 380px !important; }
         }
         @media (max-width: 600px) {
           .hero-meta-right { display: none !important; }
@@ -306,7 +307,7 @@ export function LandingHero() {
 
 function HeroPreviewCard({ device }: { device: Device }) {
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: device === "iphone" ? 360 : 480 }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <DeviceMockup device={device} />
 
       {/* Floating stamp — professional outcome copy */}
@@ -314,7 +315,7 @@ function HeroPreviewCard({ device }: { device: Device }) {
         className="hero-float-stamp"
         style={{
           position: "absolute",
-          bottom: device === "iphone" ? -8 : 32,
+          bottom: 24,
           left: device === "iphone" ? -40 : -24,
           background: "#ece8da",
           color: "#0f1518",
@@ -345,17 +346,19 @@ function HeroPreviewCard({ device }: { device: Device }) {
 // ---------------------------------------------------------------------------
 
 function DeviceMockup({ device }: { device: Device }) {
+  const shadow = "drop-shadow(0 24px 36px rgba(15,21,24,0.2))";
+
   if (device === "iphone") {
     return (
-      <div style={{ position: "relative", transition: "opacity 0.25s ease", filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))" }}>
+      <div style={{ filter: shadow, transition: "all 0.3s ease", maxHeight: "100%", display: "flex" }}>
         <Image
           src="/hero-iphone.png"
-          alt="Compliance Lens on iPhone — AI-detected compliance findings overlaid on a site photo"
+          alt="Compliance Lens on iPhone"
           width={640}
           height={1294}
           priority
-          sizes="(max-width: 900px) 280px, 360px"
-          style={{ display: "block", width: "100%", height: "auto" }}
+          sizes="(max-width: 900px) 220px, 280px"
+          style={{ display: "block", height: "100%", maxHeight: 500, width: "auto", objectFit: "contain" }}
         />
       </div>
     );
@@ -363,14 +366,14 @@ function DeviceMockup({ device }: { device: Device }) {
 
   if (device === "ipad") {
     return (
-      <div style={{ filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
+      <div style={{ filter: shadow, transition: "all 0.3s ease", width: "100%", maxWidth: 520 }}>
         <Image
           src="/hero-ipad.png"
           alt="Compliance Lens on iPad"
           width={1212}
           height={1001}
-          sizes="(max-width: 900px) 340px, 480px"
-          style={{ display: "block", width: "100%", height: "auto" }}
+          sizes="(max-width: 900px) 320px, 520px"
+          style={{ display: "block", width: "100%", height: "auto", mixBlendMode: "multiply" }}
         />
       </div>
     );
@@ -378,14 +381,14 @@ function DeviceMockup({ device }: { device: Device }) {
 
   // Web / Mac
   return (
-    <div style={{ filter: "drop-shadow(0 28px 40px rgba(15,21,24,0.18))", transition: "opacity 0.25s ease" }}>
+    <div style={{ filter: shadow, transition: "all 0.3s ease", width: "100%", maxWidth: 520 }}>
       <Image
         src="/hero-Mac.png"
         alt="Compliance Lens on Mac"
         width={1341}
         height={956}
-        sizes="(max-width: 900px) 340px, 480px"
-        style={{ display: "block", width: "100%", height: "auto" }}
+        sizes="(max-width: 900px) 320px, 520px"
+        style={{ display: "block", width: "100%", height: "auto", mixBlendMode: "multiply" }}
       />
     </div>
   );
