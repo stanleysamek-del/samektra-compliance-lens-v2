@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Device = "iphone" | "ipad" | "web";
 
@@ -12,8 +12,13 @@ const DEVICES: { id: Device; label: string; glyph: string }[] = [
   { id: "web",    label: "Web",    glyph: "⊞" },
 ];
 
-// Auto-cited stamp copy — professional, outcome-focused
-const STAMP_COPY = "“Finding cited. Report filed. 4 minutes.”";
+// Auto-cited stamp — rotates every 3.5s with a fade
+const STAMP_QUOTES = [
+  "Photos in. Citations out. Reports done.",
+  "From finding to finished report. In minutes.",
+  "The finding is documented before the dust settles.",
+  "Inspection evidence that speaks for itself.",
+];
 
 export function LandingHero() {
   const [device, setDevice] = useState<Device>("iphone");
@@ -306,11 +311,26 @@ export function LandingHero() {
 // ---------------------------------------------------------------------------
 
 function HeroPreviewCard({ device }: { device: Device }) {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // fade out → swap → fade in
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % STAMP_QUOTES.length);
+        setVisible(true);
+      }, 400);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <DeviceMockup device={device} />
 
-      {/* Floating stamp — professional outcome copy */}
+      {/* Floating stamp — rotates through professional outcome quotes */}
       <div
         className="hero-float-stamp"
         style={{
@@ -321,7 +341,7 @@ function HeroPreviewCard({ device }: { device: Device }) {
           color: "#0f1518",
           border: "1px solid #0f1518",
           padding: "12px 14px",
-          maxWidth: 220,
+          maxWidth: 240,
           boxShadow: "0 12px 24px -16px rgba(0,0,0,0.3)",
           zIndex: 10,
         }}
@@ -329,8 +349,20 @@ function HeroPreviewCard({ device }: { device: Device }) {
         <span style={{ fontFamily: "var(--font-jetbrains-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "#b8902f" }}>
           Auto-cited ✓
         </span>
-        <p style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic", fontSize: 15, margin: "4px 0 0", lineHeight: 1.3, color: "#0f1518" }}>
-          {STAMP_COPY}
+        <p
+          style={{
+            fontFamily: "var(--font-instrument-serif)",
+            fontStyle: "italic",
+            fontSize: 15,
+            margin: "4px 0 0",
+            lineHeight: 1.3,
+            color: "#0f1518",
+            opacity: visible ? 1 : 0,
+            transition: "opacity 0.35s ease",
+            minHeight: "3.9em", // prevent stamp from resizing as quotes change length
+          }}
+        >
+          &ldquo;{STAMP_QUOTES[idx]}&rdquo;
         </p>
       </div>
 
