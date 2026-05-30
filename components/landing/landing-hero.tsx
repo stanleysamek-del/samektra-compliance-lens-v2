@@ -373,7 +373,7 @@ function DeviceMockup({ device }: { device: Device }) {
           width={1212}
           height={1001}
           sizes="(max-width: 900px) 320px, 520px"
-          style={{ display: "block", width: "100%", height: "auto", filter: "brightness(1.25)", mixBlendMode: "multiply" }}
+          style={{ display: "block", width: "100%", height: "auto" }}
         />
       </div>
     );
@@ -388,7 +388,7 @@ function DeviceMockup({ device }: { device: Device }) {
         width={1341}
         height={956}
         sizes="(max-width: 900px) 320px, 520px"
-        style={{ display: "block", width: "100%", height: "auto", filter: "brightness(1.25)", mixBlendMode: "multiply" }}
+        style={{ display: "block", width: "100%", height: "auto" }}
       />
     </div>
   );
