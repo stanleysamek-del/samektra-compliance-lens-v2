@@ -1,5 +1,5 @@
 /**
- * §06 Dashboard preview — browser-chrome card containing a mock of the
+ * §05 Dashboard preview — browser-chrome card containing a mock of the
  * gated /inspections route. KPI strip + filter chips + table + footer.
  * Static (no interactive filtering) since this is purely visual on the
  * marketing page.
@@ -56,7 +56,7 @@ export function LandingDashboardPreview() {
                 marginBottom: 14,
               }}
             >
-              § 06 — Dashboard
+              § 05 — Dashboard
             </p>
             <h2
               style={{

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * §08 FAQ — accordion. Stripped down editorial style: serif question,
+ * §09 FAQ — accordion. Stripped down editorial style: serif question,
  * mono Q.NN number, gold "+" toggle that rotates to "×" when open.
  */
 const FAQ_ITEMS = [
@@ -62,7 +62,7 @@ export function LandingFAQ() {
                 marginBottom: 14,
               }}
             >
-              § 08 — Questions
+              § 09 — Questions
             </p>
             <h2
               style={{

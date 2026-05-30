@@ -1,7 +1,7 @@
 import { CountUp } from "@/components/landing/count-up";
 
 /**
- * §04 Workflow + §04½ Stats — paired section. Horizontal 4-step strip
+ * §03 Workflow + Stats — paired section. Horizontal 4-step strip
  * showing Walk → Snap → Verify → Export, followed by a 4-up stat block
  * with CountUp animations that trigger when scrolled into view.
  */
@@ -60,7 +60,7 @@ export function LandingWorkflow() {
             marginBottom: 14,
           }}
         >
-          § 04 — Workflow
+          § 03 — Workflow
         </p>
         <h2
           style={{

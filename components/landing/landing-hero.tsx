@@ -90,6 +90,17 @@ export function LandingHero() {
                   color: "#5f6b72",
                 }}
               >
+                File №&nbsp;&nbsp;CL-2026-481
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-jetbrains-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#5f6b72",
+                }}
+              >
                 Issued&nbsp;&nbsp;{dateStr}
               </span>
             </div>
@@ -282,7 +293,7 @@ export function LandingHero() {
               Codebase coverage
             </span>
             <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-              {["NFPA 101", "NFPA 99", "IBC", "IFC", "NEC", "CMS", "TJC", "ADA", "ANSI A117.1", "GA Title 25"].map((c) => (
+              {["NFPA 101", "NFPA 99", "NFPA 10", "IBC", "IFC", "NEC", "CMS", "TJC", "ADA", "ANSI A117.1", "CDC / HAI", "GA Title 25"].map((c) => (
                 <span key={c} style={{ fontFamily: "var(--font-jetbrains-mono)", fontSize: 11, letterSpacing: "0.08em", color: "#0f1518" }}>
                   {c}
                 </span>
@@ -359,7 +370,7 @@ function HeroPreviewCard({ device }: { device: Device }) {
             color: "#0f1518",
             opacity: visible ? 1 : 0,
             transition: "opacity 0.35s ease",
-            minHeight: "3.9em", // prevent stamp from resizing as quotes change length
+            minHeight: "3.2em", // reserve space for the longest quote, minimal gap
           }}
         >
           &ldquo;{STAMP_QUOTES[idx]}&rdquo;

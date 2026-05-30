@@ -3,6 +3,11 @@ import Link from "next/link";
 /**
  * §07 Pricing — three tiers, document-style. Middle tier inverted
  * (ink fill, paper text) and badged "MOST CHOSEN".
+ *
+ * NOTE: prices and claims below are INDICATIVE for the v2 staging build.
+ * Compliance claims (BAA / HIPAA / SOC 2) are framed as availability /
+ * roadmap rather than completed certifications — tighten only once each
+ * is actually in place, to avoid overstating posture.
  */
 const TIERS = [
   {
@@ -13,7 +18,7 @@ const TIERS = [
     featured: false,
     includes: [
       "Unlimited photo inspections",
-      "All 9 codebases",
+      "All 12 codebases",
       "CAP, LSRA, ILSM exports",
       "Signed PDF reports",
       "20 GB photo storage",
@@ -34,7 +39,7 @@ const TIERS = [
       "Up to 12 inspectors",
       "Per-facility audit trail",
       "AHJ submission templates",
-      "TJC tracer integration",
+      "TJC tracer templates",
       "SSO / SCIM",
       "Dedicated implementation lead",
       "Priority support (4-hr response)",
@@ -52,9 +57,9 @@ const TIERS = [
       "Everything in Facility",
       "Custom codebases (state/local)",
       "On-prem photo storage option",
-      "BAA · HIPAA · SOC 2 Type II",
+      "BAA available · HIPAA-aligned",
+      "SOC 2 (in progress)",
       "Custom report templates",
-      "Quarterly business review",
       "Named CSM + solutions engineer",
     ],
     cta: "Contact sales",
@@ -176,7 +181,6 @@ export function LandingPricing() {
                   lineHeight: 1.5,
                   color: t.featured ? "#8a9097" : "#5f6b72",
                   minHeight: 42,
-                  marginBottom: 24,
                   margin: "0 0 24px",
                 }}
               >
@@ -260,7 +264,7 @@ export function LandingPricing() {
                   gap: 10,
                   padding: "13px 22px",
                   background: t.featured ? "#c89b3c" : "transparent",
-                  color: t.featured ? "#0f1518" : "#0f1518",
+                  color: "#0f1518",
                   fontFamily: "var(--font-geist-sans)",
                   fontSize: 14,
                   fontWeight: 500,
@@ -295,8 +299,9 @@ export function LandingPricing() {
             textAlign: "center",
           }}
         >
-          Annual billing available. Non-profit and public-sector discounts on
-          request. All plans include the iOS field app at no extra cost.
+          Pricing is indicative during the v2 staging period. Annual billing
+          available. Non-profit and public-sector discounts on request. All
+          plans include the iOS field app at no extra cost.
         </p>
       </div>
 

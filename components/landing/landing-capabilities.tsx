@@ -1,5 +1,5 @@
 /**
- * §03 Capabilities — 4-card grid of inspection-grade tools.
+ * §02 Capabilities — 4-card grid of inspection-grade tools.
  * Borderless grid where cells share 1px ink hairlines; alternating
  * paper / paper-2 cell backgrounds; gold-italic number eyebrow per card.
  */
@@ -16,7 +16,7 @@ const FEATURES = [
     title: "Snap & analyze",
     body:
       "Photos are instantly inspected against fire, electrical, egress, ADA, and infection-control rules. Each frame run against ten codebases with overlap reconciled.",
-    foot: "10 codebases · 14,000+ rules",
+    foot: "12 codebases · 13,800+ rules",
   },
   {
     num: "03",
@@ -62,7 +62,7 @@ export function LandingCapabilities() {
                 marginBottom: 14,
               }}
             >
-              § 03 — Capabilities
+              § 02 — Capabilities
             </p>
             <h2
               style={{

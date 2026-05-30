@@ -31,7 +31,7 @@ export function LandingFooter() {
               marginBottom: 24,
             }}
           >
-            § 09 — Next walk-through
+            § 10 — Next walk-through
           </p>
           <h2
             style={{

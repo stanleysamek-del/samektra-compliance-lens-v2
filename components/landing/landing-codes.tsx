@@ -49,7 +49,7 @@ export function LandingCodes() {
                 marginBottom: 14,
               }}
             >
-              § 05 — Codebases
+              § 06 — Codebases
             </p>
             <h2
               style={{

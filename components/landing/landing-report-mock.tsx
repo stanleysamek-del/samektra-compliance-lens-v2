@@ -1,5 +1,5 @@
 /**
- * §06½ Report mock — sample signed PDF preview. Paper-stack offset
+ * §07 Report mock — sample signed PDF preview. Paper-stack offset
  * shadow on a slightly warmer cream than the surrounding body, header
  * + severity boxes + finding-table excerpt + signature block + a faint
  * "Specimen" watermark rotated -18°. Pairs with a left-side copy block.
@@ -43,7 +43,7 @@ export function LandingReportMock() {
                 marginBottom: 14,
               }}
             >
-              § 06½ — The deliverable
+              § 07 — The deliverable
             </p>
             <h2
               style={{
