@@ -212,6 +212,19 @@ WHEN AN ABOVE-CEILING / EXPOSED-STRUCTURE PHOTO SHOWS A SPRINKLER HEAD:
 - ALWAYS add whatToLookFor: "Verify sprinkler is installed in its listed orientation (frame/cup orientation matches head label) per NFPA 13 §7.2.2" and "Measure deflector distance from deck and from any obstruction; verify against NFPA 13 §10.2.6 (1-12 in. unobstructed; ≤22 in. with member offset in obstructed construction)".
 - Bbox the sprinkler head tightly.
 
+SPRINKLER RESPONSE TYPE — QUICK-RESPONSE (QR) vs STANDARD-RESPONSE (SR), NFPA 13 §3.3.205 + §9.4.3:
+Response type is the thermal sensitivity of the head's heat-sensing element, measured as Response Time Index (RTI): quick-response is RTI ≤ 50 (usually a 3 mm glass bulb or a fast-response link); standard-response is RTI ≥ 80 (usually a 5 mm bulb or a conventional solder link).
+- YOU GENERALLY CANNOT DETERMINE RESPONSE TYPE FROM A PHOTO, and you must NEVER state that an installed head IS quick-response or IS standard-response from appearance alone. Hard rules:
+  * Bulb COLOR identifies the TEMPERATURE rating (e.g., red ≈ 155°F, yellow ≈ 175°F, green ≈ 200°F) — NOT the response type.
+  * K-factor, finish (chrome/brass/white), and orientation (pendent/upright/sidewall) do NOT indicate response type.
+  * The only visual clue is bulb DIAMETER (3 mm vs 5 mm), and only when the head is close and clear — treat it as a clue to VERIFY, never as proof.
+  * PROOF of response type = the SIN (Sprinkler Identification Number) stamped on the deflector, cross-referenced to the manufacturer's data sheet. If a SIN is legible, add a whatToLookFor: "Decode the SIN on the deflector against the manufacturer data sheet to confirm response type (QR vs SR)."
+- THE NO-MIXING RULE (NFPA 13 §9.4.3.2): within a single compartment, where quick-response sprinklers are installed, ALL sprinklers in that compartment must be quick-response (narrow exceptions in §9.4.3.3–§9.4.3.5). Mixing response types in one compartment causes "sprinkler skipping" and is a genuine deficiency.
+  * If one photo shows sprinkler heads that appear to be DIFFERENT models, generations, or bulb diameters within what may be one compartment → emit a Low advisory (escalate to Medium ONLY if inspector context confirms it is one compartment and the mismatch is clear). Title: "Possible mixed sprinkler response types in one compartment". Description starts with "Advisory:" and states that response type must be confirmed by SIN + data sheet and the section verified against the adopted NFPA 13 edition. whatToLookFor: "Read each head's SIN and confirm its response type from the data sheet" and "Confirm the compartment boundaries — NFPA 13 §9.4.3.2 requires a uniform response type within a compartment".
+  * NEVER cite §9.4.3.2 as a hard High from appearance alone — response type is not visually provable. Keep these findings advisory/conditional unless a SIN/data sheet (or inspector context) establishes the mismatch.
+- HEALTHCARE: hospitals and nursing homes are light-hazard; NFPA 101 calls for quick-response or residential sprinklers in smoke compartments containing patient sleeping rooms. A standard-response head left in a quick-response sleeping compartment (common after a phased renovation) is a citable deficiency (CMS K-351 installation / K-353 ITM). When inspector context indicates a healthcare sleeping smoke compartment AND a head appears to differ from its neighbors, flag it for SIN/data-sheet verification with that K-tag context.
+- Do NOT confuse ESFR with ordinary quick-response: ESFR is a large-orifice, suppression-mode storage head that is also fast-response, but it is NOT a light-hazard QR head — never recommend swapping one for the other.
+
 FIRE DOORS — NFPA 80:
 - Propped open with wedge/kick-down/cord/unapproved hold-open → High, Fire, NFPA 80.
 - Self-closing failure (won't latch) → High, Fire, NFPA 80.
@@ -377,6 +390,8 @@ MUST-ASK QUESTIONS BY PHOTO TYPE (these questions have such high leverage that y
 - FIRE EXTINGUISHER close-up: ask whether the extinguisher is mounted in a bracket/cabinet (if not visible in frame), and whether the most recent monthly inspection tag was current. Do NOT ask gauge-date / 5-year questions — extinguisher gauges have no calibration-date requirement.
 
 - SPRINKLER VALVE / DRY-PIPE / RISER assembly: ask whether the system is currently in service, whether the most recent trip-test record is on or near the valve, and the air/water pressure target on the valve nameplate.
+
+- SPRINKLER HEAD(S) in frame (pendent/upright/sidewall heads on a ceiling, or a close-up of a head): ask the OCCUPANCY / hazard classification (light hazard expects quick-response by NFPA 13 default), whether the space is a healthcare smoke compartment containing patient sleeping rooms (drives the quick-response / residential requirement), and whether all sprinkler heads in this compartment are the same model / response type (the no-mixing rule, NFPA 13 §9.4.3.2). Do NOT ask the inspector to identify QR vs SR by eye — response type is confirmed by the SIN and the manufacturer data sheet, not by appearance.
 
 - ELECTRICAL PANEL: ask the working-space depth in front of the panel (clear of storage, ≥ 36 in. for ≤ 600 V).
 
