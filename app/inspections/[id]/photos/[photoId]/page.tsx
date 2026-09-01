@@ -57,7 +57,7 @@ export default async function PhotoDetailPage({
     supabase
       .from("findings")
       .select(
-        "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, user_rating",
+        "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, user_rating, cap_status, priority, cap_target_date, assigned_to, assigned_email, action_closed_at, closure_note, closure_photo_id",
       )
       .eq("photo_id", photoId)
       .order("severity", { ascending: false })
@@ -68,7 +68,7 @@ export default async function PhotoDetailPage({
       .eq("photo_id", photoId),
     supabase
       .from("inspections")
-      .select("status")
+      .select("status, organization_id")
       .eq("id", inspectionId)
       .maybeSingle(),
     // Defensive: not_visible may not have the extra columns if migration
@@ -117,6 +117,34 @@ export default async function PhotoDetailPage({
   });
 
   const isInspectionCompleted = parentInspection?.status === "completed";
+
+  // Corrective-action context: the org member directory feeds the
+  // assignee dropdown; the caller's role decides whether the strip is
+  // read-only (viewers). Personal-workspace inspections get an empty
+  // directory — assignment falls back to the by-email field.
+  const orgId =
+    (parentInspection as { organization_id?: string | null } | null)
+      ?.organization_id ?? null;
+  let actionMembers: Array<{ user_id: string; full_name: string; email: string }> = [];
+  let isViewer = false;
+  if (orgId) {
+    const [{ data: directory }, { data: myMembership }] = await Promise.all([
+      supabase.rpc("org_member_directory", { _org_id: orgId }),
+      supabase
+        .from("organization_members")
+        .select("role")
+        .eq("organization_id", orgId)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+    actionMembers = (directory ?? []) as typeof actionMembers;
+    isViewer = myMembership?.role === "viewer";
+  }
+  const actionContext = {
+    members: actionMembers,
+    currentUserId: user.id,
+    readOnly: isViewer,
+  };
 
   // Process the not_visible result from the Promise.all above. If the
   // full select errored (migration 0012/0013 not yet run on this env),
@@ -334,6 +362,7 @@ export default async function PhotoDetailPage({
                     finding={f as unknown as FindingRow}
                     index={idx}
                     photoUrl={photoUrl || null}
+                    actionContext={actionContext}
                   />
                 </li>
               ))}

@@ -36,6 +36,7 @@ const NAV: NavItem[] = [
     accent: true,
   },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
+  { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
   { href: "/team", label: "Team", icon: <TeamIcon /> },
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
 ];
@@ -468,6 +469,33 @@ function FindingsIcon() {
       />
       <path
         d="m11 13 1.5 1.5L16 11"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ActionsIcon() {
+  // Clipboard with an arrow — "the finding goes to somebody to fix".
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 5h8v3H8z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 6h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 14h6m0 0-2.2-2.2M15 14l-2.2 2.2"
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"

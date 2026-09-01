@@ -69,6 +69,14 @@ export async function GET(
       location: string | null;
       remediation: string | null;
       references: string[] | null;
+      // Live action-workflow data (migration 0019) — the manager columns
+      // print what the DB knows instead of shipping blank for hand-entry.
+      capStatus: string | null;
+      capTargetDate: string | null;
+      assignedEmail: string | null;
+      actionClosedAt: string | null;
+      closureNote: string | null;
+      managerCorrectiveAction: string | null;
     };
 
     const rows: CAPRow[] = [];
@@ -76,7 +84,7 @@ export async function GET(
       const { data: findings } = await supabase
         .from("findings")
         .select(
-          "photo_id, title, severity, category, description, location, remediation, references, created_at",
+          "photo_id, title, severity, category, description, location, remediation, references, created_at, cap_status, cap_target_date, assigned_email, action_closed_at, closure_note, manager_corrective_action",
         )
         .in("photo_id", photoIds)
         .order("severity", { ascending: false })
@@ -106,6 +114,13 @@ export async function GET(
           location: (f.location as string | null) ?? null,
           remediation: (f.remediation as string | null) ?? null,
           references: (f.references as string[] | null) ?? null,
+          capStatus: (f.cap_status as string | null) ?? null,
+          capTargetDate: (f.cap_target_date as string | null) ?? null,
+          assignedEmail: (f.assigned_email as string | null) ?? null,
+          actionClosedAt: (f.action_closed_at as string | null) ?? null,
+          closureNote: (f.closure_note as string | null) ?? null,
+          managerCorrectiveAction:
+            (f.manager_corrective_action as string | null) ?? null,
         });
       }
     }
@@ -197,8 +212,16 @@ export async function GET(
     } else {
       for (const row of rows) {
         const def = formatDeficiency(row);
-        const corr = row.remediation ?? "";
-        const followUp = "";
+        // Corrective-action column: the manager's own words win; the AI
+        // remediation is the fallback. Assignment details ride along so
+        // the printed CAP shows who owns it and by when.
+        const corrParts: string[] = [];
+        corrParts.push(row.managerCorrectiveAction ?? row.remediation ?? "");
+        if (row.assignedEmail) corrParts.push(`Assigned: ${row.assignedEmail}`);
+        if (row.capTargetDate) corrParts.push(`Due: ${row.capTargetDate}`);
+        const corr = corrParts.filter(Boolean).join("\n");
+        // Follow-up column: live workflow status + close-out trail.
+        const followUp = formatFollowUp(row);
         const sev = row.severity;
 
         const xRow = ws.getRow(r);
@@ -305,6 +328,27 @@ function formatDate(s: string | null): string {
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
   return d.toISOString().slice(0, 10);
+}
+
+function formatFollowUp(row: {
+  capStatus: string | null;
+  actionClosedAt: string | null;
+  closureNote: string | null;
+}): string {
+  const STATUS_TEXT: Record<string, string> = {
+    open: "Open",
+    in_progress: "In progress",
+    done: "Done — pending verification",
+    verified: "Verified complete",
+    wont_fix: "Won't fix",
+  };
+  const parts: string[] = [];
+  parts.push(`Status: ${STATUS_TEXT[row.capStatus ?? "open"] ?? "Open"}`);
+  if (row.actionClosedAt) {
+    parts.push(`Closed: ${row.actionClosedAt.slice(0, 10)}`);
+  }
+  if (row.closureNote) parts.push(row.closureNote);
+  return parts.join("\n");
 }
 
 function formatDeficiency(row: {

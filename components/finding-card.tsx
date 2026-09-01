@@ -8,6 +8,11 @@ import {
   type FindingPatch,
 } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { BboxPicker, type Bbox } from "@/components/bbox-picker";
+import {
+  ActionStrip,
+  type ActionFields,
+  type OrgMember,
+} from "@/components/action-strip";
 
 export type FindingRow = {
   id: string;
@@ -28,6 +33,17 @@ export type FindingRow = {
   bbox_y2: number | null;
   /** 1 = thumbs-up, -1 = thumbs-down, null = no feedback. */
   user_rating?: number | null;
+  // Corrective-action fields (migration 0019). Optional so render sites
+  // that don't select them keep compiling — the strip only shows when
+  // the page passes `actionContext`.
+  cap_status?: ActionFields["cap_status"];
+  priority?: ActionFields["priority"];
+  cap_target_date?: string | null;
+  assigned_to?: string | null;
+  assigned_email?: string | null;
+  action_closed_at?: string | null;
+  closure_note?: string | null;
+  closure_photo_id?: string | null;
 };
 
 const CATEGORIES = [
@@ -47,12 +63,20 @@ export function FindingCard({
   finding,
   index,
   photoUrl,
+  actionContext,
 }: {
   finding: FindingRow;
   index: number;
   /** If provided, edit mode shows a BboxPicker on the photo so the user can
    *  add/move/resize/clear the annotation for this finding. */
   photoUrl?: string | null;
+  /** If provided, renders the corrective-action workflow strip
+   *  (assign / due / status / close-out / comments) under the card. */
+  actionContext?: {
+    members: OrgMember[];
+    currentUserId: string;
+    readOnly?: boolean;
+  };
 }) {
   const initialBbox: Bbox | null =
     finding.bbox_x1 != null &&
@@ -382,6 +406,26 @@ export function FindingCard({
           ) : null}
         </div>
       )}
+
+      {actionContext ? (
+        <ActionStrip
+          findingId={finding.id}
+          inspectionId={finding.inspection_id}
+          action={{
+            cap_status: finding.cap_status ?? "open",
+            priority: finding.priority ?? "medium",
+            cap_target_date: finding.cap_target_date ?? null,
+            assigned_to: finding.assigned_to ?? null,
+            assigned_email: finding.assigned_email ?? null,
+            action_closed_at: finding.action_closed_at ?? null,
+            closure_note: finding.closure_note ?? null,
+            closure_photo_id: finding.closure_photo_id ?? null,
+          }}
+          members={actionContext.members}
+          currentUserId={actionContext.currentUserId}
+          readOnly={actionContext.readOnly}
+        />
+      ) : null}
     </div>
   );
 }
