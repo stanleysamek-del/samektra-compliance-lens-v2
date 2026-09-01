@@ -10,6 +10,7 @@ import {
   EditorialFootnote,
   EditorialSerifLink,
 } from "@/components/auth-editorial-inputs";
+import { GoogleSignInButton } from "@/components/google-signin-button";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
@@ -76,6 +77,8 @@ export function SignupForm({ action, next, error, sent }: Props) {
       {error ? <EditorialErrorBanner message={error} /> : null}
 
       <SubmitButton />
+
+      <GoogleSignInButton next={next} />
 
       <EditorialFootnote>
         Already have an account?{" "}

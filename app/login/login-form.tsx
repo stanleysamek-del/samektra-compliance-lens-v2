@@ -12,6 +12,7 @@ import {
   EditorialMonoLink,
   EditorialSerifLink,
 } from "@/components/auth-editorial-inputs";
+import { GoogleSignInButton } from "@/components/google-signin-button";
 
 // sessionStorage flag written at sign-in when "remember me" is off.
 // The SessionGuard component (mounted in app-shell) reads this and
@@ -124,6 +125,8 @@ export function LoginForm({ action, next, error, reset }: Props) {
       </div>
 
       <SubmitButton />
+
+      <GoogleSignInButton next={next} />
 
       <EditorialFootnote>
         New here?{" "}
