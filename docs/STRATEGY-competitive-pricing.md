@@ -4,10 +4,13 @@ Drafted 2026-08-31 (evening before the V2 finish-and-test session).
 Stanley's directive: "we need to be competitive to SafetyCulture and
 better, we need better strategy and pricing."
 
-Status: COMPLETE — positioning, verified competitive intel (three research
-passes, 2026-08-31, sources cited inline), and a recommended pricing table
-in §6.5 awaiting Stanley's blessing. Headline market fact: SafetyCulture
-rebranded to **Mitti** on Aug 11, 2026.
+Status: **APPROVED — Stanley blessed the §6.5 pricing and the overall
+approach 2026-08-31 evening ("I love that, yes thats the right approach").**
+The tiers below are no longer a recommendation; they are the pricing.
+Tomorrow's honesty copy pass installs them on the landing. Positioning +
+competitive intel verified via three research passes (2026-08-31, sources
+cited inline). Headline market fact: SafetyCulture rebranded to **Mitti**
+on Aug 11, 2026.
 
 ---
 
