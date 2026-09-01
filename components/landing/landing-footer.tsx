@@ -127,7 +127,7 @@ export function LandingFooter() {
                 marginLeft: 12,
               }}
             >
-              No credit card · 14-day trial
+              No credit card · free tier, free forever
             </span>
           </div>
         </div>

@@ -8,15 +8,15 @@ const FEATURES = [
     num: "01",
     title: "Photo-first capture",
     body:
-      "Snap with the iOS app or upload from desktop. Each frame is geotagged, time-stamped, and chain-of-custody hashed.",
-    foot: "Offline-capable",
+      "Snap from any phone browser or upload from desktop. Each frame is geotagged, time-stamped, and chain-of-custody hashed from the original file.",
+    foot: "Any phone · any desktop",
   },
   {
     num: "02",
     title: "Snap & analyze",
     body:
-      "Photos are instantly inspected against fire, electrical, egress, ADA, and infection-control rules. Each frame run against ten codebases with overlap reconciled.",
-    foot: "12 codebases · 13,800+ rules",
+      "Photos are instantly inspected against fire, electrical, egress, ADA, and infection-control rules — with the code section cited on every finding.",
+    foot: "NFPA · IBC · IFC · NEC · CMS · TJC · ADA · GA Title 25",
   },
   {
     num: "03",

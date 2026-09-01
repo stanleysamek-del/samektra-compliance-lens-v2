@@ -6,6 +6,12 @@ import { useState } from "react";
  * §09 FAQ — accordion. Stripped down editorial style: serif question,
  * mono Q.NN number, gold "+" toggle that rotates to "×" when open.
  */
+/**
+ * Honesty rule (2026-09-01 copy pass): every answer below is limited to
+ * what the shipped product actually does. No invented certifications,
+ * usage statistics, or partnership claims — a procurement reviewer WILL
+ * check, and one falsifiable line poisons the true ones.
+ */
 const FAQ_ITEMS = [
   {
     q: "Is Compliance Lens a replacement for a certified inspector?",
@@ -13,23 +19,23 @@ const FAQ_ITEMS = [
   },
   {
     q: "Which photo conditions does the model handle?",
-    a: "iPhone 12 or newer, daylight or facility lighting (≥30 fc). The model degrades gracefully in low light — findings are returned with reduced confidence and flagged for re-capture. HEIC, JPEG, and PNG accepted up to 48 MP.",
+    a: "Any reasonably lit photo from a modern phone or camera. The model degrades gracefully in poor light — findings come back with reduced confidence, and you can re-run any photo with a deeper analysis or coach the AI with context it couldn't see. JPEG and PNG accepted; photos are resized to 1024px for analysis.",
   },
   {
-    q: "How do you handle PHI in patient-occupied photos?",
-    a: "All processing happens in a HIPAA-aligned, BAA-covered environment. Faces and visible PHI are auto-redacted in exported reports by default; raw images are encrypted at rest with per-tenant keys. SOC 2 Type II report available under NDA.",
+    q: "How do you handle photos taken in patient-occupied areas?",
+    a: "Photos are stored in a private bucket, never public — every image is served through short-lived signed URLs, scoped to your account or team. Our guidance for healthcare users is the same as for any EOC round: frame the condition, not the patient. Formal compliance attestations (BAA, SOC 2) are on the roadmap and we'll state them here only when they're real.",
   },
   {
     q: "Can I add a state or local code that isn't on your list?",
-    a: "Yes. Onboarding a new codebase takes about a week for jurisdictions with a published, structured code. We've added Georgia Title 25, several California Title 24 sections, and city-level fire-marshal supplements on customer request. Email codes@compliancelens.app.",
+    a: "Tell us which jurisdiction and we'll be straight with you about timeline. Georgia Title 25 is already covered alongside the national codebases. You can also teach the AI your own house rules today — 'Teach Chip this' turns a correction into a permanent org rule applied to every future analysis.",
   },
   {
     q: "Will my AHJ accept the signed PDF?",
-    a: "Yes — that's the goal. The PDF includes chain-of-custody hash, original photos, cited code text, severity, CAP entries, and signatures. We work directly with state fire marshal offices and TJC tracer surveyors to keep templates aligned to current submission requirements.",
+    a: "The PDF is built to be defensible: chain-of-custody hash captured from the original photo file, embedded photos with findings marked, cited code sections, severity, the corrective-action trail, and a sign-off page with inspector and manager signatures. Acceptance is always the AHJ's call — which is true of any report format — but everything they'd ask for is in there.",
   },
   {
     q: "What if the AI is wrong?",
-    a: "Every finding is editable — severity, code citation, bounding box, and remediation. Dismissals require a documented reason and become part of the audit trail. A model-confidence score travels with every finding. In 14 months of customer use, override rates have averaged 6.4%.",
+    a: "Every finding is editable — severity, code citation, bounding box, and remediation — and you can delete a wrong call outright. Thumbs-down feedback and 'Coach the AI' corrections feed the next analysis, and org-level learned rules make it permanent. A model-confidence score travels with every finding so you know which calls to double-check.",
   },
 ];
 

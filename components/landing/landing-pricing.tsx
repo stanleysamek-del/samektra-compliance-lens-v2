@@ -1,70 +1,99 @@
 import Link from "next/link";
 
 /**
- * §07 Pricing — three tiers, document-style. Middle tier inverted
- * (ink fill, paper text) and badged "MOST CHOSEN".
+ * §07 Pricing — approved 2026-08-31 (docs/STRATEGY-competitive-pricing.md
+ * §6.5). The strategic frame: SafetyCulture (now Mitti) charges $24/seat
+ * and its #1 review complaint is occasional users paying full seats. We
+ * anchor on the BUILDING, not the seat — Facility is flat with unlimited
+ * members — and everything they paywall (exports, branding, no
+ * watermarks) is included. Every guarantee below targets a verified
+ * complaint from their own reviews; don't soften them.
  *
- * NOTE: prices and claims below are INDICATIVE for the v2 staging build.
- * Compliance claims (BAA / HIPAA / SOC 2) are framed as availability /
- * roadmap rather than completed certifications — tighten only once each
- * is actually in place, to avoid overstating posture.
+ * Honesty rule: every line here must be TRUE of the shipped product.
+ * SSO/SCIM, on-prem, and compliance certifications stay OFF this page
+ * until they exist.
  */
 const TIERS = [
   {
-    name: "Inspector",
-    tagline: "For solo consultants and independent CFPS practitioners.",
-    price: "$89",
-    period: "/ inspector / mo",
+    name: "Field",
+    tagline: "Try the AI on a real walk. Free means free.",
+    price: "$0",
+    period: "forever",
     featured: false,
     includes: [
-      "Unlimited photo inspections",
-      "All 12 codebases",
-      "CAP, LSRA, ILSM exports",
-      "Signed PDF reports",
-      "20 GB photo storage",
-      "Email support",
+      "1 user · 1 facility",
+      "100 AI photo analyses / mo",
+      "Cited findings — code section included",
+      "CAP, LSRA, ILSM + PDF exports",
+      "No watermarks, ever",
+      "Full data export, free, always",
     ],
-    cta: "Start a 14-day trial",
+    cta: "Start free",
+    href: "/signup",
+  },
+  {
+    name: "Pro",
+    tagline: "For solo inspectors and consultants — every building you walk.",
+    price: "$19",
+    period: "/ mo billed annually · $24 monthly",
+    featured: false,
+    includes: [
+      "Everything in Field",
+      "Unlimited facilities",
+      "1,000 AI photo analyses / mo",
+      "Coach the AI + learned rules",
+      "Your logo on reports",
+      "Priority email support",
+    ],
+    cta: "Go Pro",
     href: "/signup",
   },
   {
     name: "Facility",
-    tagline:
-      "For hospitals, university campuses, and multi-building portfolios.",
-    price: "$1,250",
-    period: "/ facility / mo",
+    tagline: "One building, your whole team. Stop counting seats.",
+    price: "$149",
+    period: "/ facility / mo · $179 monthly",
     featured: true,
     includes: [
-      "Everything in Inspector",
-      "Up to 12 inspectors",
-      "Per-facility audit trail",
-      "AHJ submission templates",
-      "TJC tracer templates",
-      "SSO / SCIM",
-      "Dedicated implementation lead",
-      "Priority support (4-hr response)",
+      "Unlimited team members",
+      "Assignees & viewers always free",
+      "Corrective-actions board + email nudges",
+      "Team workspace + shared learned rules",
+      "Signature sign-off on reports",
+      "Everything in Pro, org-wide",
     ],
-    cta: "Book a walk-through",
+    cta: "Start your building",
     href: "/signup",
   },
   {
-    name: "Enterprise",
-    tagline: "For health systems, public agencies, and integrated portfolios.",
-    price: "Custom",
-    period: "volume + region",
+    name: "Healthcare",
+    tagline: "EOC / life-safety teams under CMS and Joint Commission survey.",
+    price: "$399",
+    period: "/ facility / mo",
     featured: false,
     includes: [
       "Everything in Facility",
-      "Custom codebases (state/local)",
-      "On-prem photo storage option",
-      "BAA available · HIPAA-aligned",
-      "SOC 2 (in progress)",
-      "Custom report templates",
-      "Named CSM + solutions engineer",
+      "EOC-structured PDF reports",
+      "CAP / LSRA / ILSM at team scale",
+      "Survey-prep deliverables",
+      "Priority support",
+      "Costs less than one bad survey day",
     ],
-    cta: "Contact sales",
+    cta: "Book a walk-through",
     href: "mailto:hello@compliancelens.app",
   },
+];
+
+/** Each guarantee targets a verified complaint in SafetyCulture (now
+ *  Mitti) reviews — watermarked exports, Premium-gated bulk export,
+ *  3-device caps, per-seat math, renewal price surprises. */
+const GUARANTEES = [
+  "No watermarks on any tier",
+  "Full export, free, forever",
+  "No device limits",
+  "Unlimited viewers & assignees",
+  "12-month notice before any price change",
+  "Cancel monthly plans anytime",
 ];
 
 export function LandingPricing() {
@@ -111,7 +140,7 @@ export function LandingPricing() {
           className="pricing-grid"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "repeat(4, 1fr)",
             gap: 0,
             border: "1px solid #0f1518",
           }}
@@ -120,8 +149,8 @@ export function LandingPricing() {
             <div
               key={t.name}
               style={{
-                padding: "40px 32px",
-                borderRight: i < 2 ? "1px solid #0f1518" : "none",
+                padding: "40px 28px",
+                borderRight: i < TIERS.length - 1 ? "1px solid #0f1518" : "none",
                 background: t.featured ? "#0f1518" : "#ece8da",
                 color: t.featured ? "#ece8da" : "#0f1518",
                 display: "flex",
@@ -291,22 +320,65 @@ export function LandingPricing() {
           ))}
         </div>
 
+        {/* The guarantees strip — each line counters a documented
+            SafetyCulture/Mitti complaint. This is positioning, not filler. */}
+        <div
+          style={{
+            marginTop: 40,
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "10px 28px",
+          }}
+        >
+          {GUARANTEES.map((g) => (
+            <span
+              key={g}
+              style={{
+                fontFamily: "var(--font-jetbrains-mono)",
+                fontSize: 11,
+                letterSpacing: "0.08em",
+                color: "#0f1518",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={{ color: "#b8902f" }}>✓</span>
+              {g}
+            </span>
+          ))}
+        </div>
+
         <p
           style={{
-            marginTop: 32,
+            marginTop: 28,
             fontSize: 13,
             color: "#5f6b72",
             textAlign: "center",
           }}
         >
-          Pricing is indicative during the v2 staging period. Annual billing
-          available. Non-profit and public-sector discounts on request. All
-          plans include the iOS field app at no extra cost.
+          Multi-building portfolio or health system?{" "}
+          <a
+            href="mailto:hello@compliancelens.app"
+            style={{ color: "#0f1518", textDecorationColor: "#b8902f" }}
+          >
+            Talk to us about Portfolio pricing
+          </a>
+          {" "}— volume per-facility rates plus the option of a Samektra
+          analyst running the program for you. Non-profit and public-sector
+          discounts on request.
         </p>
       </div>
 
       <style>{`
-        @media (max-width: 900px) {
+        @media (max-width: 1100px) {
+          .pricing-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .pricing-grid > div { border-right: none !important; border-bottom: 1px solid #0f1518 !important; }
+          .pricing-grid > div:nth-child(odd) { border-right: 1px solid #0f1518 !important; }
+          .pricing-grid > div:nth-last-child(-n+2) { border-bottom: none !important; }
+        }
+        @media (max-width: 640px) {
           .pricing-grid { grid-template-columns: 1fr !important; }
           .pricing-grid > div { border-right: none !important; border-bottom: 1px solid #0f1518 !important; }
           .pricing-grid > div:last-child { border-bottom: none !important; }
