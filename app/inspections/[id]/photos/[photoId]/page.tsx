@@ -40,7 +40,7 @@ export default async function PhotoDetailPage({
   // ran one-after-another with each round-trip waiting on the previous.
   const [
     { data: photo },
-    { data: findings },
+    findingsFull,
     { data: wtlf },
     { data: parentInspection },
     nvFull,
@@ -54,6 +54,9 @@ export default async function PhotoDetailPage({
       .eq("id", photoId)
       .eq("inspection_id", inspectionId)
       .maybeSingle(),
+    // Full select includes the 0019 action columns. If that migration
+    // isn't applied yet, this errors — a legacy fallback below re-selects
+    // without them (same defensive pattern as not_visible/0012 here).
     supabase
       .from("findings")
       .select(
@@ -99,6 +102,27 @@ export default async function PhotoDetailPage({
     ? Number(latestAiCall.duration_ms ?? 0)
     : 0;
   const latestAiModel = latestAiCall?.model ?? null;
+
+  // Findings fallback for pre-0019 databases (see comment on the select).
+  // The legacy rows lack the action columns; FindingRow marks them all
+  // optional, so the narrower shape is safe to treat as the full one.
+  let findings = findingsFull.data;
+  if (findingsFull.error) {
+    console.warn(
+      "[photo] findings full select failed — falling back to legacy. " +
+        "Likely cause: migration 0019 not yet run. Error:",
+      findingsFull.error.message,
+    );
+    const legacy = await supabase
+      .from("findings")
+      .select(
+        "id, inspection_id, title, category, code, severity, description, location, remediation, references, ai_confidence, edited, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill, user_rating, cap_status, cap_target_date",
+      )
+      .eq("photo_id", photoId)
+      .order("severity", { ascending: false })
+      .order("created_at", { ascending: true });
+    findings = legacy.data as unknown as typeof findings;
+  }
   // Cumulative across every successful run on this photo (initial + re-analyses + coach turns).
   const cumulativeAiMs = (aiCallRows ?? []).reduce(
     (sum, c) => sum + Number(c.duration_ms ?? 0),
