@@ -12,6 +12,13 @@ below as Phase 1 quick wins).
 
 ## §0 Status
 
+> **2026-08-31:** still true — zero commits since this doc was written;
+> Phase 1 never started (verified: migrations end at 0018, `cap_status`
+> unwired in UI). Tomorrow's execution plan, including the E2E test gate
+> and the V2 promo video, is **`PLAN-2026-09-01-v2-finish-and-video.md`**
+> — start there. Also confirmed: V1 is what's live on both app stores
+> (iOS title has a literal typo, "Smektra"); V2 is published nowhere.
+
 | Phase | Status | Contents |
 |---|---|---|
 | Phase 1 — Replacement blockers | NOT STARTED | Actions workflow, checklist engine w/ AI pre-fill, signatures, notifications |
