@@ -3,6 +3,20 @@
 Written 2026-08-31 evening. Stanley's directive, verbatim: "improve, test,
 and make sure we got all we want for it to work" — then the video.
 
+> **STATUS — Part A COMPLETE, built and pushed 2026-08-31 evening
+> (commits `8425a9f…4431d5c`).** All 8 items below shipped: migration
+> 0019 (actions + comments + org_member_directory RPC), ActionStrip on
+> finding cards, /actions board + nav, Resend action emails + daily
+> overdue cron, CAP export reading live workflow data, SignaturePad +
+> PDF sign-off page, geotag + SHA-256 photo integrity (migration 0020),
+> dead-code deletion, and the landing honesty pass with the APPROVED
+> pricing (Field free / Pro $19 / Facility $149 / Healthcare $399 +
+> six-guarantee strip). Pre-migration fallbacks are in place, so the
+> deploy is safe before the migrations run — but **Stanley must apply
+> `0019_finding_actions.sql` and `0020_photo_integrity.sql` in the
+> Supabase SQL editor** before Part B's E2E means anything.
+> **Next: Part B — the phone E2E test gate.**
+
 **Repo state verified tonight (not assumed):** last commit is still
 `f3c34cc` (2026-07-19, the plan doc itself). Working tree clean. Migrations
 end at `0018` → **0019 is the next free number**. `cap_status` appears in
