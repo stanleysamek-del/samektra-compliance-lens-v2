@@ -113,9 +113,16 @@ services hero proved pure-UI works fine).
       redeploy — dark since May; compare `/admin/stats` timings.
 - [ ] Confirm `RESEND_API_KEY` is set in the CL v2 Vercel env — action
       emails (Part A item 4, Part B item 2) silently no-op without it.
-- [ ] **Pricing decision** (from the July plan, still open): keep
-      $89/inspector + $1,250/facility indicative pricing, or reprice
-      against SafetyCulture's $24/seat before showing anyone at work.
+- [ ] **Pricing decision — a full recommendation now exists**: read
+      `STRATEGY-competitive-pricing.md` §6.5 (written 2026-08-31 from
+      three live research passes). Recommended: Free / Pro $19 / Facility
+      $149 flat unlimited-members / Healthcare $399 / Portfolio custom —
+      replacing the $89/$1,250 indicative tiers, which price ABOVE
+      SafetyCulture with a fraction of the surface. Bless or adjust;
+      the honesty copy pass (Part A item 8) then installs the blessed
+      numbers on the landing. Note: SafetyCulture rebranded to **Mitti**
+      on Aug 11, 2026 — landing comparison copy should say
+      "SafetyCulture (now Mitti)".
 - [ ] **V1 store-listing fixes** — independent of ALL of the above, pure
       metadata, no binary: fix the iOS title typo ("Smektra" → "Samektra")
       in App Store Connect; rewrite the Play description to actually
