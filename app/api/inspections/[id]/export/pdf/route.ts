@@ -72,7 +72,7 @@ export async function GET(
     const { data: inspection } = await supabase
       .from("inspections")
       .select(
-        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at",
+        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at, inspector_signature_url, manager_signature_url, inspector_signed_at, manager_signed_at",
       )
       .eq("id", inspectionId)
       .maybeSingle();
@@ -533,6 +533,113 @@ export async function GET(
           col = 0;
           py -= cellH;
         }
+      }
+    }
+
+    /* ========================= SIGN-OFF PAGE ========================= */
+    // Dedicated final page: inspector + manager blocks. Captured
+    // signatures (the `signatures` bucket stores the PNGs the pad drew)
+    // embed above their lines; unsigned roles get a blank line for a wet
+    // signature on the printed copy.
+    {
+      const sigPage = pdf.addPage([PAGE_W, PAGE_H]);
+      let sy = PAGE_H - MARGIN - 10;
+      sigPage.drawText(safeText("Sign-off"), {
+        x: MARGIN,
+        y: sy,
+        size: 14,
+        font: helvBold,
+        color: TEAL,
+      });
+      sy -= 8;
+      sigPage.drawLine({
+        start: { x: MARGIN, y: sy },
+        end: { x: COL_RIGHT, y: sy },
+        thickness: 0.6,
+        color: TEAL,
+      });
+      sy -= 30;
+
+      const blocks = [
+        {
+          role: "Inspector",
+          name: inspection.inspector_name as string | null,
+          path: (inspection as { inspector_signature_url?: string | null })
+            .inspector_signature_url,
+          signedAt: (inspection as { inspector_signed_at?: string | null })
+            .inspector_signed_at,
+        },
+        {
+          role: "Manager Assigned",
+          name: inspection.manager_assigned as string | null,
+          path: (inspection as { manager_signature_url?: string | null })
+            .manager_signature_url,
+          signedAt: (inspection as { manager_signed_at?: string | null })
+            .manager_signed_at,
+        },
+      ];
+
+      for (const b of blocks) {
+        sigPage.drawText(safeText(b.role.toUpperCase()), {
+          x: MARGIN,
+          y: sy,
+          size: 9,
+          font: helvBold,
+          color: MUTED,
+        });
+        sy -= 14;
+
+        // Embedded signature image (72pt tall box), if captured.
+        if (b.path) {
+          try {
+            const { data: blob } = await supabase.storage
+              .from("signatures")
+              .download(b.path);
+            if (blob) {
+              const buf = Buffer.from(await blob.arrayBuffer());
+              const img = await pdf.embedPng(buf);
+              const maxH = 60;
+              const maxW = 240;
+              const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+              sigPage.drawImage(img, {
+                x: MARGIN,
+                y: sy - maxH,
+                width: img.width * scale,
+                height: img.height * scale,
+              });
+            }
+          } catch (err) {
+            console.error("[pdf] signature embed failed", err);
+          }
+          sy -= 66;
+        } else {
+          sy -= 40;
+        }
+
+        // Signature line + caption
+        sigPage.drawLine({
+          start: { x: MARGIN, y: sy },
+          end: { x: MARGIN + 260, y: sy },
+          thickness: 0.8,
+          color: FG,
+        });
+        sy -= 14;
+        const caption = [
+          b.name || "",
+          b.signedAt
+            ? `Signed ${new Date(b.signedAt).toISOString().slice(0, 10)}`
+            : "Date: ____________",
+        ]
+          .filter(Boolean)
+          .join("   ·   ");
+        sigPage.drawText(safeText(caption), {
+          x: MARGIN,
+          y: sy,
+          size: 9,
+          font: helv,
+          color: MUTED,
+        });
+        sy -= 48;
       }
     }
 

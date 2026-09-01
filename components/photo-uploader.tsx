@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/card";
 import { resizeImageForUpload } from "@/lib/resize-image";
+import { extractPhotoIntegrity } from "@/lib/photo-integrity";
 import { fetchWithRetry } from "@/lib/retry";
 import { formatDuration } from "@/lib/format-duration";
 
@@ -107,6 +108,10 @@ export function PhotoUploader({ inspectionId }: Props) {
     const previewUrl = URL.createObjectURL(file);
     setStatus({ kind: "uploading", filename: file.name, previewUrl });
 
+    // Integrity capture FIRST — GPS + timestamp + SHA-256 come from the
+    // ORIGINAL bytes; the resize below re-encodes and strips EXIF.
+    const integrity = await extractPhotoIntegrity(file);
+
     // Resize before upload to cut bandwidth + AI input-token cost.
     // Falls back to original if the browser can't decode the file.
     const resized = await resizeImageForUpload(file, 1024);
@@ -115,6 +120,10 @@ export function PhotoUploader({ inspectionId }: Props) {
     formData.append("inspection_id", inspectionId);
     formData.append("image", resized, resized.name);
     if (photoLocation) formData.append("photo_location", photoLocation);
+    if (integrity.sha256) formData.append("original_sha256", integrity.sha256);
+    if (integrity.lat !== null) formData.append("exif_lat", String(integrity.lat));
+    if (integrity.lng !== null) formData.append("exif_lng", String(integrity.lng));
+    if (integrity.takenAt) formData.append("exif_taken_at", integrity.takenAt);
 
     setStatus({ kind: "analyzing", filename: file.name, previewUrl });
 

@@ -140,6 +140,87 @@ function stringOrNull(v: FormDataEntryValue | null): string | null {
 }
 
 /* =====================================================================
+ * Signatures — inspector + manager sign-off (columns exist since 0001).
+ *
+ * The SignaturePad client component uploads the PNG to the `signatures`
+ * bucket (owner-path policy: first folder = auth.uid()) and then calls
+ * saveSignature with the storage PATH — same convention photos use, so
+ * the PDF export downloads it server-side and embeds it.
+ * ===================================================================== */
+
+export async function saveSignature(input: {
+  inspectionId: string;
+  role: "inspector" | "manager";
+  storagePath: string;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // The path must live in the caller's own folder — the storage policy
+  // enforces this for the upload; re-checking here keeps a forged path
+  // from being recorded on the row.
+  if (!input.storagePath.startsWith(`${user.id}/`)) {
+    return { ok: false as const, error: "Invalid signature path" };
+  }
+
+  const patch =
+    input.role === "inspector"
+      ? {
+          inspector_signature_url: input.storagePath,
+          inspector_signed_at: new Date().toISOString(),
+        }
+      : {
+          manager_signature_url: input.storagePath,
+          manager_signed_at: new Date().toISOString(),
+        };
+
+  const { error } = await supabase
+    .from("inspections")
+    .update(patch)
+    .eq("id", input.inspectionId);
+
+  if (error) {
+    console.error("[saveSignature]", error);
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath(`/inspections/${input.inspectionId}`);
+  return { ok: true as const };
+}
+
+export async function clearSignature(input: {
+  inspectionId: string;
+  role: "inspector" | "manager";
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const patch =
+    input.role === "inspector"
+      ? { inspector_signature_url: null, inspector_signed_at: null }
+      : { manager_signature_url: null, manager_signed_at: null };
+
+  const { error } = await supabase
+    .from("inspections")
+    .update(patch)
+    .eq("id", input.inspectionId);
+
+  if (error) {
+    console.error("[clearSignature]", error);
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath(`/inspections/${input.inspectionId}`);
+  return { ok: true as const };
+}
+
+/* =====================================================================
  * Re-photograph workflow — resolve / unresolve not_visible items.
  *
  * The not_visible table stores per-photo items Chip flagged as

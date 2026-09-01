@@ -103,6 +103,32 @@ export async function POST(request: NextRequest) {
       ? (formData.get("photo_location") as string).trim() || null
       : null;
 
+  // Integrity fields the client read from the ORIGINAL file before its
+  // resize stripped EXIF (migration 0020). All optional + validated —
+  // an upload never fails over missing/garbled integrity data.
+  const str = (k: string) => {
+    const v = formData.get(k);
+    return typeof v === "string" && v.trim() ? v.trim() : null;
+  };
+  const numOrNull = (k: string, min: number, max: number) => {
+    const v = str(k);
+    if (v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= min && n <= max ? n : null;
+  };
+  const originalSha256Raw = str("original_sha256");
+  const originalSha256 =
+    originalSha256Raw && /^[0-9a-f]{64}$/.test(originalSha256Raw)
+      ? originalSha256Raw
+      : null;
+  const exifLat = numOrNull("exif_lat", -90, 90);
+  const exifLng = numOrNull("exif_lng", -180, 180);
+  const exifTakenAtRaw = str("exif_taken_at");
+  const exifTakenAt =
+    exifTakenAtRaw && !Number.isNaN(Date.parse(exifTakenAtRaw))
+      ? new Date(exifTakenAtRaw).toISOString()
+      : null;
+
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const filename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const storagePath = `${user.id}/${inspectionId}/${filename}`;
@@ -228,19 +254,38 @@ export async function POST(request: NextRequest) {
   }
 
   // ---- Persist photo ----
-  const { data: photo, error: photoErr } = await supabase
+  const photoRow: Record<string, unknown> = {
+    inspection_id: inspectionId,
+    storage_path: storagePath,
+    width: analysis.image.width,
+    height: analysis.image.height,
+    photo_location: photoLocation,
+    raw_analysis: analysis,
+    analyzed_at: new Date().toISOString(),
+    original_sha256: originalSha256,
+    exif_lat: exifLat,
+    exif_lng: exifLng,
+    exif_taken_at: exifTakenAt,
+  };
+  let { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .insert({
-      inspection_id: inspectionId,
-      storage_path: storagePath,
-      width: analysis.image.width,
-      height: analysis.image.height,
-      photo_location: photoLocation,
-      raw_analysis: analysis,
-      analyzed_at: new Date().toISOString(),
-    })
+    .insert(photoRow)
     .select("id")
     .single();
+  if (photoErr && /original_sha256|exif_/.test(photoErr.message ?? "")) {
+    // Migration 0020 not applied yet — save the photo without integrity
+    // fields rather than failing the upload.
+    const slim = { ...photoRow };
+    delete slim.original_sha256;
+    delete slim.exif_lat;
+    delete slim.exif_lng;
+    delete slim.exif_taken_at;
+    ({ data: photo, error: photoErr } = await supabase
+      .from("photos")
+      .insert(slim)
+      .select("id")
+      .single());
+  }
   if (photoErr || !photo) {
     console.error("[upload] photo insert", photoErr);
     await supabase.storage.from("photos").remove([storagePath]);

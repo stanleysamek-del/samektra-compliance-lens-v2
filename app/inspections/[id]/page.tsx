@@ -17,6 +17,7 @@ import {
 } from "@/components/not-visible-checklist";
 import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
 import { InspectionSummary } from "@/components/inspection-summary";
+import { SignaturePad } from "@/components/signature-pad";
 import { finalizeInspection } from "./actions";
 
 export default async function InspectionDetailPage({
@@ -55,7 +56,7 @@ export default async function InspectionDetailPage({
     const { data: inspection, error: inspectionErr } = await supabase
       .from("inspections")
       .select(
-        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at, updated_at, inspector_signed_at, manager_signed_at",
+        "id, facility_name, facility_address, location, inspector_name, manager_assigned, date_of_inspection, status, created_at, updated_at, inspector_signed_at, manager_signed_at, inspector_signature_url, manager_signature_url",
       )
       .eq("id", id)
       .maybeSingle();
@@ -328,6 +329,29 @@ export default async function InspectionDetailPage({
     }
 
     const isCompleted = inspection.status === "completed";
+
+    // Signed display URLs for existing signatures (the columns store
+    // storage PATHS in the private `signatures` bucket).
+    let inspectorSigUrl: string | null = null;
+    let managerSigUrl: string | null = null;
+    const sigPaths = [
+      ["inspector", (inspection as { inspector_signature_url?: string | null }).inspector_signature_url],
+      ["manager", (inspection as { manager_signature_url?: string | null }).manager_signature_url],
+    ] as const;
+    for (const [role, path] of sigPaths) {
+      if (!path) continue;
+      try {
+        const { data } = await supabase.storage
+          .from("signatures")
+          .createSignedUrl(path, 60 * 60);
+        if (data?.signedUrl) {
+          if (role === "inspector") inspectorSigUrl = data.signedUrl;
+          else managerSigUrl = data.signedUrl;
+        }
+      } catch (err) {
+        console.error("[inspection] signature url for", role, err);
+      }
+    }
 
     stage = "render";
     return (
@@ -618,6 +642,27 @@ export default async function InspectionDetailPage({
           </div>
 
           <Card>
+            {/* Sign-off — inspector + manager. Available before AND after
+                finalize (a manager often signs after reviewing the locked
+                report). Signatures render on the PDF's sign-off page. */}
+            <div className="mb-4 grid grid-cols-1 gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-2">
+              <SignaturePad
+                inspectionId={inspection.id}
+                role="inspector"
+                label={`Inspector${inspection.inspector_name ? ` — ${inspection.inspector_name}` : ""}`}
+                signedUrl={inspectorSigUrl}
+                signedAt={inspection.inspector_signed_at}
+                userId={user.id}
+              />
+              <SignaturePad
+                inspectionId={inspection.id}
+                role="manager"
+                label={`Manager${inspection.manager_assigned ? ` — ${inspection.manager_assigned}` : ""}`}
+                signedUrl={managerSigUrl}
+                signedAt={inspection.manager_signed_at}
+                userId={user.id}
+              />
+            </div>
             {isCompleted ? (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
