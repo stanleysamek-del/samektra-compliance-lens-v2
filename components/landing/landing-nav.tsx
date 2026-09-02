@@ -128,10 +128,12 @@ export function LandingNav() {
           </Link>
           <Link
             href="/signup"
+            className="landing-nav-cta"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
+              whiteSpace: "nowrap",
               padding: "11px 18px",
               background: "#0f1518",
               color: "#ece8da",
@@ -166,6 +168,9 @@ export function LandingNav() {
         @media (max-width: 800px) {
           .landing-nav-links { display: none !important; }
           .hide-on-mobile-nav { display: none !important; }
+        }
+        @media (max-width: 600px) {
+          .landing-nav-cta { padding: 9px 12px !important; font-size: 12px !important; }
         }
       `}</style>
     </header>

@@ -29,9 +29,13 @@ export function LandingHero() {
   ).padStart(2, "0")} / ${today.getFullYear()}`;
 
   return (
-    <section style={{ position: "relative", padding: "32px 24px 80px" }}>
+    <section
+      className="hero-section"
+      style={{ position: "relative", padding: "32px 24px 80px" }}
+    >
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
         <article
+          className="hero-card"
           style={{
             border: "1px solid #0f1518",
             background: "#f3efe3",
@@ -106,7 +110,11 @@ export function LandingHero() {
             </div>
           </div>
 
-          <div aria-hidden style={{ height: 1, background: "#0f1518", opacity: 0.85, marginBottom: 48 }} />
+          <div
+            aria-hidden
+            className="hero-rule"
+            style={{ height: 1, background: "#0f1518", opacity: 0.85, marginBottom: 48 }}
+          />
 
           {/* Two-column body */}
           <div
@@ -121,6 +129,7 @@ export function LandingHero() {
             {/* Left: headline + body */}
             <div>
               <p
+                className="hero-eyebrow"
                 style={{
                   fontFamily: "var(--font-jetbrains-mono)",
                   fontSize: 11,
@@ -133,6 +142,7 @@ export function LandingHero() {
                 § 01 — The thesis
               </p>
               <h1
+                className="hero-h1"
                 style={{
                   fontFamily: "var(--font-instrument-serif)",
                   fontSize: "clamp(40px, 6.4vw, 88px)",
@@ -147,6 +157,7 @@ export function LandingHero() {
                 <em style={{ fontStyle: "italic", color: "#b8902f" }}>pocket.</em>
               </h1>
               <p
+                className="hero-body"
                 style={{
                   fontSize: 18,
                   lineHeight: 1.55,
@@ -311,6 +322,15 @@ export function LandingHero() {
         @media (max-width: 600px) {
           .hero-meta-right { display: none !important; }
           .hero-signature { display: none !important; }
+          /* Phone compaction — the desktop scale reads "elongated" on a
+             375-430px screen: tighter card, smaller serif, denser rhythm. */
+          .hero-section { padding: 16px 14px 48px !important; }
+          .hero-card { padding: 24px 18px 24px !important; box-shadow: 10px 10px 0 -8px #d9d3c0 !important; }
+          .hero-rule { margin-bottom: 24px !important; }
+          .hero-eyebrow { margin-bottom: 12px !important; }
+          .hero-h1 { font-size: clamp(30px, 8.6vw, 38px) !important; margin-bottom: 14px !important; }
+          .hero-body { font-size: 15px !important; margin-bottom: 20px !important; }
+          .hero-grid { gap: 28px !important; }
         }
       `}</style>
     </section>
