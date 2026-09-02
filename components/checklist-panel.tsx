@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/checklist";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
 import { scoreItems } from "@/lib/checklists/engine";
+import { lswLinksForCitation } from "@/lib/lsw-links";
 import { HelpTip } from "@/components/help-tip";
 
 /**
@@ -280,9 +281,24 @@ function ItemRow({
           </span>
           {item.question}
           {item.code_ref ? (
-            <span className="ml-1.5 whitespace-nowrap text-[11px] text-[var(--fg-subtle)]">
-              {item.code_ref}
-            </span>
+            (() => {
+              const lsw = lswLinksForCitation(item.code_ref)[0];
+              return lsw ? (
+                <a
+                  href={lsw.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1.5 whitespace-nowrap text-[11px] text-[var(--accent)] underline decoration-dotted underline-offset-2"
+                  title="Read this section on LifeSafetyWiki"
+                >
+                  {item.code_ref} ↗
+                </a>
+              ) : (
+                <span className="ml-1.5 whitespace-nowrap text-[11px] text-[var(--fg-subtle)]">
+                  {item.code_ref}
+                </span>
+              );
+            })()
           ) : null}
         </p>
         <div className="flex shrink-0 items-center gap-1">

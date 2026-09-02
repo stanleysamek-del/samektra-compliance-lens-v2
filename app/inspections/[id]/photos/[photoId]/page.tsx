@@ -12,6 +12,7 @@ import { AddFindingForm } from "@/components/add-finding-form";
 import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
 import type { NotVisibleItem } from "@/components/not-visible-checklist";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { LswLearnMore } from "@/components/lsw-learn-more";
 import { HelpTip } from "@/components/help-tip";
 import { DeletePhotoButton } from "@/components/delete-photo-button";
 import { PhotoBackLink } from "@/components/photo-back-link";
@@ -415,6 +416,18 @@ export default async function PhotoDetailPage({
               ))}
             </ul>
           )}
+
+          {/* LifeSafetyWiki: decoded sections + articles behind these
+              findings. Async server component; renders nothing if LSW is
+              unreachable or has nothing indexed for them. */}
+          {sortedFindings.length > 0 ? (
+            <LswLearnMore
+              findings={sortedFindings.map((f) => ({
+                title: (f.title as string | null) ?? null,
+                code: (f.code as string | null) ?? null,
+              }))}
+            />
+          ) : null}
 
           {/* Inspector-authored finding (AI missed something, or you want
               to override the AI's call). */}

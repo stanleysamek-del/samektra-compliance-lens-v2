@@ -8,6 +8,7 @@ import {
   groupBySection,
   type AuditSection,
 } from "@/lib/exports/audit-sections";
+import { lswLinksForCitation } from "@/lib/lsw-links";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
 export const runtime = "nodejs";
@@ -953,6 +954,23 @@ export async function GET(
           y,
           COL_RIGHT - MARGIN - 50,
           8,
+          helv,
+          MUTED,
+        );
+      }
+
+      // LifeSafetyWiki deep links — the decoded section a surveyor can
+      // open to read the requirement in plain language.
+      const lswLinks = lswLinksForCitation(f.code);
+      if (lswLinks.length > 0) {
+        y -= 2;
+        y = drawWrapped(
+          pg,
+          `Read on LifeSafetyWiki: ${lswLinks.map((l) => l.url).join("  ")}`,
+          MARGIN + 50,
+          y,
+          COL_RIGHT - MARGIN - 50,
+          7.5,
           helv,
           MUTED,
         );

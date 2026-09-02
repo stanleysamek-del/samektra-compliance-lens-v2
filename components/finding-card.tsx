@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { LswLinks } from "@/components/lsw-links";
 import {
   updateFinding,
   deleteFinding,
@@ -424,6 +425,7 @@ export function FindingCard({
               {finding.references.join(", ")}
             </p>
           ) : null}
+          <LswLinks code={finding.code} />
         </div>
       )}
 
