@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 
 type Device = "iphone" | "ipad" | "web";
 
@@ -23,10 +23,19 @@ const STAMP_QUOTES = [
 export function LandingHero() {
   const [device, setDevice] = useState<Device>("iphone");
 
-  const today = new Date();
-  const dateStr = `${String(today.getMonth() + 1).padStart(2, "0")} / ${String(
-    today.getDate(),
-  ).padStart(2, "0")} / ${today.getFullYear()}`;
+  // Client-only: the server renders in UTC, the visitor's browser in local
+  // time, so near midnight the two disagree and React throws a hydration
+  // mismatch (#418). Empty on the server; filled after mount.
+  const dateStr = useSyncExternalStore(
+    () => () => {},
+    () => {
+      const today = new Date();
+      return `${String(today.getMonth() + 1).padStart(2, "0")} / ${String(
+        today.getDate(),
+      ).padStart(2, "0")} / ${today.getFullYear()}`;
+    },
+    () => "",
+  );
 
   return (
     <section
