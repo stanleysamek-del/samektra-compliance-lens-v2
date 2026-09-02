@@ -114,13 +114,19 @@ export function LandingNav() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Link
             href="/login"
+            className="landing-nav-signin"
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              whiteSpace: "nowrap",
               fontFamily: "var(--font-jetbrains-mono)",
               fontSize: 11,
               letterSpacing: "0.14em",
               textTransform: "uppercase",
               color: "#0f1518",
-              padding: "10px 0",
+              padding: "11px 14px",
+              border: "1px solid #0f1518",
+              background: "transparent",
               textDecoration: "none",
             }}
           >
@@ -171,6 +177,7 @@ export function LandingNav() {
         }
         @media (max-width: 600px) {
           .landing-nav-cta { padding: 9px 12px !important; font-size: 12px !important; }
+          .landing-nav-signin { padding: 9px 11px !important; font-size: 10px !important; }
         }
       `}</style>
     </header>
