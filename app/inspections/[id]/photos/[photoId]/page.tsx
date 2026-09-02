@@ -51,7 +51,7 @@ export default async function PhotoDetailPage({
     supabase
       .from("photos")
       .select(
-        "id, storage_path, width, height, photo_location, raw_analysis, analyzed_at, annotations",
+        "id, storage_path, original_storage_path, width, height, photo_location, raw_analysis, analyzed_at, annotations",
       )
       .eq("id", photoId)
       .eq("inspection_id", inspectionId)
@@ -222,6 +222,18 @@ export default async function PhotoDetailPage({
     .createSignedUrl(photo.storage_path, 60 * 60);
   const photoUrl = signed?.signedUrl ?? "";
 
+  // Full-resolution original (migration 0023) — nullable: older photos and
+  // any upload where the best-effort original save failed have none. Mint
+  // its own signed URL only when a path exists.
+  const originalStoragePath = (photo as { original_storage_path?: string | null }).original_storage_path ?? null;
+  let originalPhotoUrl: string | null = null;
+  if (originalStoragePath) {
+    const { data: signedOriginal } = await supabase.storage
+      .from("photos")
+      .createSignedUrl(originalStoragePath, 60 * 60);
+    originalPhotoUrl = signedOriginal?.signedUrl ?? null;
+  }
+
   const summary = (photo.raw_analysis as { summary?: { text?: string; confidence?: number; imageQuality?: string } } | null)?.summary;
 
   const bboxes = sortedFindings
@@ -331,6 +343,32 @@ export default async function PhotoDetailPage({
             </p>
           </Card>
         )}
+
+        {/* Full-resolution original (migration 0023). The viewer above shows
+            the 1024px analysis copy; this opens the untouched camera file in
+            a new tab, where the browser's native pinch/scroll zoom does the
+            rest. Absent on older photos and on uploads where the best-effort
+            original save failed. */}
+        {originalPhotoUrl ? (
+          <p className="flex items-center gap-1.5 px-1 text-xs text-[var(--fg-muted)]">
+            <a
+              href={originalPhotoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[var(--accent)] underline"
+            >
+              View full-resolution original ↗
+            </a>
+            <HelpTip title="Original photo">
+              The image above is the 1024px copy Chip analyzed. This opens the
+              untouched file from the camera, so a surveyor or insurer can zoom
+              into fine detail — a gauge needle, a label, a hairline crack. The
+              photo&apos;s SHA-256 fingerprint on record was taken from this
+              exact file, so it doubles as proof it hasn&apos;t been altered
+              since capture.
+            </HelpTip>
+          </p>
+        ) : null}
 
         {/* Per-photo "Not visible" dropdown — sits directly under the
             photo viewer for quick reference. Collapsed by default; expand

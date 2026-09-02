@@ -100,6 +100,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Full-resolution original (migration 0023) — optional and best-effort.
+  // Same mime/size rules as the resized copy; a bad or missing original
+  // never fails the upload, it just means no zoom-in copy gets kept.
+  const originalFile = formData.get("original");
+  let validOriginal: File | null = null;
+  if (originalFile instanceof File) {
+    if (ALLOWED_MIMES.has(originalFile.type) && originalFile.size <= MAX_BYTES) {
+      validOriginal = originalFile;
+    } else {
+      console.warn("[upload] rejecting original: bad mime/size", originalFile.type, originalFile.size);
+    }
+  }
+
   const photoLocation =
     typeof formData.get("photo_location") === "string"
       ? (formData.get("photo_location") as string).trim() || null
@@ -134,6 +147,14 @@ export async function POST(request: NextRequest) {
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const filename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const storagePath = `${user.id}/${inspectionId}/${filename}`;
+  let originalStoragePath: string | null = null;
+  let originalBytes: Uint8Array | null = null;
+  if (validOriginal) {
+    const origExt =
+      validOriginal.type === "image/png" ? "png" : validOriginal.type === "image/webp" ? "webp" : "jpg";
+    originalStoragePath = `${user.id}/${inspectionId}/${filename.replace(/\.[^.]+$/, "")}-original.${origExt}`;
+    originalBytes = new Uint8Array(await validOriginal.arrayBuffer());
+  }
 
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -165,6 +186,24 @@ export async function POST(request: NextRequest) {
   const uploadPromise = supabase.storage
     .from("photos")
     .upload(storagePath, bytes, { contentType: file.type, upsert: false });
+  // Best-effort — a failed original upload must never fail the request or
+  // roll back the (successful) resized upload + analysis. Logged, not
+  // awaited into the failure path below.
+  const originalUploadPromise: Promise<void> = originalStoragePath && originalBytes
+    ? supabase.storage
+        .from("photos")
+        .upload(originalStoragePath, originalBytes, { contentType: validOriginal!.type, upsert: false })
+        .then(({ error }) => {
+          if (error) {
+            console.warn("[upload] original storage upload failed", error.message);
+            originalStoragePath = null;
+          }
+        })
+        .catch((err) => {
+          console.warn("[upload] original storage upload threw", err);
+          originalStoragePath = null;
+        })
+    : Promise.resolve();
   const analysisPromise: Promise<
     Awaited<ReturnType<typeof analyzeImage>>
     | Awaited<ReturnType<typeof analyzeImageTwoStage>>
@@ -172,10 +211,15 @@ export async function POST(request: NextRequest) {
     ? analyzeImageTwoStage(base64, file.type, "default", [], orgRules)
     : analyzeImage(base64, file.type, "default", [], [], orgRules);
 
-  const [uploadSettled, analysisSettled] = await Promise.allSettled([
-    uploadPromise,
-    analysisPromise,
-  ]);
+  // originalUploadPromise never rejects and its outcome is only a
+  // side-effect (originalStoragePath cleared on failure) — settle it
+  // alongside the other two but ignore its slot.
+  const [uploadSettled, analysisSettled] = (
+    await Promise.allSettled([uploadPromise, analysisPromise, originalUploadPromise])
+  ).slice(0, 2) as [
+    PromiseSettledResult<Awaited<typeof uploadPromise>>,
+    PromiseSettledResult<Awaited<typeof analysisPromise>>,
+  ];
 
   // Upload failure — abandon and surface the error. If the AI call
   // happened to succeed, we drop the result (no photo row to attach it
@@ -199,7 +243,9 @@ export async function POST(request: NextRequest) {
       analysisSettled.reason instanceof Error
         ? analysisSettled.reason.message
         : "AI analysis failed";
-    await supabase.storage.from("photos").remove([storagePath]);
+    await supabase.storage
+      .from("photos")
+      .remove(originalStoragePath ? [storagePath, originalStoragePath] : [storagePath]);
     await supabase.from("ai_calls").insert({
       inspection_id: inspectionId,
       provider: aiProvider,
@@ -251,7 +297,9 @@ export async function POST(request: NextRequest) {
       error_message: message,
     });
 
-    await supabase.storage.from("photos").remove([storagePath]);
+    await supabase.storage
+      .from("photos")
+      .remove(originalStoragePath ? [storagePath, originalStoragePath] : [storagePath]);
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 
@@ -268,17 +316,19 @@ export async function POST(request: NextRequest) {
     exif_lat: exifLat,
     exif_lng: exifLng,
     exif_taken_at: exifTakenAt,
+    original_storage_path: originalStoragePath,
   };
   let { data: photo, error: photoErr } = await supabase
     .from("photos")
     .insert(photoRow)
     .select("id")
     .single();
-  if (photoErr && /original_sha256|exif_/.test(photoErr.message ?? "")) {
+  if (photoErr && /original_sha256|exif_|original_storage_path/.test(photoErr.message ?? "")) {
     // Migration 0020 not applied yet — save the photo without integrity
     // fields rather than failing the upload.
     const slim = { ...photoRow };
     delete slim.original_sha256;
+    delete slim.original_storage_path;
     delete slim.exif_lat;
     delete slim.exif_lng;
     delete slim.exif_taken_at;

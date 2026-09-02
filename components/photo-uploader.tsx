@@ -145,6 +145,15 @@ export function PhotoUploader({ inspectionId }: Props) {
         const formData = new FormData();
         formData.append("inspection_id", inspectionId);
         formData.append("image", resized, resized.name);
+        // Full-resolution original alongside the resized analysis copy —
+        // best-effort on the server; keeping it lets a surveyor or insurer
+        // zoom into fine detail the resized 1024px copy can't show. Only
+        // worth sending when it's a genuinely different file — small
+        // photos already skip resizing (see resizeImageForUpload) and
+        // shipping the same bytes twice would just double the upload.
+        if (resized !== item.file) {
+          formData.append("original", item.file, item.file.name);
+        }
         if (item.photoLocation) formData.append("photo_location", item.photoLocation);
         if (integrity.sha256) formData.append("original_sha256", integrity.sha256);
         if (integrity.lat !== null) formData.append("exif_lat", String(integrity.lat));
