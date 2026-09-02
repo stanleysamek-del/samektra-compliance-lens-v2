@@ -54,9 +54,10 @@ export default async function TemplatesPage() {
               Checklist templates
             </h1>
             <p className="mt-1 text-sm text-[var(--fg-muted)]">
-              The question sets an inspection can start from. Pick one on the
-              New Inspection screen — the AI files findings under the matching
-              questions as photos come in.
+              Each template defines an <strong>inspection type</strong> — the
+              scored question set the walk follows. Pick one under
+              &quot;Inspection type&quot; on the New Inspection screen; the AI
+              files findings under the matching questions as photos come in.
             </p>
           </div>
           <Link href="/templates/new" className="cl-btn-accent">

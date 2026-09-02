@@ -101,11 +101,11 @@ export default async function NewInspectionPage({
 
             <div className="flex flex-col">
               <label htmlFor="template_id" className="cl-label">
-                Inspection checklist
+                Inspection type
               </label>
               <select id="template_id" name="template_id" className="cl-input">
-                <option value="">No checklist — photos only</option>
-                <optgroup label="Built-in templates">
+                <option value="">General — photos only, no checklist</option>
+                <optgroup label="Standard inspection types">
                   {BUILTIN_TEMPLATES.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.occupancy})
@@ -113,7 +113,7 @@ export default async function NewInspectionPage({
                   ))}
                 </optgroup>
                 {customTemplates && customTemplates.length > 0 ? (
-                  <optgroup label="Your templates">
+                  <optgroup label="Your inspection types">
                     {customTemplates.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -124,10 +124,10 @@ export default async function NewInspectionPage({
                 ) : null}
               </select>
               <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
-                Picking a template adds a scored question set (Yes / No /
-                N.A.) grouped into sections — the AI auto-flags questions as
+                The type sets the scored checklist this inspection follows
+                (Yes / No / N.A. by section) — the AI auto-flags questions as
                 findings come in, and your photos file under the same groups.
-                Manage templates on the{" "}
+                Build or customize types on the{" "}
                 <Link href="/templates" className="underline">
                   Templates
                 </Link>{" "}
