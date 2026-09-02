@@ -71,19 +71,6 @@ export default async function NewInspectionPage({
             </div>
 
             <div className="flex flex-col">
-              <label htmlFor="facility_address" className="cl-label">
-                Facility address
-              </label>
-              <input
-                id="facility_address"
-                name="facility_address"
-                type="text"
-                placeholder="123 Compliance Way, Atlanta, GA 30301"
-                className="cl-input"
-              />
-            </div>
-
-            <div className="flex flex-col">
               <label htmlFor="location" className="cl-label">
                 Location
               </label>
@@ -95,7 +82,7 @@ export default async function NewInspectionPage({
                 className="cl-input"
               />
               <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
-                Department, smoke compartment, suite, or other inspection scope.
+                Department, smoke compartment, or suite.
               </p>
             </div>
 
@@ -124,104 +111,124 @@ export default async function NewInspectionPage({
                 ) : null}
               </select>
               <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
-                The type sets the scored checklist this inspection follows
-                (Yes / No / N.A. by section) — the AI auto-flags questions as
-                findings come in, and your photos file under the same groups.
-                Build or customize types on the{" "}
+                Sets the scored checklist this walk follows — the AI answers
+                questions from your photos. Manage types under{" "}
                 <Link href="/templates" className="underline">
                   Templates
-                </Link>{" "}
-                page.
+                </Link>
+                .
               </p>
             </div>
 
-            <div className="flex flex-col">
-              <label htmlFor="inspector_name" className="cl-label">
-                Inspector name
-              </label>
-              <input
-                id="inspector_name"
-                name="inspector_name"
-                type="text"
-                defaultValue={profile.full_name ?? ""}
-                className="cl-input"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Optional fields fold away so the phone form stays short —
+                inspector defaults to the profile name and the date to today;
+                everything is editable later from the detail page. */}
+            <details className="rounded-lg border border-[var(--border)]">
+              <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-[var(--fg-muted)]">
+                More details — address, inspector, manager, dates
+              </summary>
+              <div className="flex flex-col gap-4 px-3 pb-3 pt-1">
               <div className="flex flex-col">
-                <label htmlFor="manager_assigned" className="cl-label">
-                  Assigned manager
+                <label htmlFor="facility_address" className="cl-label">
+                  Facility address
                 </label>
                 <input
-                  id="manager_assigned"
-                  name="manager_assigned"
+                  id="facility_address"
+                  name="facility_address"
                   type="text"
-                  placeholder="Jane Smith"
+                  placeholder="123 Compliance Way, Atlanta, GA 30301"
                   className="cl-input"
                 />
               </div>
               <div className="flex flex-col">
-                <label htmlFor="manager_assigned_email" className="cl-label">
-                  Manager email
+                <label htmlFor="inspector_name" className="cl-label">
+                  Inspector name
                 </label>
                 <input
-                  id="manager_assigned_email"
-                  name="manager_assigned_email"
-                  type="email"
-                  placeholder="jane@facility.com"
+                  id="inspector_name"
+                  name="inspector_name"
+                  type="text"
+                  defaultValue={profile.full_name ?? ""}
                   className="cl-input"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col">
-                <label htmlFor="date_of_inspection" className="cl-label">
-                  Date of inspection
-                </label>
-                <input
-                  id="date_of_inspection"
-                  name="date_of_inspection"
-                  type="date"
-                  defaultValue={today}
-                  className="cl-input"
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col">
+                  <label htmlFor="manager_assigned" className="cl-label">
+                    Assigned manager
+                  </label>
+                  <input
+                    id="manager_assigned"
+                    name="manager_assigned"
+                    type="text"
+                    placeholder="Jane Smith"
+                    className="cl-input"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="manager_assigned_email" className="cl-label">
+                    Manager email
+                  </label>
+                  <input
+                    id="manager_assigned_email"
+                    name="manager_assigned_email"
+                    type="email"
+                    placeholder="jane@facility.com"
+                    className="cl-input"
+                  />
+                </div>
               </div>
-              <div className="flex flex-col">
-                <label htmlFor="date_assigned" className="cl-label">
-                  Date assigned (manager)
-                </label>
-                <input
-                  id="date_assigned"
-                  name="date_assigned"
-                  type="date"
-                  className="cl-input"
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col">
+                  <label htmlFor="date_of_inspection" className="cl-label">
+                    Date of inspection
+                  </label>
+                  <input
+                    id="date_of_inspection"
+                    name="date_of_inspection"
+                    type="date"
+                    defaultValue={today}
+                    className="cl-input"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="date_assigned" className="cl-label">
+                    Date assigned (manager)
+                  </label>
+                  <input
+                    id="date_assigned"
+                    name="date_assigned"
+                    type="date"
+                    className="cl-input"
+                  />
+                </div>
               </div>
-            </div>
 
-            {params.error ? (
-              <p
-                className="rounded-lg border px-3 py-2 text-sm"
-                style={{
-                  borderColor: "rgba(168,54,43,0.4)",
-                  background: "rgba(168,54,43,0.08)",
-                  color: "#a8362b",
-                }}
-              >
-                {params.error}
-              </p>
-            ) : null}
+              {params.error ? (
+                <p
+                  className="rounded-lg border px-3 py-2 text-sm"
+                  style={{
+                    borderColor: "rgba(168,54,43,0.4)",
+                    background: "rgba(168,54,43,0.08)",
+                    color: "#a8362b",
+                  }}
+                >
+                  {params.error}
+                </p>
+              ) : null}
 
-            <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-              <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
-                Create & start uploading
-              </button>
-              <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
-                Cancel
-              </Link>
-            </div>
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
+                  Create & start uploading
+                </button>
+                <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
+                  Cancel
+                </Link>
+              </div>
+              </div>
+            </details>
           </form>
         </Card>
 
