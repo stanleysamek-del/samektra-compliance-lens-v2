@@ -73,12 +73,14 @@ export default async function ProfilePage() {
               You have admin access. Cost dashboards and per-user usage are
               available below.
             </CardDescription>
-            <Link
-              href="/admin/stats"
-              className="cl-btn-accent mt-4 w-full sm:w-auto"
-            >
-              Open AI cost dashboard
-            </Link>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <Link href="/admin/stats" className="cl-btn-accent w-full sm:w-auto">
+                Open AI cost dashboard
+              </Link>
+              <Link href="/admin/users" className="cl-btn-outline w-full sm:w-auto">
+                Members directory
+              </Link>
+            </div>
           </Card>
         ) : null}
 

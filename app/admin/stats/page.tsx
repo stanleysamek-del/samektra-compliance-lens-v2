@@ -154,17 +154,22 @@ export default async function AdminStatsPage() {
       }}
     >
       <div className="flex flex-col gap-5">
-        <div>
-          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--accent)]">
-            Admin · Cost dashboard
-          </span>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
-            AI usage &amp; spend
-          </h1>
-          <p className="mt-1 text-sm text-[var(--fg-muted)]">
-            Every Claude/OpenAI call across all users. Last {calls.length} calls
-            shown.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--accent)]">
+              Admin · Cost dashboard
+            </span>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
+              AI usage &amp; spend
+            </h1>
+            <p className="mt-1 text-sm text-[var(--fg-muted)]">
+              Every Claude/OpenAI call across all users. Last {calls.length}{" "}
+              calls shown.
+            </p>
+          </div>
+          <Link href="/admin/users" className="cl-btn-outline">
+            Members directory
+          </Link>
         </div>
 
         {/* ---- Total cards ---- */}
