@@ -5,6 +5,56 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 /**
+ * Every mutating action in this file returns `{ ok: true } | { ok: false,
+ * error }` so the calling component can toast the failure and keep the
+ * user's state (the audit's "nothing lies, nothing loses work" rule).
+ * Exceptions: finalizeInspection / deleteInspection keep their redirect
+ * contract — the detail page reads `?error=` for those.
+ */
+type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Turn a raw Postgres / PostgREST error into something a facility manager
+ * can act on. Anything we don't recognise falls through to the raw message
+ * so nothing is hidden.
+ */
+function friendlyError(
+  err: { code?: string; message?: string } | null | undefined,
+  fallback = "Something went wrong. Please try again.",
+): string {
+  if (!err) return fallback;
+  const code = err.code ?? "";
+  const msg = (err.message ?? "").toLowerCase();
+  if (
+    code === "42501" ||
+    msg.includes("row-level security") ||
+    msg.includes("permission denied")
+  ) {
+    return "You don't have permission to change this inspection.";
+  }
+  if (code === "23505") return "That name is already in use.";
+  if (code === "23503") {
+    return "This item is still linked to other records and can't be removed.";
+  }
+  if (code === "23514" || code === "22P02" || code === "22001") {
+    return "Some of the values aren't valid. Check them and try again.";
+  }
+  if (code === "PGRST116") return "That item no longer exists.";
+  if (
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("econnrefused")
+  ) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return err.message || fallback;
+}
+
+/** RLS hides rows it denies, so a 0-row update is a permission/missing case. */
+const NO_ROWS =
+  "Nothing was changed — you may not have permission, or the item no longer exists.";
+
+/**
  * Finalize/reopen an inspection. Reads inspection_id + status from form data
  * (avoiding .bind() — Next.js 16 has been flaky with bound server actions).
  */
@@ -36,12 +86,49 @@ export async function finalizeInspection(formData: FormData) {
   revalidatePath(`/inspections/${inspectionId}`);
 }
 
+/** Field values the edit form round-trips so a failed save never wipes them. */
+export type InspectionEditValues = {
+  facility_name: string;
+  facility_address: string;
+  location: string;
+  inspector_name: string;
+  manager_assigned: string;
+  manager_assigned_email: string;
+  date_of_inspection: string;
+  date_assigned: string;
+};
+
+export type UpdateInspectionState = {
+  ok: boolean;
+  error: string | null;
+  values: InspectionEditValues | null;
+};
+
 /**
- * Update inspection metadata. Used by /inspections/[id]/edit.
+ * Update inspection metadata. Used by /inspections/[id]/edit through
+ * useActionState — on failure the submitted values come back so the form
+ * re-renders with what the user typed instead of the DB defaults.
  */
-export async function updateInspection(formData: FormData) {
+export async function updateInspection(
+  _prev: UpdateInspectionState,
+  formData: FormData,
+): Promise<UpdateInspectionState> {
   const inspectionId = String(formData.get("inspection_id") ?? "");
-  if (!inspectionId) return;
+
+  const values: InspectionEditValues = {
+    facility_name: String(formData.get("facility_name") ?? "").trim(),
+    facility_address: String(formData.get("facility_address") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    inspector_name: String(formData.get("inspector_name") ?? ""),
+    manager_assigned: String(formData.get("manager_assigned") ?? ""),
+    manager_assigned_email: String(formData.get("manager_assigned_email") ?? ""),
+    date_of_inspection: String(formData.get("date_of_inspection") ?? ""),
+    date_assigned: String(formData.get("date_assigned") ?? ""),
+  };
+
+  if (!inspectionId) {
+    return { ok: false, error: "Missing inspection id.", values };
+  }
 
   const supabase = await createClient();
   const {
@@ -49,34 +136,33 @@ export async function updateInspection(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const facility_name = String(formData.get("facility_name") ?? "").trim();
-  if (!facility_name) {
-    redirect(
-      `/inspections/${inspectionId}/edit?error=Facility%20name%20is%20required`,
-    );
+  if (!values.facility_name) {
+    return { ok: false, error: "Facility name is required.", values };
   }
 
   const patch: Record<string, string | null> = {
-    facility_name,
-    facility_address: stringOrNull(formData.get("facility_address")),
-    location: stringOrNull(formData.get("location")),
-    inspector_name: stringOrNull(formData.get("inspector_name")),
-    manager_assigned: stringOrNull(formData.get("manager_assigned")),
-    manager_assigned_email: stringOrNull(formData.get("manager_assigned_email")),
-    date_of_inspection: stringOrNull(formData.get("date_of_inspection")),
-    date_assigned: stringOrNull(formData.get("date_assigned")),
+    facility_name: values.facility_name,
+    facility_address: stringOrNull(values.facility_address),
+    location: stringOrNull(values.location),
+    inspector_name: stringOrNull(values.inspector_name),
+    manager_assigned: stringOrNull(values.manager_assigned),
+    manager_assigned_email: stringOrNull(values.manager_assigned_email),
+    date_of_inspection: stringOrNull(values.date_of_inspection),
+    date_assigned: stringOrNull(values.date_assigned),
   };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inspections")
     .update(patch)
-    .eq("id", inspectionId);
+    .eq("id", inspectionId)
+    .select("id");
 
   if (error) {
     console.error("[updateInspection]", error);
-    redirect(
-      `/inspections/${inspectionId}/edit?error=${encodeURIComponent(error.message)}`,
-    );
+    return { ok: false, error: friendlyError(error), values };
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: NO_ROWS, values };
   }
 
   revalidatePath(`/inspections/${inspectionId}`);
@@ -124,7 +210,7 @@ export async function deleteInspection(formData: FormData) {
   if (error) {
     console.error("[deleteInspection]", error);
     redirect(
-      `/inspections/history?error=${encodeURIComponent(error.message)}`,
+      `/inspections/history?error=${encodeURIComponent(friendlyError(error))}`,
     );
   }
 
@@ -133,7 +219,7 @@ export async function deleteInspection(formData: FormData) {
   redirect(redirectTo);
 }
 
-function stringOrNull(v: FormDataEntryValue | null): string | null {
+function stringOrNull(v: FormDataEntryValue | string | null): string | null {
   if (typeof v !== "string") return null;
   const trimmed = v.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -152,7 +238,7 @@ export async function saveSignature(input: {
   inspectionId: string;
   role: "inspector" | "manager";
   storagePath: string;
-}) {
+}): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -163,7 +249,7 @@ export async function saveSignature(input: {
   // enforces this for the upload; re-checking here keeps a forged path
   // from being recorded on the row.
   if (!input.storagePath.startsWith(`${user.id}/`)) {
-    return { ok: false as const, error: "Invalid signature path" };
+    return { ok: false, error: "Invalid signature path" };
   }
 
   const patch =
@@ -177,24 +263,26 @@ export async function saveSignature(input: {
           manager_signed_at: new Date().toISOString(),
         };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inspections")
     .update(patch)
-    .eq("id", input.inspectionId);
+    .eq("id", input.inspectionId)
+    .select("id");
 
   if (error) {
     console.error("[saveSignature]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${input.inspectionId}`);
-  return { ok: true as const };
+  return { ok: true };
 }
 
 export async function clearSignature(input: {
   inspectionId: string;
   role: "inspector" | "manager";
-}) {
+}): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -206,18 +294,20 @@ export async function clearSignature(input: {
       ? { inspector_signature_url: null, inspector_signed_at: null }
       : { manager_signature_url: null, manager_signed_at: null };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inspections")
     .update(patch)
-    .eq("id", input.inspectionId);
+    .eq("id", input.inspectionId)
+    .select("id");
 
   if (error) {
     console.error("[clearSignature]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${input.inspectionId}`);
-  return { ok: true as const };
+  return { ok: true };
 }
 
 /* =====================================================================
@@ -230,12 +320,14 @@ export async function clearSignature(input: {
  * better shot.
  * ===================================================================== */
 
-export async function resolveNotVisible(formData: FormData) {
+export async function resolveNotVisible(formData: FormData): Promise<ActionResult> {
   const itemId = String(formData.get("item_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const note = stringOrNull(formData.get("note")) ?? null;
   const photoId = stringOrNull(formData.get("resolved_photo_id")) ?? null;
-  if (!itemId || !inspectionId) return;
+  if (!itemId || !inspectionId) {
+    return { ok: false, error: "Missing item or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -243,7 +335,7 @@ export async function resolveNotVisible(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("not_visible")
     .update({
       resolved: true,
@@ -251,16 +343,24 @@ export async function resolveNotVisible(formData: FormData) {
       resolved_note: note,
       resolved_photo_id: photoId,
     })
-    .eq("id", itemId);
-  if (error) console.error("[resolveNotVisible]", error);
+    .eq("id", itemId)
+    .select("id");
+  if (error) {
+    console.error("[resolveNotVisible]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
-export async function unresolveNotVisible(formData: FormData) {
+export async function unresolveNotVisible(formData: FormData): Promise<ActionResult> {
   const itemId = String(formData.get("item_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
-  if (!itemId || !inspectionId) return;
+  if (!itemId || !inspectionId) {
+    return { ok: false, error: "Missing item or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -268,7 +368,7 @@ export async function unresolveNotVisible(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("not_visible")
     .update({
       resolved: false,
@@ -276,10 +376,16 @@ export async function unresolveNotVisible(formData: FormData) {
       resolved_note: null,
       resolved_photo_id: null,
     })
-    .eq("id", itemId);
-  if (error) console.error("[unresolveNotVisible]", error);
+    .eq("id", itemId)
+    .select("id");
+  if (error) {
+    console.error("[unresolveNotVisible]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
@@ -291,11 +397,13 @@ export async function unresolveNotVisible(formData: FormData) {
  * resolution metadata, so we don't end up in a (resolved=true, skipped=true)
  * state.
  */
-export async function skipNotVisible(formData: FormData) {
+export async function skipNotVisible(formData: FormData): Promise<ActionResult> {
   const itemId = String(formData.get("item_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const reason = stringOrNull(formData.get("reason")) ?? null;
-  if (!itemId || !inspectionId) return;
+  if (!itemId || !inspectionId) {
+    return { ok: false, error: "Missing item or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -303,7 +411,7 @@ export async function skipNotVisible(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("not_visible")
     .update({
       skipped: true,
@@ -315,19 +423,27 @@ export async function skipNotVisible(formData: FormData) {
       resolved_note: null,
       resolved_photo_id: null,
     })
-    .eq("id", itemId);
-  if (error) console.error("[skipNotVisible]", error);
+    .eq("id", itemId)
+    .select("id");
+  if (error) {
+    console.error("[skipNotVisible]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
  * Reopen a skipped item — sends it back to the active to-do list.
  */
-export async function unskipNotVisible(formData: FormData) {
+export async function unskipNotVisible(formData: FormData): Promise<ActionResult> {
   const itemId = String(formData.get("item_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
-  if (!itemId || !inspectionId) return;
+  if (!itemId || !inspectionId) {
+    return { ok: false, error: "Missing item or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -335,17 +451,23 @@ export async function unskipNotVisible(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("not_visible")
     .update({
       skipped: false,
       skipped_reason: null,
       skipped_at: null,
     })
-    .eq("id", itemId);
-  if (error) console.error("[unskipNotVisible]", error);
+    .eq("id", itemId)
+    .select("id");
+  if (error) {
+    console.error("[unskipNotVisible]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /* =====================================================================
@@ -356,10 +478,11 @@ export async function unskipNotVisible(formData: FormData) {
  * Create a new section ("Stair B", "Main Corridor", etc.) within an
  * inspection. Sort order auto-appends to the end.
  */
-export async function createSection(formData: FormData) {
+export async function createSection(formData: FormData): Promise<ActionResult> {
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  if (!inspectionId || !name) return;
+  if (!inspectionId) return { ok: false, error: "Missing inspection id." };
+  if (!name) return { ok: false, error: "Section name is required." };
 
   const supabase = await createClient();
   const {
@@ -382,19 +505,26 @@ export async function createSection(formData: FormData) {
     name: name.slice(0, 120),
     sort_order: nextOrder,
   });
-  if (error) console.error("[createSection]", error);
+  if (error) {
+    console.error("[createSection]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
  * Rename a section in place.
  */
-export async function renameSection(formData: FormData) {
+export async function renameSection(formData: FormData): Promise<ActionResult> {
   const sectionId = String(formData.get("section_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  if (!sectionId || !inspectionId || !name) return;
+  if (!sectionId || !inspectionId) {
+    return { ok: false, error: "Missing section or inspection id." };
+  }
+  if (!name) return { ok: false, error: "Section name is required." };
 
   const supabase = await createClient();
   const {
@@ -402,13 +532,19 @@ export async function renameSection(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inspection_sections")
     .update({ name: name.slice(0, 120) })
-    .eq("id", sectionId);
-  if (error) console.error("[renameSection]", error);
+    .eq("id", sectionId)
+    .select("id");
+  if (error) {
+    console.error("[renameSection]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
@@ -416,10 +552,12 @@ export async function renameSection(formData: FormData) {
  * on delete per migration 0011). Findings/annotations on those photos are
  * unaffected — only the grouping changes.
  */
-export async function deleteSection(formData: FormData) {
+export async function deleteSection(formData: FormData): Promise<ActionResult> {
   const sectionId = String(formData.get("section_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
-  if (!sectionId || !inspectionId) return;
+  if (!sectionId || !inspectionId) {
+    return { ok: false, error: "Missing section or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -427,26 +565,42 @@ export async function deleteSection(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inspection_sections")
     .delete()
-    .eq("id", sectionId);
-  if (error) console.error("[deleteSection]", error);
+    .eq("id", sectionId)
+    .select("id");
+  if (error) {
+    console.error("[deleteSection]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
  * Move a section up or down in the ordering. Swaps sort_order with the
  * adjacent section in the requested direction. Simpler than a full
  * reorder API and good enough for ~20 sections.
+ *
+ * The neighbor query is built conditionally: "down" needs only a lower
+ * bound (`sort_order > current`), "up" only an upper bound. The previous
+ * version passed ±Infinity for the missing bound, which PostgREST
+ * serialised as the string "Infinity" → Postgres 22P02 → the move silently
+ * no-op'd for every section.
  */
-export async function moveSection(formData: FormData) {
+export async function moveSection(formData: FormData): Promise<ActionResult> {
   const sectionId = String(formData.get("section_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const direction = String(formData.get("direction") ?? "");
-  if (!sectionId || !inspectionId) return;
-  if (direction !== "up" && direction !== "down") return;
+  if (!sectionId || !inspectionId) {
+    return { ok: false, error: "Missing section or inspection id." };
+  }
+  if (direction !== "up" && direction !== "down") {
+    return { ok: false, error: "Invalid move direction." };
+  }
 
   const supabase = await createClient();
   const {
@@ -455,48 +609,71 @@ export async function moveSection(formData: FormData) {
   if (!user) redirect("/login");
 
   // Pull the current section + its neighbor in the requested direction.
-  const { data: current } = await supabase
+  const { data: current, error: currentErr } = await supabase
     .from("inspection_sections")
     .select("id, sort_order")
     .eq("id", sectionId)
     .maybeSingle();
-  if (!current) return;
+  if (currentErr) {
+    console.error("[moveSection]", currentErr);
+    return { ok: false, error: friendlyError(currentErr) };
+  }
+  if (!current) return { ok: false, error: "That section no longer exists." };
 
-  const { data: neighbor } = await supabase
+  // Down → the next-higher sort_order (ascending, first row).
+  // Up   → the next-lower sort_order (descending, first row).
+  const base = supabase
     .from("inspection_sections")
     .select("id, sort_order")
     .eq("inspection_id", inspectionId)
-    .order("sort_order", { ascending: direction === "down" })
-    .gt(
-      "sort_order",
-      direction === "down" ? current.sort_order : -Infinity,
-    )
-    .lt(
-      "sort_order",
-      direction === "up" ? current.sort_order : Infinity,
-    )
-    .limit(1)
-    .maybeSingle();
-  if (!neighbor) return; // already at the edge
+    .neq("id", current.id);
+  const bounded =
+    direction === "down"
+      ? base.gt("sort_order", current.sort_order).order("sort_order", { ascending: true })
+      : base.lt("sort_order", current.sort_order).order("sort_order", { ascending: false });
+  const { data: neighbor, error: neighborErr } = await bounded.limit(1).maybeSingle();
+  if (neighborErr) {
+    console.error("[moveSection]", neighborErr);
+    return { ok: false, error: friendlyError(neighborErr) };
+  }
+  if (!neighbor) return { ok: true }; // already at the edge — nothing to do
 
-  // Swap.
-  await supabase
+  // Swap. If both rows share a sort_order (legacy data), nudge so the move
+  // is still observable.
+  const currentOrder =
+    neighbor.sort_order === current.sort_order
+      ? direction === "down"
+        ? current.sort_order + 1
+        : current.sort_order - 1
+      : neighbor.sort_order;
+  const neighborOrder = current.sort_order;
+
+  const { error: e1 } = await supabase
     .from("inspection_sections")
-    .update({ sort_order: neighbor.sort_order })
+    .update({ sort_order: currentOrder })
     .eq("id", current.id);
-  await supabase
+  if (e1) {
+    console.error("[moveSection]", e1);
+    return { ok: false, error: friendlyError(e1) };
+  }
+  const { error: e2 } = await supabase
     .from("inspection_sections")
-    .update({ sort_order: current.sort_order })
+    .update({ sort_order: neighborOrder })
     .eq("id", neighbor.id);
+  if (e2) {
+    console.error("[moveSection]", e2);
+    return { ok: false, error: friendlyError(e2) };
+  }
 
   revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
 }
 
 /**
  * Assign a single photo to a section (or detach by passing "" / "none").
  * Auto-appends to the end of the destination section's photo list.
  */
-export async function assignPhotoToSection(formData: FormData) {
+export async function assignPhotoToSection(formData: FormData): Promise<ActionResult> {
   const photoId = String(formData.get("photo_id") ?? "");
   const inspectionId = String(formData.get("inspection_id") ?? "");
   const sectionRaw = String(formData.get("section_id") ?? "");
@@ -504,7 +681,9 @@ export async function assignPhotoToSection(formData: FormData) {
     sectionRaw && sectionRaw !== "none" && sectionRaw !== ""
       ? sectionRaw
       : null;
-  if (!photoId || !inspectionId) return;
+  if (!photoId || !inspectionId) {
+    return { ok: false, error: "Missing photo or inspection id." };
+  }
 
   const supabase = await createClient();
   const {
@@ -537,12 +716,18 @@ export async function assignPhotoToSection(formData: FormData) {
     nextSortOrder = (maxRow?.sort_order ?? -1) + 1;
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("photos")
     .update({ section_id: sectionId, sort_order: nextSortOrder })
-    .eq("id", photoId);
-  if (error) console.error("[assignPhotoToSection]", error);
+    .eq("id", photoId)
+    .select("id");
+  if (error) {
+    console.error("[assignPhotoToSection]", error);
+    return { ok: false, error: friendlyError(error) };
+  }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`);
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`);
+  return { ok: true };
 }

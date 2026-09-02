@@ -1,4 +1,7 @@
 import { Card } from "@/components/card";
+import { HelpTip } from "@/components/help-tip";
+import { formatDateShort, formatDateTime } from "@/lib/format-date";
+import { severityColor } from "@/lib/severity";
 
 type SeverityBreakdown = {
   high: number;
@@ -69,17 +72,24 @@ export function InspectionSummary({
           value={String(findings.total)}
           sub={
             findings.total === 0 ? (
-              <span className="text-[var(--fg-subtle)]">No violations</span>
+              <span className="text-[var(--fg-subtle)]">No findings yet</span>
             ) : (
-              <span className="flex flex-wrap gap-1">
+              <span className="flex flex-wrap items-center gap-1">
                 {findings.high > 0 ? (
-                  <SevPill tone="high">{findings.high} High</SevPill>
+                  <SevPill tone="High">{findings.high} High</SevPill>
                 ) : null}
                 {findings.medium > 0 ? (
-                  <SevPill tone="medium">{findings.medium} Med</SevPill>
+                  <SevPill tone="Medium">{findings.medium} Med</SevPill>
                 ) : null}
                 {findings.low > 0 ? (
-                  <SevPill tone="low">{findings.low} Low</SevPill>
+                  <>
+                    <SevPill tone="Low">{findings.low} Advisory</SevPill>
+                    <HelpTip title="Advisory" side="bottom">
+                      Low-severity notes worth fixing but unlikely to be cited
+                      on a survey. Hidden by default so the real deficiencies
+                      stand out.
+                    </HelpTip>
+                  </>
                 ) : null}
               </span>
             )
@@ -190,13 +200,9 @@ function SevPill({
   tone,
 }: {
   children: React.ReactNode;
-  tone: "high" | "medium" | "low";
+  tone: "High" | "Medium" | "Low";
 }) {
-  const styles = {
-    high: { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" },
-    medium: { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
-    low: { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
-  }[tone];
+  const styles = severityColor(tone);
   return (
     <span
       className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
@@ -234,8 +240,10 @@ function TimelineItem({
   );
 }
 
+/** "just now" / "12m ago" / "3h ago" / "5d ago", then the shared short date. */
 function fmtRelative(iso: string): string {
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
   const diff = Date.now() - d.getTime();
   const minutes = Math.round(diff / 60_000);
   if (minutes < 1) return "just now";
@@ -244,9 +252,9 @@ function fmtRelative(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDateShort(iso);
 }
 
 function fmtFull(iso: string): string {
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }

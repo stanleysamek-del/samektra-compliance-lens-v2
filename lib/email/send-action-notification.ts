@@ -37,6 +37,11 @@ export async function sendActionEmail(input: ActionEmailInput): Promise<{
   const link = input.photoId
     ? `${SITE_URL}/inspections/${input.inspectionId}/photos/${input.photoId}#finding-${input.findingId}`
     : `${SITE_URL}/inspections/${input.inspectionId}`;
+  // For the assignee: the deep link drops them onto someone else's photo
+  // page with no orientation. A second, clearly labelled link lands them
+  // on their own filtered action list instead.
+  const myListLink = `${SITE_URL}/actions?who=me&status=active`;
+  const showMyList = input.kind === "assigned";
 
   if (!apiKey || !fromEmail) {
     console.warn(
@@ -60,7 +65,8 @@ export async function sendActionEmail(input: ActionEmailInput): Promise<{
   const text =
     `${leads[input.kind]}\n\n` +
     `Finding: ${input.findingTitle} (${input.severity})\n\n` +
-    `Open it:\n${link}\n`;
+    `Open this finding:\n${link}\n` +
+    (showMyList ? `\nOpen my action list (everything assigned to you):\n${myListLink}\n` : "");
 
   const html = `<!DOCTYPE html>
 <html>
@@ -83,9 +89,30 @@ export async function sendActionEmail(input: ActionEmailInput): Promise<{
           Open the finding
         </a>
       </div>
+      ${
+        showMyList
+          ? `<div style="margin:0 0 22px 0;padding:14px 16px;border:1px solid #1e293b;border-radius:8px">
+        <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">
+          Your action list
+        </div>
+        <p style="margin:0 0 10px 0;font-size:13px;line-height:1.55;color:#cbd5e1">
+          Everything assigned to you, across every inspection, overdue first.
+        </p>
+        <a href="${myListLink}"
+          style="display:inline-block;border:1px solid #14b8a6;color:#5eead4;font-weight:600;padding:9px 16px;border-radius:8px;text-decoration:none;font-size:13px">
+          Open my action list
+        </a>
+      </div>`
+          : ""
+      }
       <p style="margin:22px 0 0 0;font-size:12px;color:#94a3b8;line-height:1.55">
         Or paste this link into your browser:<br/>
         <a href="${link}" style="color:#5eead4;word-break:break-all">${link}</a>
+        ${
+          showMyList
+            ? `<br/><br/>Your action list:<br/><a href="${myListLink}" style="color:#5eead4;word-break:break-all">${myListLink}</a>`
+            : ""
+        }
       </p>
     </div>
   </body>

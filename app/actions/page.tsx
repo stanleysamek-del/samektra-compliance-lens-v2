@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { HelpTip } from "@/components/help-tip";
+import { formatDate } from "@/lib/format-date";
 
 /**
  * Cross-inspection Actions board — every finding that has been assigned
@@ -48,6 +50,8 @@ function parseFilters(sp: {
   };
 }
 
+const FILTER_KEYS = ["status", "priority", "who", "overdue", "all"] as const;
+
 function buildUrl(f: Filters): string {
   const params = new URLSearchParams();
   if (f.status) params.set("status", f.status);
@@ -55,7 +59,19 @@ function buildUrl(f: Filters): string {
   if (f.who) params.set("who", f.who);
   if (f.overdue) params.set("overdue", f.overdue);
   const qs = params.toString();
-  return qs ? `/actions?${qs}` : "/actions";
+  // A deliberately filterless view carries ?all=1 so the "my active
+  // actions" default doesn't snap back on when the last chip is cleared.
+  return qs ? `/actions?${qs}` : "/actions?all=1";
+}
+
+/** Query string (without the leading ?) for the CSV export — same filters. */
+function exportQuery(f: Filters): string {
+  const params = new URLSearchParams();
+  if (f.status) params.set("status", f.status);
+  if (f.priority) params.set("priority", f.priority);
+  if (f.who) params.set("who", f.who);
+  if (f.overdue) params.set("overdue", f.overdue);
+  return params.toString();
 }
 
 const STATUS_LABEL: Record<ActionStatus, string> = {
@@ -74,6 +90,8 @@ export default async function ActionsBoardPage({
     priority?: string;
     who?: string;
     overdue?: string;
+    /** Explicit "show everything" — suppresses the my-active default. */
+    all?: string;
   }>;
 }) {
   const supabase = await createClient();
@@ -90,8 +108,26 @@ export default async function ActionsBoardPage({
   if (!profile) redirect("/onboarding");
 
   const sp = await searchParams;
-  const filters = parseFilters(sp);
+  let filters = parseFilters(sp);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Default view: if the URL carries no filter at all AND anything is
+  // assigned to this user, open on "my active actions" rather than the
+  // whole org's board. A facility manager arriving from an assignment
+  // email should see their list, not 300 rows they don't own.
+  const noFilterParams = FILTER_KEYS.every((k) => sp[k] === undefined);
+  let defaultedToMine = false;
+  if (noFilterParams) {
+    const { count } = await supabase
+      .from("findings")
+      .select("id", { count: "exact", head: true })
+      .eq("assigned_to", user.id)
+      .in("cap_status", ["open", "in_progress", "done"]);
+    if ((count ?? 0) > 0) {
+      filters = { ...filters, who: "me", status: "active" };
+      defaultedToMine = true;
+    }
+  }
 
   let q = supabase
     .from("findings")
@@ -180,21 +216,58 @@ export default async function ActionsBoardPage({
       }}
     >
       <div className="flex flex-col gap-5">
-        <div className="px-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
-            Actions
-          </h1>
-          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
-            Every corrective action across every inspection — what&apos;s
-            overdue floats to the top.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3 px-1">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
+              Actions
+            </h1>
+            <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
+              Every corrective action across every inspection — what&apos;s
+              overdue floats to the top.
+            </p>
+          </div>
+          {/* CSV export respects the current filters via the same query string. */}
+          <a
+            href={`/api/actions/export/csv${exportQuery(filters) ? `?${exportQuery(filters)}` : ""}`}
+            className="cl-btn-outline"
+            title="Download the actions matching the current filters as a CSV file"
+          >
+            Download CSV
+          </a>
         </div>
+
+        {defaultedToMine ? (
+          <p className="-mt-2 px-1 text-xs text-[var(--fg-muted)]">
+            Showing:{" "}
+            <span className="font-medium text-[var(--fg)]">my active actions</span>
+            {" · "}
+            <Link
+              href="/actions?all=1"
+              className="text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
+            >
+              Show all
+            </Link>
+          </p>
+        ) : null}
 
         <Card padded={false}>
           <div className="grid grid-cols-2 divide-y divide-[var(--border)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
             <Tile label="Open" value={counts.open} />
             <Tile label="In progress" value={counts.inProgress} tone="medium" />
-            <Tile label="Awaiting verify" value={counts.awaitingVerify} tone="teal" />
+            <Tile
+              label="Awaiting verify"
+              value={counts.awaitingVerify}
+              tone="teal"
+              tip={
+                <HelpTip title="Awaiting verify" side="bottom">
+                  Work reported complete that nobody has confirmed yet. These
+                  are the riskiest items on a survey: they look closed to the
+                  people who fixed them but are still open deficiencies in the
+                  record until an inspector verifies. Clear this tile before
+                  you finalize a report.
+                </HelpTip>
+              }
+            />
             <Tile label="Overdue" value={counts.overdue} tone="high" />
           </div>
         </Card>
@@ -292,7 +365,7 @@ export default async function ActionsBoardPage({
                           style={{ color: overdue ? "#a8362b" : "var(--fg-subtle)" }}
                         >
                           {r.cap_target_date
-                            ? `${overdue ? "OVERDUE · " : "due "}${r.cap_target_date}`
+                            ? `${overdue ? "OVERDUE · " : "due "}${formatDate(r.cap_target_date)}`
                             : "no due date"}
                         </span>
                       </div>
@@ -323,10 +396,13 @@ function Tile({
   label,
   value,
   tone,
+  tip,
 }: {
   label: string;
   value: number;
   tone?: "high" | "medium" | "teal";
+  /** Optional inline ? explaining what the tile counts. */
+  tip?: React.ReactNode;
 }) {
   const color =
     tone === "high"
@@ -338,8 +414,9 @@ function Tile({
           : "var(--fg)";
   return (
     <div className="flex flex-col gap-1 px-5 py-4">
-      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
         {label}
+        {tip}
       </span>
       <span
         className="text-2xl font-semibold leading-none tracking-tight"

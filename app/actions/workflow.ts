@@ -25,6 +25,41 @@ export type ActionStatus =
 
 export type ActionPriority = "low" | "medium" | "high";
 
+/**
+ * Turn a raw Postgres / PostgREST error into something a facility manager
+ * can act on. Unknown errors fall through to the raw message.
+ */
+function friendlyError(
+  err: { code?: string; message?: string } | null | undefined,
+  fallback = "Something went wrong. Please try again.",
+): string {
+  if (!err) return fallback;
+  const code = err.code ?? "";
+  const msg = (err.message ?? "").toLowerCase();
+  if (
+    code === "42501" ||
+    msg.includes("row-level security") ||
+    msg.includes("permission denied")
+  ) {
+    return "You don't have permission to change this action.";
+  }
+  if (code === "23514" && msg.includes("closure_note")) {
+    return "Won't-fix needs a written reason.";
+  }
+  if (code === "23514" || code === "22P02" || code === "22001") {
+    return "Some of the values aren't valid. Check them and try again.";
+  }
+  if (code === "23503") return "That photo or person no longer exists.";
+  if (
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("econnrefused")
+  ) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return err.message || fallback;
+}
+
 /** Everything the strip + board need to revalidate after a mutation. */
 function revalidateFindingSurfaces(inspectionId: string, photoId: string | null) {
   revalidatePath("/actions", "page");
@@ -125,7 +160,7 @@ export async function assignAction(input: {
 
   if (error) {
     console.error("[assignAction]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false as const, error: friendlyError(error) };
   }
 
   // Notify the assignee — best-effort, never blocks. Skip self-assigns:
@@ -182,7 +217,7 @@ export async function setActionStatus(input: {
 
   if (error) {
     console.error("[setActionStatus]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false as const, error: friendlyError(error) };
   }
 
   revalidateFindingSurfaces(input.inspectionId, ctx.photo_id);
@@ -226,6 +261,23 @@ export async function closeAction(input: {
   const ctx = await getFindingContext(supabase, input.findingId);
   if (!ctx) return { ok: false as const, error: "Finding not found" };
 
+  // A close-out photo must belong to THIS inspection — the picker only
+  // offers those, but the id arrives from the client so we re-check.
+  if (photoId) {
+    const { data: photo } = await supabase
+      .from("photos")
+      .select("id")
+      .eq("id", photoId)
+      .eq("inspection_id", input.inspectionId)
+      .maybeSingle();
+    if (!photo) {
+      return {
+        ok: false as const,
+        error: "That close-out photo isn't part of this inspection.",
+      };
+    }
+  }
+
   const { error } = await supabase
     .from("findings")
     .update({
@@ -238,7 +290,7 @@ export async function closeAction(input: {
 
   if (error) {
     console.error("[closeAction]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false as const, error: friendlyError(error) };
   }
 
   if (input.status === "done" && ctx.created_by !== user.id) {
@@ -297,7 +349,7 @@ export async function addFindingComment(input: {
 
   if (error) {
     console.error("[addFindingComment]", error);
-    return { ok: false as const, error: error.message };
+    return { ok: false as const, error: friendlyError(error) };
   }
 
   const ctx = await getFindingContext(supabase, input.findingId);

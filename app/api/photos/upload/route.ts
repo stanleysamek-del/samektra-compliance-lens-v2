@@ -19,7 +19,8 @@ const MAX_BYTES = 10 * 1024 * 1024;
  *   photo_location — optional string
  *
  * Uploads to Supabase Storage, calls the AI, persists photo + findings +
- * what_to_look_for + not_visible + ai_calls. Returns { ok, photoId }.
+ * what_to_look_for + not_visible + ai_calls. Returns { ok, photoId,
+ * findingsCount }.
  *
  * Replaces the previous server action approach (which 400'd intermittently
  * in Next.js 16 due to cross-origin checks during the action invocation).
@@ -383,5 +384,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, photoId: photo.id });
+  // findingsCount feeds the uploader's success toast ("Photo analyzed — N
+  // findings") now that uploads stay on the inspection page.
+  return NextResponse.json({
+    ok: true,
+    photoId: photo.id,
+    findingsCount: analysis.violations.length,
+  });
 }

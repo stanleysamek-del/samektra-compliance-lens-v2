@@ -44,26 +44,59 @@ export default async function WelcomePage() {
             Welcome to Compliance Lens, {profile.full_name.split(" ")[0]}.
           </h1>
           <p className="mt-1 text-sm text-[var(--fg-muted)]">
-            Walk a building. Snap photos. Chip flags violations, cites the
-            code, and writes the report. Three quick paths to start.
+            Walk a building. Snap photos. Chip drafts the findings with the
+            code citation; you confirm them, assign the fixes, sign, and
+            export the report.
           </p>
         </header>
 
+        {/* Who Chip is — the one name a new user must learn. */}
+        <Card>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+            Meet Chip
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-[var(--fg-muted)]">
+            <strong className="text-[var(--fg)]">Chip is the AI that reads your photos.</strong>{" "}
+            Every photo you upload, Chip examines and drafts findings with a
+            citation (NFPA / IBC / IFC / NEC / ADA) and a suggested fix, and
+            answers any checklist question the photo covers. Chip drafts —
+            you decide. Nothing goes on the report until you confirm it, and
+            anything you edit or write yourself is always kept.
+          </p>
+        </Card>
+
         {/* The loop explained, briefly */}
         <Card variant="tinted-teal">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
-            <LoopStep n={1} title="Snap" body="Take photos of equipment, walls, exits, gauges, tags." />
-            <Sep />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <LoopStep
+              n={1}
+              title="Pick an inspection type"
+              body="New inspection → choose a template. Its questions become the checklist you score."
+            />
             <LoopStep
               n={2}
-              title="Coach Chip"
-              body="Chip writes findings with NFPA / IBC / IFC / NEC citations. You confirm or correct."
+              title="Snap photos"
+              body="Equipment, walls, exits, gauges, tags. Take several at once — they queue and analyze in the background."
             />
-            <Sep />
             <LoopStep
               n={3}
-              title="Export"
-              body="Download the signed PDF, CAP, LSRA, and ILSM for the file."
+              title="Chip finds"
+              body="Findings with citations appear under each photo; matching checklist questions get auto-answered. Confirm, correct, or add your own."
+            />
+            <LoopStep
+              n={4}
+              title="Assign actions"
+              body="Turn each finding into a corrective action with an owner, a target date, and a status. The Actions board tracks them to Verified."
+            />
+            <LoopStep
+              n={5}
+              title="Sign"
+              body="Inspector and manager sign right on the page. Signatures print on the PDF with timestamps."
+            />
+            <LoopStep
+              n={6}
+              title="Finalize & export"
+              body="Finalize locks the report. Download the PDF, CAP, LSRA, and ILSM. Reopen any time to edit."
             />
           </div>
         </Card>
@@ -73,7 +106,7 @@ export default async function WelcomePage() {
           <PathCard
             badge="Path 1"
             title="Start your first inspection"
-            body="Fill in the facility, add a few photos, see Chip in action."
+            body="Pick an inspection type, add a few photos, watch Chip draft the findings."
             cta="New inspection"
             href="/inspections/new"
             recommended
@@ -100,18 +133,72 @@ export default async function WelcomePage() {
             Cheat sheet
           </h2>
           <ul className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-            <CheatItem label="Home" body="Dashboard, recent activity, daily code insight." />
+            <CheatItem label="Home" body="Dashboard: in-progress inspections, recent activity, this week's numbers." />
             <CheatItem label="History" body="Every inspection you can access, grouped by Folder when you're in a team." />
             <CheatItem
               label="Upload"
-              body="Big orange button — the fastest way to start a new inspection."
+              body="The gold button — the fastest way to start a new inspection."
             />
-            <CheatItem label="Findings" body="Cross-inspection analytics: severity, category, trend, deep-links to the photo." />
+            <CheatItem label="Findings" body="Every finding across every inspection: filter by severity, category, rating; export CSV." />
+            <CheatItem
+              label="Actions"
+              body="The corrective-action board — what's open, who owns it, what's waiting on you to verify."
+            />
+            <CheatItem
+              label="Templates"
+              body="Reusable checklist question sets. Pick one when creating an inspection; edit or build your own."
+            />
             <CheatItem
               label="Team"
-              body="Members, invites, folders, and team-wide rollups."
+              body="Members, invites, folders, and Chip's team rules. On a phone, reach it from Profile."
             />
-            <CheatItem label="Profile" body="Your name, organization, sign out." />
+            <CheatItem label="Profile" body="Your name, organization, links to Team and Templates, sign out." />
+          </ul>
+        </Card>
+
+        {/* The three words that get mixed up */}
+        <Card>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+            Sections vs. Folders vs. Templates
+          </h2>
+          <ul className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <CheatItem
+              label="Sections"
+              body="Group photos inside ONE inspection (“Stair B”, “3 West”). They become the PDF headings."
+            />
+            <CheatItem
+              label="Folders"
+              body="Group whole inspections on the History page. Teams only."
+            />
+            <CheatItem
+              label="Templates"
+              body="The question sets. Chosen once, when you create the inspection."
+            />
+          </ul>
+        </Card>
+
+        {/* What comes out */}
+        <Card>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+            What you export
+          </h2>
+          <ul className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+            <CheatItem
+              label="PDF"
+              body="The signed inspection report: every photo, the finding under it, the citation, and both signatures with timestamps."
+            />
+            <CheatItem
+              label="CAP"
+              body="Corrective Action Plan — a spreadsheet of every deficiency, the fix, the owner, the target date, and status."
+            />
+            <CheatItem
+              label="LSRA"
+              body="Life Safety Risk Assessment — scores each deficiency by Impact × Severity into a Risk Level (ASHE convention)."
+            />
+            <CheatItem
+              label="ILSM"
+              body="Interim Life Safety Measures — the compensating measures you document while a deficiency waits for its fix."
+            />
           </ul>
         </Card>
 
@@ -161,15 +248,6 @@ function LoopStep({
     </div>
   );
 }
-function Sep() {
-  return (
-    <div
-      aria-hidden
-      className="hidden h-auto w-px self-stretch bg-[var(--border)] sm:block"
-    />
-  );
-}
-
 function PathCard({
   badge,
   title,

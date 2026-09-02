@@ -7,6 +7,7 @@ import {
   deleteSection,
   moveSection,
 } from "@/app/inspections/[id]/actions";
+import { showToast } from "@/components/toaster";
 
 export type SectionRow = {
   id: string;
@@ -46,7 +47,12 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
     fd.append("inspection_id", inspectionId);
     fd.append("name", name);
     startTransition(async () => {
-      await createSection(fd);
+      const res = await createSection(fd);
+      if (!res.ok) {
+        // Keep the composer open with the typed name so nothing is lost.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setNewName("");
       setAdding(false);
     });
@@ -58,12 +64,25 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
       setEditingId(null);
       return;
     }
+    // Unchanged name → nothing to save (also stops the blur-after-Enter
+    // double submit).
+    const current = sections.find((s) => s.id === sectionId);
+    if (current && current.name === name) {
+      setEditingId(null);
+      return;
+    }
+    if (isPending) return;
     const fd = new FormData();
     fd.append("section_id", sectionId);
     fd.append("inspection_id", inspectionId);
     fd.append("name", name);
     startTransition(async () => {
-      await renameSection(fd);
+      const res = await renameSection(fd);
+      if (!res.ok) {
+        // Stay in edit mode with the typed name intact.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setEditingId(null);
     });
   }
@@ -80,7 +99,8 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
     fd.append("section_id", sectionId);
     fd.append("inspection_id", inspectionId);
     startTransition(async () => {
-      await deleteSection(fd);
+      const res = await deleteSection(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -90,7 +110,8 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
     fd.append("inspection_id", inspectionId);
     fd.append("direction", direction);
     startTransition(async () => {
-      await moveSection(fd);
+      const res = await moveSection(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -142,6 +163,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                         if (e.key === "Escape") setEditingId(null);
                       }}
                       onBlur={() => submitRename(s.id)}
+                      disabled={isPending}
                       className="cl-input py-1 text-sm"
                     />
                   ) : (
@@ -227,9 +249,10 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
             type="button"
             onClick={submitNew}
             disabled={isPending || newName.trim().length === 0}
-            className="cl-btn-accent px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            aria-busy={isPending}
+            className="cl-btn-accent px-3 py-1 text-xs"
           >
-            Add
+            {isPending ? "Adding…" : "Add"}
           </button>
           <button
             type="button"

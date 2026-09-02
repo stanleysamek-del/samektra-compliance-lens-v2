@@ -8,6 +8,8 @@ import {
   skipNotVisible,
   unskipNotVisible,
 } from "@/app/inspections/[id]/actions";
+import { showToast } from "@/components/toaster";
+import { HelpTip } from "@/components/help-tip";
 
 export type NotVisibleItem = {
   id: string;
@@ -159,6 +161,9 @@ export function NotVisibleChecklist({
 
 type Mode = "idle" | "resolving" | "skipping";
 
+/** Phone-first tap target: ≥40px tall below the sm breakpoint. */
+const TAP = "min-h-[40px] sm:min-h-0";
+
 function NotVisibleRow({
   item,
   inspectionId,
@@ -179,7 +184,12 @@ function NotVisibleRow({
     fd.append("note", note.trim());
     fd.append("resolved_photo_id", item.photo_id);
     startTransition(async () => {
-      await resolveNotVisible(fd);
+      const res = await resolveNotVisible(fd);
+      if (!res.ok) {
+        // Keep the composer open with the note intact so nothing is lost.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setMode("idle");
       setNote("");
     });
@@ -191,7 +201,11 @@ function NotVisibleRow({
     fd.append("inspection_id", inspectionId);
     fd.append("reason", note.trim());
     startTransition(async () => {
-      await skipNotVisible(fd);
+      const res = await skipNotVisible(fd);
+      if (!res.ok) {
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setMode("idle");
       setNote("");
     });
@@ -202,7 +216,8 @@ function NotVisibleRow({
     fd.append("item_id", item.id);
     fd.append("inspection_id", inspectionId);
     startTransition(async () => {
-      await unresolveNotVisible(fd);
+      const res = await unresolveNotVisible(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -211,7 +226,8 @@ function NotVisibleRow({
     fd.append("item_id", item.id);
     fd.append("inspection_id", inspectionId);
     startTransition(async () => {
-      await unskipNotVisible(fd);
+      const res = await unskipNotVisible(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -291,7 +307,7 @@ function NotVisibleRow({
               type="button"
               onClick={() => setMode("resolving")}
               disabled={isPending}
-              className="rounded-md border border-[var(--primary)] px-2.5 py-1 text-[11px] font-medium text-[var(--primary)] transition active:scale-[0.97] hover:bg-[var(--primary)] hover:text-[#0a0d12]"
+              className={`${TAP} rounded-md border border-[var(--primary)] px-3 py-1 text-[11px] font-medium text-[var(--primary)] transition active:scale-[0.97] hover:bg-[var(--primary)] hover:text-[#0a0d12] sm:px-2.5`}
               title="Mark as verified — opens a note field for how you re-photographed it"
             >
               ✓ Resolve
@@ -300,21 +316,26 @@ function NotVisibleRow({
               type="button"
               onClick={() => setMode("skipping")}
               disabled={isPending}
-              className="rounded-md border border-[var(--border-strong)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition active:scale-[0.97] hover:bg-white/[0.05] hover:text-[var(--fg)]"
+              className={`${TAP} rounded-md border border-[var(--border-strong)] px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition active:scale-[0.97] hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2.5`}
               title="Skip — Chip flagged this but you've decided no re-photograph is needed (false positive, out of scope, etc.)"
             >
               ↷ Skip
             </button>
+            <HelpTip title="Resolve vs Skip">
+              Resolve = you re-photographed it and the AI (or you) confirmed
+              it&apos;s fine. Skip = it genuinely doesn&apos;t need another
+              photo; say why so the report explains the gap.
+            </HelpTip>
           </div>
         ) : !isOpen ? (
           <button
             type="button"
             onClick={item.resolved ? reopenResolved : reopenSkipped}
             disabled={isPending}
-            className="shrink-0 rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+            className={`${TAP} shrink-0 rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2`}
             title="Send back to the open to-do list"
           >
-            Reopen
+            {isPending ? "Reopening…" : "Reopen"}
           </button>
         ) : null}
       </div>
@@ -334,6 +355,7 @@ function NotVisibleRow({
             rows={2}
             className="cl-input resize-y py-2 text-xs"
             autoFocus
+            disabled={isPending}
           />
           <div className="flex justify-end gap-2">
             <button
@@ -343,7 +365,7 @@ function NotVisibleRow({
                 setNote("");
               }}
               disabled={isPending}
-              className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+              className={`${TAP} rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2`}
             >
               Cancel
             </button>
@@ -351,7 +373,9 @@ function NotVisibleRow({
               type="button"
               onClick={mode === "resolving" ? resolve : skip}
               disabled={isPending}
+              aria-busy={isPending}
               className={[
+                TAP,
                 "rounded-md px-3 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                 mode === "resolving"
                   ? "bg-[var(--primary)] text-[#0a0d12] hover:bg-[var(--primary-hover)]"

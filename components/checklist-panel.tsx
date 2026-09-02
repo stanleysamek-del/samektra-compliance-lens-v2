@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/checklist";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
 import { scoreItems } from "@/lib/checklists/engine";
+import { HelpTip } from "@/components/help-tip";
 
 /**
  * The inspection checklist: sections of Yes/No/N.A. questions with live
@@ -38,8 +39,9 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
   // Optimistic local copy — server actions revalidate, but the panel
   // should feel instant on a phone in a stairwell.
   const [local, setLocal] = useState<ChecklistItemRow[]>(items);
-  // Explicit user toggles win; sections with flagged (No) answers default
-  // open so problems are never hidden behind a collapsed header.
+  // Explicit user toggles win; sections with flagged (No) answers OR any
+  // unconfirmed AI answer default open so nothing that needs a human is
+  // hidden behind a collapsed header.
   const [toggled, setToggled] = useState<Map<string, boolean>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -127,11 +129,19 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
           ) : null}
         </div>
         <div className="text-right">
-          <div className="text-xl font-semibold tabular-nums text-[var(--fg)]">
-            {overall.yes} / {overall.scored}
-            <span className="ml-2 text-sm font-medium text-[var(--fg-muted)]">
-              {pctLabel(overall.pct)}
+          <div className="flex items-center justify-end gap-1.5 text-xl font-semibold tabular-nums text-[var(--fg)]">
+            <span>
+              {overall.yes} / {overall.scored}
+              <span className="ml-2 text-sm font-medium text-[var(--fg-muted)]">
+                {pctLabel(overall.pct)}
+              </span>
             </span>
+            <HelpTip title="Checklist score" side="bottom">
+              Score = Yes ÷ (Yes + No). N.A. (&ldquo;not applicable — this
+              building doesn&apos;t have that system&rdquo;) is removed from
+              the math, so it never hurts your score. Unanswered questions
+              aren&apos;t counted but show as gaps on the report.
+            </HelpTip>
           </div>
           <div className="text-[11px] text-[var(--fg-subtle)]">
             {overall.na} N.A. · {overall.unanswered} unanswered
@@ -149,7 +159,10 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
         {sections.map((section) => {
           const s = scoreItems(section.rows);
           const flagged = section.rows.filter((r) => r.answer === "no").length;
-          const open = toggled.get(section.code) ?? flagged > 0;
+          const unconfirmedAi = section.rows.filter(
+            (r) => r.answered_by_ai && !r.ai_confirmed,
+          ).length;
+          const open = toggled.get(section.code) ?? (flagged > 0 || unconfirmedAi > 0);
           return (
             <div key={section.code} className="border-b border-[var(--border)] last:border-b-0">
               <button
@@ -162,7 +175,12 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
                   {section.code}. {section.title}
                   {flagged > 0 ? (
                     <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
-                      {flagged} flagged
+                      {flagged} No
+                    </span>
+                  ) : null}
+                  {unconfirmedAi > 0 ? (
+                    <span className="ml-2 rounded bg-[var(--accent)]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                      ✦ {unconfirmedAi} to confirm
                     </span>
                   ) : null}
                 </span>
@@ -295,8 +313,14 @@ function ItemRow({
 
       {aiPending ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded bg-[var(--accent)]/10 px-2.5 py-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--accent)]">
             ✦ AI flagged
+            <HelpTip title="AI flagged" side="bottom">
+              A photo you uploaded matched this question, so the AI answered
+              it. Nothing is final until you confirm — tap Confirm to agree,
+              or Yes / No / N.A. to overrule. The report marks unconfirmed
+              answers as AI-answered.
+            </HelpTip>
           </span>
           {!readOnly ? (
             <button
@@ -349,7 +373,7 @@ function ItemRow({
               onChange={(e) => setNoteDraft(e.target.value)}
               rows={2}
               className="cl-input text-sm"
-              placeholder="Deficiency details, room number, what was observed…"
+              placeholder="What you observed, room number, notes…"
             />
             <div className="flex gap-2">
               <button type="button" onClick={saveNote} className="cl-btn-accent px-3 py-1 text-xs">

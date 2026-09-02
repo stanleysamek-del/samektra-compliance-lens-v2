@@ -64,15 +64,32 @@ export function HelpDrawer() {
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
+              {/* Who Chip is — say it once, plainly, before anything else. */}
+              <section className="flex flex-col gap-1.5">
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+                  Meet Chip
+                </h3>
+                <p className="text-xs text-[var(--fg-muted)]">
+                  <strong className="text-[var(--fg)]">Chip is the AI that reads your photos.</strong>{" "}
+                  Every photo you upload, Chip examines and drafts findings
+                  with the code citation (NFPA / IBC / IFC / NEC / ADA) and a
+                  fix. Chip drafts — you decide. Nothing is final until you
+                  confirm it.
+                </p>
+              </section>
+
               {/* The loop */}
-              <section className="flex flex-col gap-2">
+              <section className="mt-5 flex flex-col gap-2">
                 <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
                   The loop
                 </h3>
                 <ol className="flex flex-col gap-1.5 text-xs text-[var(--fg-muted)]">
-                  <Step n={1} title="Snap photos" body="Equipment, walls, exits, gauges, tags." />
-                  <Step n={2} title="Coach Chip" body="Chip writes findings. You confirm or correct. Thumbs-up/down trains the next turn." />
-                  <Step n={3} title="Export" body="Signed PDF + CAP + LSRA + ILSM for the file." />
+                  <Step n={1} title="Pick an inspection type" body="New inspection → choose a template (the question set for that kind of building). It becomes the checklist." />
+                  <Step n={2} title="Snap photos" body="Equipment, walls, exits, gauges, tags. Take several at once — they queue." />
+                  <Step n={3} title="Chip finds" body="Chip drafts findings with citations and auto-answers matching checklist questions. Confirm, correct, or add your own." />
+                  <Step n={4} title="Assign actions" body="Turn a finding into a corrective action: an owner, a target date, a status. That's what surveyors ask to see." />
+                  <Step n={5} title="Sign" body="Inspector and manager sign on the page. Signatures print on the PDF with timestamps." />
+                  <Step n={6} title="Finalize & export" body="Finalize locks the report. Download the PDF, CAP, LSRA, and ILSM. Reopen any time." />
                 </ol>
               </section>
 
@@ -82,35 +99,54 @@ export function HelpDrawer() {
                   Sidebar / nav
                 </h3>
                 <dl className="flex flex-col gap-1.5 text-xs">
-                  <NavExplain term="Home" def="Dashboard with summary tiles, in-progress cards, recent activity." />
-                  <NavExplain term="History" def="Every inspection, grouped by Folder when you're in a team." />
-                  <NavExplain term="Upload" def="The orange button — fastest way to a new inspection." />
-                  <NavExplain term="Findings" def="Cross-inspection analytics. Filter by severity / category / rating." />
-                  <NavExplain term="Team" def="Members, invites, folders, and team-wide rollups." />
-                  <NavExplain term="Profile" def="Your name, organization, sign out." />
+                  <NavExplain term="Home" def="Dashboard: in-progress inspections, recent activity, this week's numbers." />
+                  <NavExplain term="History" def="Every inspection you can see, grouped by Folder when you're in a team." />
+                  <NavExplain term="Upload" def="The gold button — fastest way to a new inspection." />
+                  <NavExplain term="Findings" def="Every finding across every inspection. Filter by severity, category, or rating; export CSV." />
+                  <NavExplain term="Actions" def="The corrective-action board: what's open, who owns it, what's waiting on you to verify." />
+                  <NavExplain term="Templates" def="The reusable checklist question sets you pick when creating an inspection. Edit or build your own." />
+                  <NavExplain term="Team" def="Members, invites, folders, and Chip's team rules. On a phone, reach it from Profile." />
+                  <NavExplain term="Profile" def="Your name, organization, team and templates links, sign out." />
+                </dl>
+              </section>
+
+              {/* Words that get mixed up */}
+              <section className="mt-5 flex flex-col gap-2">
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+                  Sections · Folders · Templates
+                </h3>
+                <dl className="flex flex-col gap-1.5 text-xs">
+                  <NavExplain term="Sections" def="Group photos INSIDE one inspection (“Stair B”, “3 West”). They become the PDF headings." />
+                  <NavExplain term="Folders" def="Group whole inspections on History. Teams only." />
+                  <NavExplain term="Templates" def="The question sets. Chosen once, when you create the inspection." />
                 </dl>
               </section>
 
               {/* Chip-specific notes */}
               <section className="mt-5 flex flex-col gap-2">
                 <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-                  Chip (the AI)
+                  When Chip gets it wrong
                 </h3>
                 <ul className="flex flex-col gap-1 text-xs text-[var(--fg-muted)]">
                   <li>
-                    <strong className="text-[var(--fg)]">Re-analyze</strong> any
-                    photo with deeper reasoning when Chip got it wrong or missed
-                    something.
+                    <strong className="text-[var(--fg)]">Edit or delete</strong>{" "}
+                    any finding, or add one Chip missed. Your edits are always
+                    kept.
                   </li>
                   <li>
-                    <strong className="text-[var(--fg)]">Coach Chip</strong> by
-                    typing a hint or attaching an annotation — Chip re-runs with
-                    that context.
+                    <strong className="text-[var(--fg)]">Coach Chip</strong> — a
+                    conversation on the photo page: tell it what to look at and
+                    it re-reads the photo.
                   </li>
                   <li>
-                    <strong className="text-[var(--fg)]">Thumbs up/down</strong>{" "}
-                    on each finding feed Chip&apos;s next turn — it learns what
-                    you accept and rejects.
+                    <strong className="text-[var(--fg)]">Deep analyze</strong>{" "}
+                    re-runs a stronger model after a few questions that change
+                    which code applies.
+                  </li>
+                  <li>
+                    <strong className="text-[var(--fg)]">✦ AI flagged</strong> on
+                    a checklist question means a photo matched it and Chip
+                    answered. Confirm, or overrule with Yes / No / N.A.
                   </li>
                 </ul>
               </section>
@@ -125,9 +161,10 @@ export function HelpDrawer() {
                   <strong className="text-[var(--fg)]">Personal workspace</strong>{" "}
                   and any{" "}
                   <strong className="text-[var(--fg)]">Teams</strong> you belong
-                  to. Inspections you create in personal mode aren&apos;t
-                  visible to teammates, and vice versa. Folders only exist
-                  inside teams.
+                  to. A team workspace is shared — every member sees the
+                  team&apos;s inspections, folders, findings, and Chip&apos;s
+                  rules. Switching changes what you see everywhere and where
+                  new inspections save.
                 </p>
               </section>
 

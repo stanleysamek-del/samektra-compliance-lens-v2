@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { fetchWithRetry } from "@/lib/retry";
+import { showToast } from "@/components/toaster";
 
 type Props = {
   photoId: string;
@@ -11,10 +12,16 @@ type Props = {
   tier?: "default" | "deep";
 };
 
-const TIER_LABELS: Record<"default" | "deep", { name: string; cost: string }> = {
-  default: { name: "Haiku 4.5", cost: "≈ $0.005-0.010" },
-  deep: { name: "Sonnet 4.5 (deeper)", cost: "≈ $0.020-0.040" },
+// Plain-language names only. Model cost is the operator's budget line, not
+// something a facility manager should be asked to weigh on every click.
+const TIER_LABELS: Record<"default" | "deep", { name: string }> = {
+  default: { name: "the standard model" },
+  deep: { name: "the deeper model" },
 };
+
+/** One wording for every re-analysis confirmation on the photo page. */
+export const REANALYZE_CONFIRM =
+  "Re-run the AI analysis on this photo? The AI's findings will be replaced with fresh ones. Findings you wrote or edited are always kept.";
 
 export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
   const router = useRouter();
@@ -24,13 +31,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
 
   async function run() {
     if (busy) return;
-    if (
-      !confirm(
-        `Re-run analysis with ${meta.name}? Existing findings on this photo will be replaced. Cost ${meta.cost}.`,
-      )
-    ) {
-      return;
-    }
+    if (!window.confirm(REANALYZE_CONFIRM)) return;
     setError(null);
     setBusy(true);
     try {
@@ -53,7 +54,9 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
         error?: string;
       };
       if (!res.ok || !json.ok) {
-        setError(json.error ?? `Re-analysis failed (HTTP ${res.status})`);
+        const message = json.error ?? `Re-analysis failed (HTTP ${res.status})`;
+        setError(message);
+        showToast({ kind: "error", message });
         setBusy(false);
         return;
       }
@@ -61,7 +64,9 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
       router.refresh();
       setBusy(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Re-analysis failed");
+      const message = err instanceof Error ? err.message : "Re-analysis failed";
+      setError(message);
+      showToast({ kind: "error", message });
       setBusy(false);
     }
   }
@@ -72,6 +77,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
         type="button"
         onClick={run}
         disabled={busy}
+        aria-busy={busy}
         className="cl-btn-outline w-full sm:w-auto"
       >
         {busy ? (
@@ -86,6 +92,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
       </button>
       {error ? (
         <p
+          role="alert"
           className="rounded-lg border px-3 py-2 text-xs"
           style={{
             borderColor: "rgba(168,54,43,0.4)",

@@ -4,6 +4,9 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
 import { DeleteTeamDialog } from "@/components/delete-team-dialog";
+import { SubmitButton } from "@/components/submit-button";
+import { HelpTip } from "@/components/help-tip";
+import { formatDate } from "@/lib/format-date";
 import { getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import {
   inviteMember,
@@ -17,6 +20,24 @@ import {
 } from "../actions";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://compliancelens.app";
+
+/** Same wording as the invite email + the HelpTip, so the three agree. */
+const ROLE_HELP = (
+  <>
+    <p>
+      <span className="font-medium">Admin:</span> invite and remove people,
+      edit Chip&apos;s rules, delete the team.
+    </p>
+    <p className="mt-1">
+      <span className="font-medium">Member:</span> create and edit
+      inspections, assign corrective actions, close them out.
+    </p>
+    <p className="mt-1">
+      <span className="font-medium">Viewer:</span> read inspections and
+      download exports, cannot change anything.
+    </p>
+  </>
+);
 
 export default async function TeamMembersPage({
   searchParams,
@@ -83,27 +104,30 @@ export default async function TeamMembersPage({
   return (
     <AppShell user={userShell}>
       <div className="flex flex-col gap-5">
+        {/* Header — same shape on every Team tab: eyebrow = team name,
+            h1 = the tab you're on. */}
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
-              Current team
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+              {org.name}
             </p>
             <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--fg)]">
-              {org.name}
+              Members
             </h1>
             <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-              You are an <span className="font-medium text-[var(--fg)]">{org.role}</span> ·{" "}
+              You are {org.role === "admin" ? "an" : "a"}{" "}
+              <span className="font-medium text-[var(--fg)]">{org.role}</span> ·{" "}
               {(members ?? []).length}{" "}
               {(members ?? []).length === 1 ? "member" : "members"}
             </p>
           </div>
 
           {allOrgs.length > 1 ? (
-            <form action={switchCurrentOrg}>
+            <form action={switchCurrentOrg} className="flex shrink-0 items-center gap-1.5">
               <select
                 name="organization_id"
                 defaultValue={org.id}
-                onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                aria-label="Switch team"
                 className="cl-input py-1 text-xs"
               >
                 {allOrgs.map((o) => (
@@ -113,11 +137,9 @@ export default async function TeamMembersPage({
                 ))}
                 <option value="personal">Personal workspace</option>
               </select>
-              <noscript>
-                <button type="submit" className="cl-btn-outline">
-                  Switch
-                </button>
-              </noscript>
+              <SubmitButton className="cl-btn-outline px-2.5 py-1 text-xs" pendingLabel="…">
+                Switch
+              </SubmitButton>
             </form>
           ) : null}
         </div>
@@ -126,6 +148,7 @@ export default async function TeamMembersPage({
 
         {error ? (
           <div
+            role="alert"
             className="rounded-lg border px-3 py-2 text-xs"
             style={{
               borderColor: "rgba(168,54,43,0.4)",
@@ -143,27 +166,38 @@ export default async function TeamMembersPage({
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
               Invite a member
             </h2>
-            <form action={inviteMember} className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <form action={inviteMember} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <input type="hidden" name="organization_id" value={org.id} />
               <input
                 type="email"
                 name="email"
                 required
                 placeholder="inspector@example.com"
+                aria-label="Email address to invite"
                 className="cl-input flex-1"
               />
-              <select name="role" defaultValue="member" className="cl-input sm:w-32">
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                <option value="viewer">Viewer (read-only)</option>
-              </select>
-              <button type="submit" className="cl-btn-accent shrink-0">
+              <div className="flex items-center gap-1.5">
+                <select
+                  name="role"
+                  defaultValue="member"
+                  aria-label="Role for the invited person"
+                  className="cl-input sm:w-40"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                  <option value="viewer">Viewer (read-only)</option>
+                </select>
+                <HelpTip title="What each role can do" side="bottom">
+                  {ROLE_HELP}
+                </HelpTip>
+              </div>
+              <SubmitButton className="cl-btn-accent shrink-0" pendingLabel="Sending…">
                 Send invite
-              </button>
+              </SubmitButton>
             </form>
             <p className="mt-2 text-[11px] text-[var(--fg-subtle)]">
-              You&apos;ll get a shareable link after sending. Forward it manually
-              for now — automated email delivery comes in a later iteration.
+              We email the invite. The link that appears under Pending invites
+              is a backup you can paste into Slack or a text.
             </p>
           </Card>
         ) : null}
@@ -187,21 +221,24 @@ export default async function TeamMembersPage({
                           {inv.email}
                         </p>
                         <p className="mt-0.5 text-[11px] text-[var(--fg-subtle)]">
-                          {inv.role} · expires{" "}
-                          {new Date(inv.expires_at).toLocaleDateString()}
+                          {inv.role} · emailed · expires {formatDate(inv.expires_at)}
                         </p>
-                        <code className="mt-1.5 block break-all rounded bg-[#0a0d12]/60 px-2 py-1 text-[10px] text-[var(--fg-muted)]">
+                        <p className="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
+                          Backup link
+                        </p>
+                        <code className="mt-0.5 block break-all rounded bg-[#0a0d12]/60 px-2 py-1 text-[10px] text-[var(--fg-muted)]">
                           {link}
                         </code>
                       </div>
                       <form action={revokeInvite}>
                         <input type="hidden" name="invite_id" value={inv.id} />
-                        <button
-                          type="submit"
-                          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
+                        <SubmitButton
+                          className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                          pendingLabel="Revoking…"
+                          confirmMessage={`Revoke the invite for ${inv.email}? The link they were sent will stop working.`}
                         >
                           Revoke
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
                   </li>
@@ -222,6 +259,7 @@ export default async function TeamMembersPage({
               const memberProfile = m.profiles as unknown as {
                 full_name: string;
               } | null;
+              const displayName = memberProfile?.full_name ?? "this member";
               return (
                 <li
                   key={m.id}
@@ -238,26 +276,33 @@ export default async function TeamMembersPage({
                         ) : null}
                       </p>
                       <p className="text-[11px] text-[var(--fg-subtle)]">
-                        {m.role} · joined{" "}
-                        {new Date(m.joined_at).toLocaleDateString()}
+                        {m.role} · joined {formatDate(m.joined_at)}
                       </p>
                     </div>
 
                     <div className="flex items-center gap-1.5">
                       {isAdmin && !isOnlyAdmin ? (
-                        <form action={changeMemberRole}>
+                        // Explicit Save — a role change is a permissions
+                        // change, so it must never fire on a stray scroll
+                        // or arrow-key inside the select.
+                        <form action={changeMemberRole} className="flex items-center gap-1">
                           <input type="hidden" name="member_id" value={m.id} />
                           <select
                             name="role"
                             defaultValue={m.role}
-                            onChange={(e) =>
-                              e.currentTarget.form?.requestSubmit()
-                            }
+                            aria-label={`Role for ${displayName}`}
                             className="cl-input py-1 text-[11px]"
                           >
                             <option value="member">Member</option>
                             <option value="admin">Admin</option>
+                            <option value="viewer">Viewer (read-only)</option>
                           </select>
+                          <SubmitButton
+                            className="rounded border border-[var(--border-strong)] px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)] disabled:opacity-50"
+                            pendingLabel="Saving…"
+                          >
+                            Save
+                          </SubmitButton>
                         </form>
                       ) : null}
 
@@ -269,23 +314,25 @@ export default async function TeamMembersPage({
                               name="organization_id"
                               value={org.id}
                             />
-                            <button
-                              type="submit"
-                              className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
+                            <SubmitButton
+                              className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                              pendingLabel="Leaving…"
+                              confirmMessage={`Leave ${org.name}? You'll lose access to the team's inspections until someone invites you again.`}
                             >
                               Leave team
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null
                       ) : isAdmin ? (
                         <form action={removeMember}>
                           <input type="hidden" name="member_id" value={m.id} />
-                          <button
-                            type="submit"
-                            className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
+                          <SubmitButton
+                            className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                            pendingLabel="Removing…"
+                            confirmMessage={`Remove ${displayName} from ${org.name}? They'll lose access to the team's inspections immediately.`}
                           >
                             Remove
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                     </div>
@@ -318,6 +365,7 @@ export default async function TeamMembersPage({
                 name="member_id"
                 defaultValue=""
                 required
+                aria-label="Member to promote to admin"
                 className="cl-input flex-1"
               >
                 <option value="" disabled>
@@ -334,9 +382,13 @@ export default async function TeamMembersPage({
                   );
                 })}
               </select>
-              <button type="submit" className="cl-btn-outline shrink-0">
+              <SubmitButton
+                className="cl-btn-outline shrink-0"
+                pendingLabel="Transferring…"
+                confirmMessage="Promote the selected member to admin and step yourself down to member? You can be re-promoted by any admin later."
+              >
                 Transfer &amp; step down
-              </button>
+              </SubmitButton>
             </form>
           </Card>
         ) : null}
@@ -353,9 +405,9 @@ export default async function TeamMembersPage({
               </p>
             </div>
             <input type="hidden" name="organization_id" value="personal" />
-            <button type="submit" className="cl-btn-outline shrink-0">
+            <SubmitButton className="cl-btn-outline shrink-0" pendingLabel="Switching…">
               Switch
-            </button>
+            </SubmitButton>
           </form>
         </Card>
 

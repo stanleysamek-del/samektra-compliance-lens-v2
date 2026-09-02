@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { fetchWithRetry } from "@/lib/retry";
+import { showToast } from "@/components/toaster";
+import { REANALYZE_CONFIRM } from "@/components/reanalyze-button";
 
 // Centralized retry config for this flow — all three call paths
 // (deep-questions, reanalyze, reanalyze-with-observation) hit the
@@ -24,7 +26,7 @@ type Stage =
   | { kind: "idle" }
   | { kind: "fetching-questions" }
   | { kind: "answering"; questions: Question[]; answers: Record<string, string> }
-  | { kind: "analyzing"; answers: Record<string, string>; questions: Question[] }
+  | { kind: "analyzing" }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -32,19 +34,30 @@ type Props = {
   photoId: string;
 };
 
+const OBSERVATION_PROMPT =
+  "INSPECTOR OBSERVATION — what the inspector saw on site that you may have missed or under-rated. Treat this as authoritative ground truth and incorporate into your findings.";
+
 /**
  * Two-pass deep analysis UX.
  *
- * Pass 1: Sonnet looks at the photo and produces 3-6 clarifying questions.
- * The inspector picks answers (or "Unsure"). Pass 2: Sonnet re-analyzes
- * with the answers as authoritative context.
+ * Pass 1: the deeper model looks at the photo and produces 3-6 clarifying
+ * questions. The inspector picks answers (or "Unsure"). Pass 2: it
+ * re-analyzes with the answers as authoritative context.
  *
- * "Quick re-analyze" path skips the questions and fires a Sonnet pass with
- * no inspector context — same as the old ReanalyzeButton behavior.
+ * "Skip questions" fires the deep pass with no inspector context; "I saw
+ * something the AI missed" sends the inspector's own observation as ground
+ * truth. All three paths funnel through runReanalyze, which owns the ONE
+ * confirmation gate — so the wording is identical everywhere and the
+ * replace-findings warning can't be bypassed.
+ *
+ * The observation text lives here (not in the idle panel) so it survives
+ * the analyzing → error transition and is still there after "Try again".
  */
 export function DeepReanalyzeFlow({ photoId }: Props) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
+  const [observation, setObservation] = useState("");
+  const [showObservation, setShowObservation] = useState(false);
 
   async function startWithQuestions() {
     setStage({ kind: "fetching-questions" });
@@ -64,98 +77,50 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
         error?: string;
       };
       if (!res.ok || !json.ok) {
-        setStage({
-          kind: "error",
-          message: json.error ?? `Could not generate questions (HTTP ${res.status})`,
-        });
+        fail(json.error ?? `Could not generate questions (HTTP ${res.status})`);
         return;
       }
       const questions = json.questions ?? [];
       if (questions.length === 0) {
         // No questions needed — go straight to deep analysis with no context.
-        await runReanalyze({}, []);
+        await runReanalyze({ answers: {}, questions: [] });
         return;
       }
       setStage({ kind: "answering", questions, answers: {} });
     } catch (err) {
-      setStage({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Network error",
-      });
+      fail(err instanceof Error ? err.message : "Network error");
     }
   }
 
-  async function quickReanalyze() {
-    if (
-      !confirm(
-        "Re-analyze with Sonnet 4.5 (no clarifying questions)? Existing findings on this photo will be replaced. Cost ≈ $0.020-0.040.",
-      )
-    ) {
-      return;
-    }
-    await runReanalyze({}, []);
+  function fail(message: string) {
+    setStage({ kind: "error", message });
+    showToast({ kind: "error", message });
   }
 
-  async function runWithCustomObservation(observation: string) {
-    const trimmed = observation.trim();
-    if (!trimmed) return;
-    setStage({ kind: "analyzing", answers: { custom: trimmed }, questions: [] });
-    try {
-      const res = await fetchWithRetry(
-        `/api/photos/${photoId}/reanalyze`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tier: "deep",
-            answers: [
-              {
-                question:
-                  "INSPECTOR OBSERVATION — what the inspector saw on site that you may have missed or under-rated. Treat this as authoritative ground truth and incorporate into your findings.",
-                answer: trimmed,
-              },
-            ],
-          }),
-        },
-        {
-          ...RETRY_OPTS,
-          onAttempt: (attempt, reason) =>
-            console.warn(`[reanalyze-observation] retry ${attempt} (${reason})`),
-        },
-      );
-      const json = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !json.ok) {
-        setStage({
-          kind: "error",
-          message: json.error ?? `Re-analysis failed (HTTP ${res.status})`,
-        });
-        return;
-      }
-      setStage({ kind: "done" });
-      router.refresh();
-    } catch (err) {
-      setStage({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Network error",
-      });
-    }
-  }
+  /**
+   * The single re-analysis entry point. Confirms ONCE (same wording as the
+   * standalone re-analyze button), then posts the deep pass with whatever
+   * context the caller supplied: answered questions, the inspector's own
+   * observation, or nothing.
+   */
+  async function runReanalyze(input: {
+    answers: Record<string, string>;
+    questions: Question[];
+    observation?: string;
+  }) {
+    if (!window.confirm(REANALYZE_CONFIRM)) return;
 
-  async function runReanalyze(
-    answers: Record<string, string>,
-    questions: Question[],
-  ) {
-    setStage({ kind: "analyzing", answers, questions });
+    setStage({ kind: "analyzing" });
 
-    const payload = questions
+    const payload = input.questions
       .map((q) => ({
         question: q.question,
-        answer: (answers[q.id] ?? "").trim(),
+        answer: (input.answers[q.id] ?? "").trim(),
       }))
       .filter((qa) => qa.answer.length > 0);
+
+    const obs = (input.observation ?? "").trim();
+    if (obs) payload.push({ question: OBSERVATION_PROMPT, answer: obs });
 
     try {
       const res = await fetchWithRetry(
@@ -176,26 +141,41 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
         error?: string;
       };
       if (!res.ok || !json.ok) {
-        setStage({
-          kind: "error",
-          message: json.error ?? `Re-analysis failed (HTTP ${res.status})`,
-        });
+        fail(json.error ?? `Re-analysis failed (HTTP ${res.status})`);
         return;
       }
       setStage({ kind: "done" });
+      // The observation was consumed — clear it only now that it landed.
+      if (obs) {
+        setObservation("");
+        setShowObservation(false);
+      }
       router.refresh();
     } catch (err) {
-      setStage({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Network error",
-      });
+      fail(err instanceof Error ? err.message : "Network error");
     }
   }
 
   /* -------------------- render -------------------- */
 
   if (stage.kind === "idle") {
-    return <IdlePanel onWithQuestions={startWithQuestions} onSkip={quickReanalyze} onCustom={runWithCustomObservation} />;
+    return (
+      <IdlePanel
+        onWithQuestions={startWithQuestions}
+        onSkip={() => runReanalyze({ answers: {}, questions: [] })}
+        onCustom={() =>
+          runReanalyze({ answers: {}, questions: [], observation })
+        }
+        observation={observation}
+        onObservationChange={setObservation}
+        showObservation={showObservation}
+        onToggleObservation={() => setShowObservation((v) => !v)}
+        onCancelObservation={() => {
+          setShowObservation(false);
+          setObservation("");
+        }}
+      />
+    );
   }
 
   if (stage.kind === "fetching-questions") {
@@ -239,6 +219,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
                       <button
                         key={opt}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() =>
                           setStage((prev) =>
                             prev.kind === "answering"
@@ -250,7 +231,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
                           )
                         }
                         className={[
-                          "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                          "min-h-[40px] rounded-full border px-2.5 py-1 text-xs font-medium transition sm:min-h-0",
                           selected
                             ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
                             : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5 hover:text-[var(--fg)]",
@@ -293,8 +274,10 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
           <button
             type="button"
             disabled={!allAnswered}
-            onClick={() => runReanalyze(stage.answers, stage.questions)}
-            className="cl-btn-accent w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() =>
+              runReanalyze({ answers: stage.answers, questions: stage.questions })
+            }
+            className="cl-btn-accent w-full sm:w-auto"
           >
             Run deep analysis
           </button>
@@ -306,7 +289,8 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
   if (stage.kind === "analyzing") {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
-        <Spinner /> Re-analyzing with Sonnet 4.5 using your answers…
+        <Spinner /> Re-analyzing with the deeper model
+        {observation.trim() ? " using your observation…" : "…"}
       </div>
     );
   }
@@ -319,10 +303,12 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
     );
   }
 
-  // error
+  // error — "Try again" returns to the idle panel with the observation
+  // (if any) still filled in and open.
   return (
     <div className="flex flex-col gap-2">
       <p
+        role="alert"
         className="rounded-lg border px-3 py-2 text-xs"
         style={{
           borderColor: "rgba(168,54,43,0.4)",
@@ -331,10 +317,16 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
         }}
       >
         {stage.message}
+        {observation.trim()
+          ? " Your observation is saved — tap Try again to send it again."
+          : ""}
       </p>
       <button
         type="button"
-        onClick={() => setStage({ kind: "idle" })}
+        onClick={() => {
+          if (observation.trim()) setShowObservation(true);
+          setStage({ kind: "idle" });
+        }}
         className="cl-btn-outline w-full sm:w-auto"
       >
         Try again
@@ -383,14 +375,21 @@ function IdlePanel({
   onWithQuestions,
   onSkip,
   onCustom,
+  observation,
+  onObservationChange,
+  showObservation,
+  onToggleObservation,
+  onCancelObservation,
 }: {
   onWithQuestions: () => void;
   onSkip: () => void;
-  onCustom: (observation: string) => void;
+  onCustom: () => void;
+  observation: string;
+  onObservationChange: (v: string) => void;
+  showObservation: boolean;
+  onToggleObservation: () => void;
+  onCancelObservation: () => void;
 }) {
-  const [showCustom, setShowCustom] = useState(false);
-  const [observation, setObservation] = useState("");
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -410,15 +409,15 @@ function IdlePanel({
         </button>
         <button
           type="button"
-          onClick={() => setShowCustom((v) => !v)}
+          onClick={onToggleObservation}
           className="cl-btn-outline w-full sm:w-auto"
-          aria-expanded={showCustom}
+          aria-expanded={showObservation}
         >
-          {showCustom ? "Hide observation" : "I saw something the AI missed"}
+          {showObservation ? "Hide observation" : "I saw something the AI missed"}
         </button>
       </div>
 
-      {showCustom ? (
+      {showObservation ? (
         <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3">
           <label
             htmlFor="custom-observation"
@@ -429,7 +428,7 @@ function IdlePanel({
           <textarea
             id="custom-observation"
             value={observation}
-            onChange={(e) => setObservation(e.target.value)}
+            onChange={(e) => onObservationChange(e.target.value)}
             placeholder="e.g., 'There's an unsealed penetration around the MC cable behind the plastic sheeting — the wall is rated 1-hour. Also, the door has a Williamsburg Hardware self-closer that's missing the door coordinator.'"
             rows={4}
             className="cl-input min-h-[88px] resize-y py-2.5 text-sm"
@@ -442,10 +441,7 @@ function IdlePanel({
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
-              onClick={() => {
-                setShowCustom(false);
-                setObservation("");
-              }}
+              onClick={onCancelObservation}
               className="cl-btn-outline"
             >
               Cancel
@@ -453,8 +449,8 @@ function IdlePanel({
             <button
               type="button"
               disabled={observation.trim().length === 0}
-              onClick={() => onCustom(observation)}
-              className="cl-btn-accent disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={onCustom}
+              className="cl-btn-accent"
             >
               Re-analyze with my observation
             </button>

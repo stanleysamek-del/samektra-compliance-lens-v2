@@ -12,22 +12,31 @@ type Props = {
     title?: string;
     organization?: string;
   };
+  /** Button label — "Save and continue" on first run, "Save changes" when editing. */
+  submitLabel?: string;
 };
 
-function SubmitButton() {
+function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
       disabled={pending}
+      aria-busy={pending}
       className="cl-btn-primary w-full"
     >
-      {pending ? "Saving…" : "Save and continue"}
+      {pending ? "Saving…" : label}
     </button>
   );
 }
 
-export function ProfileForm({ action, email, error, initial }: Props) {
+export function ProfileForm({
+  action,
+  email,
+  error,
+  initial,
+  submitLabel = "Save and continue",
+}: Props) {
   return (
     <form action={action} className="flex flex-col gap-4">
       <div className="flex flex-col">
@@ -114,7 +123,7 @@ export function ProfileForm({ action, email, error, initial }: Props) {
         </p>
       ) : null}
 
-      <SubmitButton />
+      <SubmitButton label={submitLabel} />
 
       <p className="text-xs leading-relaxed text-[var(--fg-subtle)]">
         These details show up on the inspection PDF and CAP report. You can

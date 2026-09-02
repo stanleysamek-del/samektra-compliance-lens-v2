@@ -15,6 +15,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { saveSignature, clearSignature } from "@/app/inspections/[id]/actions";
+import { showToast } from "@/components/toaster";
+import { formatDateTime } from "@/lib/format-date";
 
 export function SignaturePad({
   inspectionId,
@@ -116,12 +118,32 @@ export function SignaturePad({
       }
       const res = await saveSignature({ inspectionId, role, storagePath: path });
       if (!res.ok) {
+        // The canvas keeps its ink — the inspector can just tap Save again.
         setError(res.error);
+        showToast({ kind: "error", message: res.error });
         return;
       }
       setSigning(false);
       setDirty(false);
       hasInk.current = false;
+    });
+  }
+
+  function removeSignature() {
+    if (
+      !window.confirm(
+        `Remove the ${label.toLowerCase()} signature? The report will show it as unsigned until someone signs again.`,
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await clearSignature({ inspectionId, role });
+      if (!res.ok) {
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
+      showToast({ kind: "success", message: "Signature removed." });
     });
   }
 
@@ -140,25 +162,22 @@ export function SignaturePad({
           />
         </div>
         <div className="flex items-center gap-3 text-[11px] text-[var(--fg-subtle)]">
-          {signedAt ? <span>Signed {new Date(signedAt).toLocaleString()}</span> : null}
+          {signedAt ? <span>Signed {formatDateTime(signedAt)}</span> : null}
           <button
             type="button"
-            className="underline-offset-2 hover:text-[var(--fg)] hover:underline"
+            className="min-h-[40px] underline-offset-2 hover:text-[var(--fg)] hover:underline sm:min-h-0"
             onClick={() => setSigning(true)}
           >
             Re-sign
           </button>
           <button
             type="button"
-            className="underline-offset-2 hover:text-[#a8362b] hover:underline"
+            className="min-h-[40px] underline-offset-2 hover:text-[#a8362b] hover:underline disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
             disabled={isPending}
-            onClick={() =>
-              startTransition(async () => {
-                await clearSignature({ inspectionId, role });
-              })
-            }
+            aria-busy={isPending}
+            onClick={removeSignature}
           >
-            Remove
+            {isPending ? "Removing…" : "Remove"}
           </button>
         </div>
       </div>

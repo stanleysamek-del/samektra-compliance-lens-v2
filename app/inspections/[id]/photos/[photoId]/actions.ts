@@ -4,6 +4,51 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Every mutating action here returns `{ ok: true } | { ok: false, error }`
+ * so the calling component can toast the failure and keep the user's
+ * draft (finding edits, custom findings, annotation drawings). The one
+ * exception is deletePhoto, which redirects on success and returns the
+ * error shape on any failure.
+ */
+type ActionResult = { ok: true } | { ok: false; error: string };
+
+function friendlyError(
+  err: { code?: string; message?: string } | null | undefined,
+  fallback = "Something went wrong. Please try again.",
+): string {
+  if (!err) return fallback;
+  const code = err.code ?? "";
+  const msg = (err.message ?? "").toLowerCase();
+  if (
+    code === "42501" ||
+    msg.includes("row-level security") ||
+    msg.includes("permission denied")
+  ) {
+    return "You don't have permission to change this inspection.";
+  }
+  if (code === "23505") return "That already exists.";
+  if (code === "23503") {
+    return "This item is still linked to other records and can't be removed.";
+  }
+  if (code === "23514" || code === "22P02" || code === "22001") {
+    return "Some of the values aren't valid. Check them and try again.";
+  }
+  if (code === "PGRST116") return "That item no longer exists.";
+  if (
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("econnrefused")
+  ) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return err.message || fallback;
+}
+
+/** RLS hides rows it denies, so a 0-row update is a permission/missing case. */
+const NO_ROWS =
+  "Nothing was changed — you may not have permission, or the item no longer exists.";
+
 export type FindingPatch = {
   title: string;
   category: string;
@@ -25,12 +70,15 @@ export async function updateFinding(
   findingId: string,
   inspectionId: string,
   patch: FindingPatch,
-) {
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  const title = (patch.title ?? "").trim();
+  if (!title) return { ok: false, error: "A finding needs a title." };
 
   // Read photo_id BEFORE updating so we can revalidate the photo page too —
   // otherwise the photo detail page renders with stale findings/bboxes/badges.
@@ -42,7 +90,7 @@ export async function updateFinding(
   const photoId = (existing?.photo_id as string | null) ?? null;
 
   const update: Record<string, unknown> = {
-    title: patch.title,
+    title,
     category: patch.category,
     code: patch.code || null,
     severity: patch.severity,
@@ -65,14 +113,17 @@ export async function updateFinding(
     update.bbox_y2 = clamp(patch.bbox.y2);
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("findings")
     .update(update)
-    .eq("id", findingId);
+    .eq("id", findingId)
+    .select("id");
 
   if (error) {
     console.error("[updateFinding]", error);
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
   if (photoId) {
@@ -81,6 +132,7 @@ export async function updateFinding(
       "page",
     );
   }
+  return { ok: true };
 }
 
 /**
@@ -97,7 +149,7 @@ export async function rateFinding(
   inspectionId: string,
   rating: 1 | -1 | null,
   note?: string,
-) {
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -111,17 +163,20 @@ export async function rateFinding(
     .maybeSingle();
   const photoId = (existing?.photo_id as string | null) ?? null;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("findings")
     .update({
       user_rating: rating,
       user_feedback_note: rating === null ? null : (note ?? null),
     })
-    .eq("id", findingId);
+    .eq("id", findingId)
+    .select("id");
 
   if (error) {
     console.error("[rateFinding]", error);
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
   if (photoId) {
@@ -130,9 +185,13 @@ export async function rateFinding(
       "page",
     );
   }
+  return { ok: true };
 }
 
-export async function deleteFinding(findingId: string, inspectionId: string) {
+export async function deleteFinding(
+  findingId: string,
+  inspectionId: string,
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -149,14 +208,17 @@ export async function deleteFinding(findingId: string, inspectionId: string) {
     .maybeSingle();
   const photoId = (existing?.photo_id as string | null) ?? null;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("findings")
     .delete()
-    .eq("id", findingId);
+    .eq("id", findingId)
+    .select("id");
 
   if (error) {
     console.error("[deleteFinding]", error);
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
   if (photoId) {
@@ -165,25 +227,88 @@ export async function deleteFinding(findingId: string, inspectionId: string) {
       "page",
     );
   }
+  return { ok: true };
 }
 
+/**
+ * Delete a photo and everything hanging off it (findings, what-to-look-for,
+ * not-visible rows, the storage object).
+ *
+ * CONTRACT (the photo page's confirm button depends on it):
+ *   - success → redirect to the inspection page
+ *   - ANY failure → return `{ ok: false, error }` and do NOT redirect
+ *
+ * The storage path is looked up here rather than trusted from the client,
+ * so a forged path can never delete somebody else's object.
+ */
 export async function deletePhoto(
   photoId: string,
-  storagePath: string,
   inspectionId: string,
-) {
+): Promise<{ ok: false; error: string }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: photo, error: photoErr } = await supabase
+    .from("photos")
+    .select("id, storage_path")
+    .eq("id", photoId)
+    .maybeSingle();
+  if (photoErr) {
+    console.error("[deletePhoto] lookup", photoErr);
+    return { ok: false, error: friendlyError(photoErr) };
+  }
+  if (!photo) {
+    return {
+      ok: false,
+      error: "That photo no longer exists, or you don't have access to it.",
+    };
+  }
+
   // Findings cascade via photo_id ON DELETE SET NULL — manually clean them up.
-  await supabase.from("findings").delete().eq("photo_id", photoId);
-  await supabase.from("what_to_look_for").delete().eq("photo_id", photoId);
-  await supabase.from("not_visible").delete().eq("photo_id", photoId);
-  await supabase.from("photos").delete().eq("id", photoId);
-  await supabase.storage.from("photos").remove([storagePath]);
+  const dependents: Array<["findings" | "what_to_look_for" | "not_visible", string]> = [
+    ["findings", "findings"],
+    ["what_to_look_for", "what-to-look-for items"],
+    ["not_visible", "re-photograph items"],
+  ];
+  for (const [table, label] of dependents) {
+    const { error } = await supabase.from(table).delete().eq("photo_id", photoId);
+    if (error) {
+      console.error(`[deletePhoto] ${table}`, error);
+      return {
+        ok: false,
+        error: `Couldn't remove the photo's ${label}: ${friendlyError(error)}`,
+      };
+    }
+  }
+
+  const { data: deleted, error: delErr } = await supabase
+    .from("photos")
+    .delete()
+    .eq("id", photoId)
+    .select("id");
+  if (delErr) {
+    console.error("[deletePhoto] photos", delErr);
+    return { ok: false, error: friendlyError(delErr) };
+  }
+  if (!deleted || deleted.length === 0) {
+    return {
+      ok: false,
+      error: "You don't have permission to delete this photo.",
+    };
+  }
+
+  // Storage cleanup is best-effort: the row is gone, so the report is
+  // already correct. Log but don't fail — an orphaned object is harmless.
+  const storagePath = (photo.storage_path as string | null) ?? null;
+  if (storagePath) {
+    const { error: storageErr } = await supabase.storage
+      .from("photos")
+      .remove([storagePath]);
+    if (storageErr) console.error("[deletePhoto] storage", storageErr);
+  }
 
   revalidatePath(`/inspections/${inspectionId}`);
   redirect(`/inspections/${inspectionId}`);
@@ -195,7 +320,7 @@ export async function deletePhoto(
  * the project's convention of avoiding .bind() on server actions in
  * Next.js 16.
  */
-export async function addCustomFinding(formData: FormData) {
+export async function addCustomFinding(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -235,9 +360,10 @@ export async function addCustomFinding(formData: FormData) {
     bx2 > bx1 &&
     by2 > by1;
 
-  if (!photoId || !inspectionId || !title) {
-    return;
+  if (!photoId || !inspectionId) {
+    return { ok: false, error: "Missing photo or inspection id." };
   }
+  if (!title) return { ok: false, error: "A finding needs a title." };
 
   const validSeverity = ["Low", "Medium", "High"].includes(severity)
     ? severity
@@ -276,10 +402,12 @@ export async function addCustomFinding(formData: FormData) {
 
   if (error) {
     console.error("[addCustomFinding]", error);
+    return { ok: false, error: friendlyError(error) };
   }
 
   revalidatePath(`/inspections/${inspectionId}`, "page");
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+  return { ok: true };
 }
 
 /* =====================================================================
@@ -304,24 +432,10 @@ export type Annotation = {
   fill?: string;
 };
 
-/**
- * Persist the inspector-drawn annotation layer for a photo. Replaces the
- * full annotations JSON. The shape array can be empty to clear all
- * annotations on a photo.
- */
-export async function updatePhotoAnnotations(
-  photoId: string,
-  inspectionId: string,
-  annotations: Annotation[],
-) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
+/** Shared sanitiser for the annotation JSON — used by both persist paths. */
+function cleanAnnotations(annotations: Annotation[]): Annotation[] {
   const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
-  const cleaned: Annotation[] = (Array.isArray(annotations) ? annotations : [])
+  return (Array.isArray(annotations) ? annotations : [])
     .slice(0, 200)
     .map((a) => ({
       id: String(a.id ?? Math.random().toString(36).slice(2, 10)),
@@ -354,17 +468,38 @@ export async function updatePhotoAnnotations(
           ? a.fill.slice(0, 16)
           : undefined,
     }));
+}
 
-  const { error } = await supabase
+/**
+ * Persist the inspector-drawn annotation layer for a photo. Replaces the
+ * full annotations JSON. The shape array can be empty to clear all
+ * annotations on a photo.
+ */
+export async function updatePhotoAnnotations(
+  photoId: string,
+  inspectionId: string,
+  annotations: Annotation[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data, error } = await supabase
     .from("photos")
-    .update({ annotations: cleaned })
-    .eq("id", photoId);
+    .update({ annotations: cleanAnnotations(annotations) })
+    .eq("id", photoId)
+    .select("id");
 
   if (error) {
     console.error("[updatePhotoAnnotations]", error);
+    return { ok: false, error: friendlyError(error) };
   }
+  if (!data || data.length === 0) return { ok: false, error: NO_ROWS };
 
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
+  return { ok: true };
 }
 
 
@@ -399,56 +534,29 @@ export async function updatePhotoState(
   inspectionId: string,
   annotations: Annotation[],
   bboxUpdates: FindingBboxPatch[],
-) {
+): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Persist annotations (re-uses the cleaning logic from updatePhotoAnnotations).
   const clamp = (n: number) => Math.max(0, Math.min(1, Number(n)));
-  const cleanedAnnotations: Annotation[] = (Array.isArray(annotations) ? annotations : [])
-    .slice(0, 200)
-    .map((a) => ({
-      id: String(a.id ?? Math.random().toString(36).slice(2, 10)),
-      type:
-        a.type === "rect" ||
-        a.type === "circle" ||
-        a.type === "arrow" ||
-        a.type === "text"
-          ? a.type
-          : "rect",
-      color: typeof a.color === "string" ? a.color.slice(0, 16) : "#f87171",
-      x1: clamp(a.x1),
-      y1: clamp(a.y1),
-      x2: clamp(a.x2),
-      y2: clamp(a.y2),
-      text:
-        typeof a.text === "string" && a.text.length > 0
-          ? a.text.slice(0, 200)
-          : undefined,
-      strokeWidth:
-        typeof a.strokeWidth === "number" && a.strokeWidth >= 0.5 && a.strokeWidth <= 5
-          ? a.strokeWidth
-          : 2,
-      fontSize:
-        typeof a.fontSize === "number" && a.fontSize >= 0.5 && a.fontSize <= 5
-          ? a.fontSize
-          : 2,
-      fill:
-        typeof a.fill === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.fill)
-          ? a.fill.slice(0, 16)
-          : undefined,
-    }));
 
-  await supabase
+  const { data: photoRows, error: annErr } = await supabase
     .from("photos")
-    .update({ annotations: cleanedAnnotations })
-    .eq("id", photoId);
+    .update({ annotations: cleanAnnotations(annotations) })
+    .eq("id", photoId)
+    .select("id");
+  if (annErr) {
+    console.error("[updatePhotoState] annotations", annErr);
+    return { ok: false, error: friendlyError(annErr) };
+  }
+  if (!photoRows || photoRows.length === 0) return { ok: false, error: NO_ROWS };
 
   // Apply bbox updates to each affected finding. We mark edited=true so the
   // re-analyze flow preserves these adjustments.
+  const failed: string[] = [];
   for (const u of bboxUpdates ?? []) {
     if (!u || !u.findingId) continue;
     const update: Record<string, unknown> = { edited: true };
@@ -480,9 +588,28 @@ export async function updatePhotoState(
       // Only "edited: true" present — nothing to write.
       continue;
     }
-    await supabase.from("findings").update(update).eq("id", u.findingId);
+    const { error } = await supabase
+      .from("findings")
+      .update(update)
+      .eq("id", u.findingId);
+    if (error) {
+      console.error("[updatePhotoState] finding", u.findingId, error);
+      failed.push(friendlyError(error));
+    }
   }
 
   revalidatePath(`/inspections/${inspectionId}/photos/${photoId}`, "page");
   revalidatePath(`/inspections/${inspectionId}`, "page");
+
+  if (failed.length > 0) {
+    // Annotations landed but some finding boxes didn't — say so honestly so
+    // the inspector can retry rather than assume everything saved.
+    return {
+      ok: false,
+      error: `Your drawings were saved, but ${failed.length} finding box${
+        failed.length === 1 ? "" : "es"
+      } didn't update: ${failed[0]}`,
+    };
+  }
+  return { ok: true };
 }

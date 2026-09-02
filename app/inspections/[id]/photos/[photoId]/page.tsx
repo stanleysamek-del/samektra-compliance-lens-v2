@@ -12,7 +12,9 @@ import { AddFindingForm } from "@/components/add-finding-form";
 import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
 import type { NotVisibleItem } from "@/components/not-visible-checklist";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
-import { deletePhoto } from "./actions";
+import { HelpTip } from "@/components/help-tip";
+import { DeletePhotoButton } from "@/components/delete-photo-button";
+import { PhotoBackLink } from "@/components/photo-back-link";
 
 export default async function PhotoDetailPage({
   params,
@@ -264,12 +266,17 @@ export default async function PhotoDetailPage({
       <div className="flex flex-col gap-5">
         {/* Back link + summary */}
         <div>
-          <Link
-            href={`/inspections/${inspectionId}`}
-            className="text-xs font-medium text-[var(--fg-muted)] transition hover:text-[var(--fg)]"
-          >
-            ← Inspection
-          </Link>
+          {/* Shows "← Back to my actions" when the visitor arrived from an
+              assignment email (#finding-…) or the Actions board. */}
+          <PhotoBackLink />
+          <div>
+            <Link
+              href={`/inspections/${inspectionId}`}
+              className="text-xs font-medium text-[var(--fg-muted)] transition hover:text-[var(--fg)]"
+            >
+              ← Inspection
+            </Link>
+          </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
             {photo.photo_location || "Photo"}
           </h1>
@@ -279,18 +286,27 @@ export default async function PhotoDetailPage({
             </p>
           ) : null}
           {summary ? (
-            <p className="mt-1 text-xs text-[var(--fg-subtle)]">
-              Image quality: {summary.imageQuality ?? "—"}
-              {typeof summary.confidence === "number"
-                ? ` · AI confidence ${Math.round(summary.confidence * 100)}%`
-                : ""}
-              {latestAiDurationMs > 0
-                ? ` · analyzed in ${formatDuration(latestAiDurationMs)}`
-                : ""}
-              {totalAiRuns > 1
-                ? ` · ${totalAiRuns} runs (${formatDuration(cumulativeAiMs)} total)`
-                : ""}
-              {latestAiModel ? ` · ${shortModelName(latestAiModel)}` : ""}
+            <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-[var(--fg-subtle)]">
+              <span>Image quality: {summary.imageQuality ?? "—"}</span>
+              {typeof summary.confidence === "number" ? (
+                <span className="inline-flex items-center gap-1">
+                  · AI confidence {Math.round(summary.confidence * 100)}%
+                  <HelpTip title="AI confidence" side="bottom">
+                    How sure the AI is about what it SAW, not about the code.
+                    Under ~70%, look again in person: re-shoot closer and
+                    straight-on, or tell it what&apos;s actually there.
+                  </HelpTip>
+                </span>
+              ) : null}
+              {latestAiDurationMs > 0 ? (
+                <span>· analyzed in {formatDuration(latestAiDurationMs)}</span>
+              ) : null}
+              {totalAiRuns > 1 ? (
+                <span>
+                  · {totalAiRuns} runs ({formatDuration(cumulativeAiMs)} total)
+                </span>
+              ) : null}
+              {latestAiModel ? <span>· {shortModelName(latestAiModel)}</span> : null}
             </p>
           ) : null}
         </div>
@@ -331,40 +347,8 @@ export default async function PhotoDetailPage({
           </Card>
         ) : null}
 
-        {/* Deep re-analyze (Sonnet, with optional clarifying questions) */}
-        <Card variant="tinted-teal">
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="font-medium text-[var(--fg)]">
-                Not seeing what you expected?
-              </p>
-              <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                Run a deeper analysis. &ldquo;Deep analyze&rdquo; first asks you a
-                few clarifying questions (occupancy, sprinkler status, fire-rated
-                doors, egress role) so the AI can apply the right code section —
-                recommended when the call could swing on context. &ldquo;Skip
-                questions&rdquo; just re-runs the deeper model against the photo
-                alone. Your custom findings and any edits you&apos;ve made to AI
-                findings are preserved across re-analysis.
-              </p>
-            </div>
-            <DeepReanalyzeFlow photoId={photo.id} />
-          </div>
-        </Card>
-
-        {/* Coach the AI — back-and-forth hint thread. The inspector tells
-            the AI what to look at, AI re-analyzes with the whole thread as
-            authoritative context, and the conversation persists per photo.
-            Annotations the inspector drew on the photo are passed in so
-            they can attach a region to a specific hint. */}
-        <Card variant="tinted-teal">
-          <CoachTheAI
-            photoId={photo.id}
-            annotations={(photo.annotations ?? []) as Annotation[]}
-          />
-        </Card>
-
-        {/* Findings */}
+        {/* Findings — FIRST after the photo. This is what the inspector
+            (and the manager arriving from an assignment email) came for. */}
         <section className="flex flex-col gap-3">
           <h2 className="px-1 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
             Findings · {sortedFindings.length}
@@ -372,10 +356,11 @@ export default async function PhotoDetailPage({
           {sortedFindings.length === 0 ? (
             <Card>
               <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
-                No violations detected.
+                No findings on this photo.
               </p>
               <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
-                Review the &ldquo;What to look for&rdquo; checklist below before clearing.
+                Review the &ldquo;What to look for&rdquo; list below before
+                clearing it — or add a finding yourself if Chip missed one.
               </p>
             </Card>
           ) : (
@@ -404,6 +389,63 @@ export default async function PhotoDetailPage({
           </div>
         </section>
 
+        {/* AI tuning — Coach + Deep analyze — behind ONE disclosure below
+            the findings. Both re-run Chip; neither is part of the normal
+            loop, so they shouldn't sit between the photo and its findings. */}
+        <details className="cl-card group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="font-medium text-[var(--fg)]">
+                Not what you expected? Coach Chip or re-analyze
+              </span>
+              <HelpTip title="Not what you expected?" side="bottom">
+                Deep analyze re-runs a stronger model after asking a few
+                questions that change which code applies. Coach is a
+                conversation — you say what to look at. Findings you wrote or
+                edited are always preserved.
+              </HelpTip>
+            </span>
+            <span
+              aria-hidden
+              className="shrink-0 text-[var(--fg-subtle)] transition group-open:rotate-90"
+            >
+              ›
+            </span>
+          </summary>
+          <div className="flex flex-col gap-4 border-t border-[var(--border)] px-5 pb-5 pt-4 sm:px-6">
+            {/* Coach the AI — back-and-forth hint thread. The inspector tells
+                the AI what to look at, AI re-analyzes with the whole thread as
+                authoritative context, and the conversation persists per photo.
+                Annotations the inspector drew on the photo are passed in so
+                they can attach a region to a specific hint. */}
+            <Card variant="tinted-teal">
+              <CoachTheAI
+                photoId={photo.id}
+                annotations={(photo.annotations ?? []) as Annotation[]}
+              />
+            </Card>
+
+            {/* Deep re-analyze (stronger model, with optional clarifying questions) */}
+            <Card variant="tinted-teal">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="font-medium text-[var(--fg)]">Deep analyze</p>
+                  <p className="mt-1 text-xs text-[var(--fg-muted)]">
+                    &ldquo;Deep analyze&rdquo; first asks a few clarifying
+                    questions (occupancy, sprinkler status, fire-rated doors,
+                    egress role) so Chip can apply the right code section —
+                    recommended when the call could swing on context.
+                    &ldquo;Skip questions&rdquo; re-runs the stronger model
+                    against the photo alone. Findings you wrote or edited are
+                    preserved.
+                  </p>
+                </div>
+                <DeepReanalyzeFlow photoId={photo.id} />
+              </div>
+            </Card>
+          </div>
+        </details>
+
         {/* What to look for */}
         {wtlf && wtlf.length > 0 ? (
           <Card variant="tinted-teal">
@@ -430,28 +472,28 @@ export default async function PhotoDetailPage({
             sit directly under the photo viewer as an interactive
             dropdown — see <PhotoCardNotVisible> above. */}
 
-        {/* Delete photo */}
-        <Card>
-          <form
-            action={deletePhoto.bind(
-              null,
-              photo.id,
-              photo.storage_path,
-              inspectionId,
-            )}
-            className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div>
-              <p className="font-medium text-[var(--fg)]">Remove this photo</p>
-              <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                Deletes the photo and all associated findings.
+        {/* Delete photo — confirm names the finding count; errors toast. */}
+        {!isInspectionCompleted ? (
+          <Card>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-[var(--fg)]">Remove this photo</p>
+                <p className="mt-1 text-sm text-[var(--fg-muted)]">
+                  Deletes the photo and{" "}
+                  {sortedFindings.length === 0
+                    ? "anything Chip noted on it"
+                    : `its ${sortedFindings.length} finding${sortedFindings.length === 1 ? "" : "s"}`}
+                  . This cannot be undone.
                 </p>
+              </div>
+              <DeletePhotoButton
+                photoId={photo.id}
+                inspectionId={inspectionId}
+                findingsCount={sortedFindings.length}
+              />
             </div>
-            <button type="submit" className="cl-btn-outline">
-              Delete photo
-            </button>
-          </form>
-        </Card>
+          </Card>
+        ) : null}
       </div>
     </AppShell>
   );

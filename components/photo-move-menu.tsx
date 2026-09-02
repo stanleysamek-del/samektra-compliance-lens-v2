@@ -60,8 +60,10 @@ export function PhotoMoveMenu({
           setOpen((v) => !v);
         }}
         disabled={isPending}
-        className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] font-medium text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)]"
+        // ≥40px tall on phones (thumb target); compact chip from sm up.
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)] sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px]"
         title="Move this photo to a section"
+        aria-label={`Move photo to a section (currently ${currentName})`}
       >
         <FolderIcon /> {isPending ? "Moving…" : currentName}
         <CaretIcon />
@@ -91,7 +93,7 @@ export function PhotoMoveMenu({
                     move(null);
                   }}
                   className={[
-                    "w-full px-3 py-1.5 text-left transition hover:bg-white/[0.05]",
+                    "w-full px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:py-1.5",
                     currentSectionId === null
                       ? "font-semibold text-[var(--primary)]"
                       : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
@@ -115,7 +117,7 @@ export function PhotoMoveMenu({
                       move(s.id);
                     }}
                     className={[
-                      "w-full truncate px-3 py-1.5 text-left transition hover:bg-white/[0.05]",
+                      "w-full truncate px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:py-1.5",
                       s.id === currentSectionId
                         ? "font-semibold text-[var(--primary)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg)]",

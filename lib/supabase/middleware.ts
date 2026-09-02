@@ -10,6 +10,15 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 /**
+ * Path prefixes that render for logged-out visitors. The invite page
+ * (/team/invite/<token>) peeks the invite via an anon-granted RPC and
+ * shows "Create an account / Sign in" links that carry ?next= back to
+ * itself — so a brand-new invitee must be able to reach it without a
+ * session, otherwise they bounce to /login and never see the team name.
+ */
+const PUBLIC_PREFIXES = ["/team/invite/"];
+
+/**
  * Hard cap on the Supabase auth call inside the middleware. If Supabase is
  * unreachable / slow, we fail OPEN (let the request through with no user
  * context) so the entire site doesn't 504 with MIDDLEWARE_INVOCATION_TIMEOUT.
@@ -22,7 +31,10 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthRoute = path.startsWith("/auth");
   const isApiRoute = path.startsWith("/api");
-  const isPublic = PUBLIC_PATHS.has(path) || isAuthRoute;
+  const isPublic =
+    PUBLIC_PATHS.has(path) ||
+    isAuthRoute ||
+    PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
 
   // Always set up the Supabase client (it handles cookie sync via setAll —
   // required for the auth callback to persist the session). What we vary

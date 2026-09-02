@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { deleteFinding } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { HelpTip } from "@/components/help-tip";
+import { severityColor } from "@/lib/severity";
 
 export type CompactFinding = {
   id: string;
@@ -17,6 +19,30 @@ type Props = {
 };
 
 const ADVISORY_KEY = "cl-include-advisories";
+const ADVISORY_EVENT = "cl-advisories-changed";
+
+/* The "show advisories" preference is a tiny external store: localStorage
+   + a window event so every PhotoCardFindings on the page re-reads it.
+   useSyncExternalStore keeps SSR (true) and client in step without an
+   effect that sets state on mount. */
+function subscribeAdvisories(onChange: () => void) {
+  window.addEventListener(ADVISORY_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(ADVISORY_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+function readAdvisories(): boolean {
+  try {
+    return window.localStorage.getItem(ADVISORY_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+function readAdvisoriesServer(): boolean {
+  return true;
+}
 
 /**
  * Concise findings list shown directly on the photo card on the inspection
@@ -32,57 +58,33 @@ const ADVISORY_KEY = "cl-include-advisories";
  * Setting is global per browser — applies to every photo card.
  */
 export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
-  const [includeAdvisories, setIncludeAdvisories] = useState(true);
+  const includeAdvisories = useSyncExternalStore(
+    subscribeAdvisories,
+    readAdvisories,
+    readAdvisoriesServer,
+  );
 
-  // Read persisted preference on mount.
-  useEffect(() => {
-    try {
-      const v = window.localStorage.getItem(ADVISORY_KEY);
-      if (v === "0") setIncludeAdvisories(false);
-    } catch {
-      /* localStorage unavailable */
-    }
-  }, []);
-
-  // Persist whenever the user toggles.
+  // Persist + notify every other PhotoCardFindings on the page.
   const toggle = () => {
-    setIncludeAdvisories((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(ADVISORY_KEY, next ? "1" : "0");
-        // Notify any other PhotoCardFindings on the page to re-read the value.
-        window.dispatchEvent(new CustomEvent("cl-advisories-changed"));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    const next = !includeAdvisories;
+    try {
+      window.localStorage.setItem(ADVISORY_KEY, next ? "1" : "0");
+    } catch {
+      /* localStorage unavailable — the event still flips the others */
+    }
+    window.dispatchEvent(new CustomEvent(ADVISORY_EVENT));
   };
-
-  // Listen for changes from other instances of this component.
-  useEffect(() => {
-    const handler = () => {
-      try {
-        const v = window.localStorage.getItem(ADVISORY_KEY);
-        setIncludeAdvisories(v !== "0");
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener("cl-advisories-changed", handler);
-    return () => window.removeEventListener("cl-advisories-changed", handler);
-  }, []);
 
   if (findings.length === 0) {
     return (
       <p className="px-4 pb-3 text-xs text-[var(--fg-subtle)]">
-        No deficiencies detected.
+        No findings on this photo.
       </p>
     );
   }
 
   // Sort High → Medium → Low. We keep ALL findings in the array but apply the
-  // visibility filter at render time so deficiencies retain their numbering
+  // visibility filter at render time so findings retain their numbering
   // (#1, #2, …) which matches the badges drawn on the photo.
   const order = { High: 0, Medium: 1, Low: 2 } as const;
   const sorted = [...findings].sort(
@@ -99,10 +101,14 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
       {/* Toggle row */}
       {advisoryCount > 0 ? (
         <div className="flex items-center justify-between gap-2 px-4 pb-1.5 pt-2 text-[11px]">
-          <span className="text-[var(--fg-subtle)]">
+          <span className="inline-flex items-center gap-1 text-[var(--fg-subtle)]">
             {includeAdvisories
               ? `Showing all · ${advisoryCount} advisor${advisoryCount === 1 ? "y" : "ies"}`
               : `Hiding ${advisoryCount} advisor${advisoryCount === 1 ? "y" : "ies"}`}
+            <HelpTip title="Advisory" side="bottom">
+              Low-severity notes worth fixing but unlikely to be cited on a
+              survey. Hidden by default so the real deficiencies stand out.
+            </HelpTip>
           </span>
           <button
             type="button"
@@ -132,7 +138,7 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
       <ul className="divide-y divide-[var(--border)]">
         {visible.map((f) => {
           // Index uses the original sorted order so numbering stays stable
-          // (deficiencies always #1..#N regardless of advisory toggle).
+          // (findings always #1..#N regardless of advisory toggle).
           const idx = sorted.indexOf(f);
           return (
             <li
@@ -158,20 +164,17 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
 }
 
 function SeverityPill({ severity }: { severity: "Low" | "Medium" | "High" }) {
-  const map = {
-    High: { bg: "rgba(248,113,113,0.14)", fg: "#a8362b", label: "H" },
-    Medium: { bg: "rgba(248,113,113,0.10)", fg: "#a8362b", label: "M" },
-    Low: { bg: "rgba(52,211,153,0.12)", fg: "#6ee7b7", label: "L" },
-  } as const;
-  const m = map[severity];
+  // Shared palette — Medium used to render identical to High here.
+  const m = severityColor(severity);
+  const label = severity === "Low" ? "Advisory" : severity;
   return (
     <span
       className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
       style={{ background: m.bg, color: m.fg }}
-      title={severity}
-      aria-label={severity}
+      title={label}
+      aria-label={label}
     >
-      {m.label}
+      {m.letter}
     </span>
   );
 }

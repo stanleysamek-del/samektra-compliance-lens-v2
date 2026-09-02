@@ -32,7 +32,7 @@ export function SignupForm({ action, next, error, sent }: Props) {
   if (sent) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <EditorialSuccessBanner message="Check your email. We've sent a confirmation link to verify your address. Click it to finish creating your account, then come back and sign in." />
+        <EditorialSuccessBanner message="Check your email. We've sent a confirmation link to verify your address. Click it and you'll be signed in automatically — no need to come back here." />
         <EditorialFootnote>
           Back to{" "}
           <EditorialSerifLink href="/login">Sign in</EditorialSerifLink>

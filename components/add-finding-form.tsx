@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { addCustomFinding } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { BboxPicker, type Bbox } from "@/components/bbox-picker";
+import { SubmitButton } from "@/components/submit-button";
+import { showToast } from "@/components/toaster";
+import { severityColor, type Severity } from "@/lib/severity";
 
 type Props = {
   inspectionId: string;
@@ -11,7 +14,7 @@ type Props = {
   photoUrl: string | null;
 };
 
-const SEVERITIES = ["Low", "Medium", "High"] as const;
+const SEVERITIES: Severity[] = ["Low", "Medium", "High"];
 const CATEGORIES = [
   "Fire",
   "Electrical",
@@ -52,19 +55,51 @@ const CODE_SUGGESTIONS = [
   "NEC §110.26",
 ];
 
+type Draft = {
+  category: (typeof CATEGORIES)[number];
+  title: string;
+  code: string;
+  location: string;
+  description: string;
+  remediation: string;
+  references: string;
+};
+
+const EMPTY_DRAFT: Draft = {
+  category: "Fire",
+  title: "",
+  code: "",
+  location: "",
+  description: "",
+  remediation: "",
+  references: "",
+};
+
 /**
  * Inspector-authored ("custom") finding entry. The AI doesn't always catch
  * everything; this form lets the inspector add their own deficiency to the
  * photo with the same fields the AI fills in.
  *
- * Severity and category are constrained selects (matches the schema enums);
- * code, location, and references are free-text with autocomplete; title,
- * description, and remediation are open text.
+ * Fields are CONTROLLED on purpose: React 19 resets uncontrolled inputs
+ * after a form action completes, so a failed save would wipe the draft.
+ * The form only closes when the server confirms the insert.
  */
 export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
   const [open, setOpen] = useState(false);
-  const [severity, setSeverity] = useState<(typeof SEVERITIES)[number]>("Medium");
+  const [severity, setSeverity] = useState<Severity>("Medium");
   const [bbox, setBbox] = useState<Bbox | null>(null);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+
+  function set<K extends keyof Draft>(key: K, value: Draft[K]) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function close() {
+    setOpen(false);
+    setDraft(EMPTY_DRAFT);
+    setBbox(null);
+    setSeverity("Medium");
+  }
 
   if (!open) {
     return (
@@ -81,8 +116,15 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
   return (
     <form
       action={async (fd) => {
-        await addCustomFinding(fd);
-        setOpen(false);
+        const res = await addCustomFinding(fd);
+        if (!res.ok) {
+          // Keep the form open — every field is controlled so the draft
+          // survives React's post-action reset.
+          showToast({ kind: "error", message: res.error });
+          return;
+        }
+        showToast({ kind: "success", message: "Finding added." });
+        close();
       }}
       className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4"
     >
@@ -104,7 +146,7 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
         </h3>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={close}
           className="text-xs text-[var(--fg-muted)] underline-offset-2 hover:underline"
         >
           Cancel
@@ -118,7 +160,7 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
             Mark on photo (optional)
           </label>
           <div className="mt-1.5">
-            <BboxPicker src={photoUrl} onChange={setBbox} />
+            <BboxPicker src={photoUrl} initial={bbox} onChange={setBbox} />
           </div>
         </div>
       ) : null}
@@ -131,26 +173,22 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
         <div className="mt-1.5 flex gap-2">
           {SEVERITIES.map((s) => {
             const selected = severity === s;
-            const color =
-              s === "High"
-                ? "#f87171"
-                : s === "Medium"
-                  ? "#b8762a"
-                  : "#34d399";
+            const sev = severityColor(s);
             return (
               <button
                 key={s}
                 type="button"
                 onClick={() => setSeverity(s)}
+                aria-pressed={selected}
                 className={[
-                  "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                  "min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition sm:min-h-0",
                   selected
-                    ? "text-[#0a0d12]"
+                    ? "text-white"
                     : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5",
                 ].join(" ")}
                 style={
                   selected
-                    ? { background: color, borderColor: color }
+                    ? { background: sev.fg, borderColor: sev.fg }
                     : undefined
                 }
               >
@@ -172,7 +210,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
         <select
           id="cf-category"
           name="category"
-          defaultValue="Fire"
+          value={draft.category}
+          onChange={(e) => set("category", e.target.value as Draft["category"])}
           className="cl-input mt-1.5"
         >
           {CATEGORIES.map((c) => (
@@ -196,6 +235,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
           name="title"
           required
           maxLength={200}
+          value={draft.title}
+          onChange={(e) => set("title", e.target.value)}
           placeholder="e.g., Unsealed annular space around MC cable"
           className="cl-input mt-1.5"
         />
@@ -213,6 +254,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
           id="cf-code"
           name="code"
           list="cf-code-suggestions"
+          value={draft.code}
+          onChange={(e) => set("code", e.target.value)}
           placeholder="e.g., NFPA 101 §8.3.5.1"
           className="cl-input mt-1.5"
         />
@@ -238,6 +281,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
           id="cf-location"
           name="location"
           maxLength={200}
+          value={draft.location}
+          onChange={(e) => set("location", e.target.value)}
           placeholder="e.g., Above ceiling, north wall, room 214"
           className="cl-input mt-1.5"
         />
@@ -255,6 +300,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
           id="cf-description"
           name="description"
           rows={3}
+          value={draft.description}
+          onChange={(e) => set("description", e.target.value)}
           placeholder="What is the problem and why is it a deficiency?"
           className="cl-input mt-1.5 resize-y"
         />
@@ -272,6 +319,8 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
           id="cf-remediation"
           name="remediation"
           rows={3}
+          value={draft.remediation}
+          onChange={(e) => set("remediation", e.target.value)}
           placeholder="How should it be corrected?"
           className="cl-input mt-1.5 resize-y"
         />
@@ -288,22 +337,20 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
         <input
           id="cf-references"
           name="references"
+          value={draft.references}
+          onChange={(e) => set("references", e.target.value)}
           placeholder="e.g., NFPA 101 §8.3.5.1; UL XHEZ"
           className="cl-input mt-1.5"
         />
       </div>
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="cl-btn-outline"
-        >
+        <button type="button" onClick={close} className="cl-btn-outline">
           Cancel
         </button>
-        <button type="submit" className="cl-btn-accent">
+        <SubmitButton className="cl-btn-accent" pendingLabel="Adding…">
           Add finding
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

@@ -4,9 +4,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { sendInviteEmail } from "@/lib/email/send-invite";
+import { sendInviteEmail, type InviteRole } from "@/lib/email/send-invite";
 
 const CURRENT_ORG_COOKIE = "cl_org";
+
+/** Every role the org_members / org_invites check constraints accept (0016). */
+const ROLES: readonly InviteRole[] = ["admin", "member", "viewer"];
+function isRole(v: string): v is InviteRole {
+  return (ROLES as readonly string[]).includes(v);
+}
+
+/** Errors from the members screen surface on the members screen. */
+function membersError(message: string): never {
+  redirect(`/team/members?error=${encodeURIComponent(message)}`);
+}
 
 /* =====================================================================
  * Current-org cookie helpers
@@ -82,12 +93,11 @@ export async function inviteMember(formData: FormData) {
   const orgId = String(formData.get("organization_id") ?? "");
   const emailRaw = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "member");
-  if (!orgId || !emailRaw) return;
-  if (role !== "admin" && role !== "member" && role !== "viewer") return;
+  if (!orgId) return;
+  if (!emailRaw) membersError("Enter the email address to invite");
+  if (!isRole(role)) membersError("Pick a role: admin, member, or viewer");
   if (!emailRaw.includes("@")) {
-    redirect(
-      `/team?error=${encodeURIComponent("Enter a valid email address")}`,
-    );
+    membersError("Enter a valid email address");
   }
 
   const supabase = await createClient();
@@ -110,7 +120,11 @@ export async function inviteMember(formData: FormData) {
     .maybeSingle();
   if (error) {
     console.error("[inviteMember]", error);
-    redirect(`/team?error=${encodeURIComponent(error.message)}`);
+    membersError(
+      /duplicate|unique/i.test(error.message)
+        ? `${emailRaw} already has a pending invite to this team`
+        : error.message,
+    );
   }
 
   // Best-effort email delivery via Resend. Failures don't block the invite
@@ -132,7 +146,7 @@ export async function inviteMember(formData: FormData) {
       toEmail: emailRaw,
       inviterName: inviterProfile?.full_name ?? user.email ?? "A teammate",
       orgName: orgRow?.name ?? "Compliance Lens",
-      role: role as "admin" | "member",
+      role,
       token: insertedInvite.token as string,
     });
   }
@@ -151,8 +165,16 @@ export async function revokeInvite(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  await supabase.from("organization_invites").delete().eq("id", inviteId);
+  const { error } = await supabase
+    .from("organization_invites")
+    .delete()
+    .eq("id", inviteId);
+  if (error) {
+    console.error("[revokeInvite]", error);
+    membersError(error.message || "Couldn't revoke the invite. Are you an admin?");
+  }
   revalidatePath("/team");
+  revalidatePath("/team/members");
 }
 
 /**
@@ -200,7 +222,8 @@ export async function acceptInvite(formData: FormData) {
 export async function changeMemberRole(formData: FormData) {
   const memberId = String(formData.get("member_id") ?? "");
   const role = String(formData.get("role") ?? "");
-  if (!memberId || (role !== "admin" && role !== "member")) return;
+  if (!memberId) return;
+  if (!isRole(role)) membersError("Pick a role: admin, member, or viewer");
 
   const supabase = await createClient();
   const {
@@ -212,9 +235,13 @@ export async function changeMemberRole(formData: FormData) {
     .from("organization_members")
     .update({ role })
     .eq("id", memberId);
-  if (error) console.error("[changeMemberRole]", error);
+  if (error) {
+    console.error("[changeMemberRole]", error);
+    membersError(error.message || "Couldn't change the role. Are you an admin?");
+  }
 
   revalidatePath("/team");
+  revalidatePath("/team/members");
 }
 
 export async function removeMember(formData: FormData) {
@@ -231,9 +258,13 @@ export async function removeMember(formData: FormData) {
     .from("organization_members")
     .delete()
     .eq("id", memberId);
-  if (error) console.error("[removeMember]", error);
+  if (error) {
+    console.error("[removeMember]", error);
+    membersError(error.message || "Couldn't remove that member. Are you an admin?");
+  }
 
   revalidatePath("/team");
+  revalidatePath("/team/members");
 }
 
 /**
@@ -251,11 +282,15 @@ export async function leaveOrganization(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  await supabase
+  const { error } = await supabase
     .from("organization_members")
     .delete()
     .eq("organization_id", orgId)
     .eq("user_id", user.id);
+  if (error) {
+    console.error("[leaveOrganization]", error);
+    membersError(error.message || "Couldn't leave the team.");
+  }
 
   const store = await cookies();
   if (store.get(CURRENT_ORG_COOKIE)?.value === orgId) {

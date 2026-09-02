@@ -6,6 +6,8 @@ import {
   type Annotation,
   type FindingBboxPatch,
 } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { showToast } from "@/components/toaster";
+import { severityColor, type Severity } from "@/lib/severity";
 
 /* =====================================================================
  *  Unified photo viewer + annotation editor.
@@ -78,11 +80,10 @@ const COLORS = [
   { hex: "#ffffff", label: "White" },
 ];
 
-const SEVERITY_COLOR: Record<"Low" | "Medium" | "High", string> = {
-  High: "#f87171",
-  Medium: "#f87171",
-  Low: "#34d399",
-};
+/** Stroke/badge color for an AI bbox — ONE palette app-wide (lib/severity). */
+function sevStroke(s: Severity): string {
+  return severityColor(s).fg;
+}
 
 type Props = {
   src: string;
@@ -119,9 +120,8 @@ export function PhotoEditor({
       document.body.style.overflow = prev;
       document.removeEventListener("keydown", onKey);
     };
-    // cancelEditing is stable (function declaration); intentionally omit
-    // it from deps so the lock setup runs exactly once per editing toggle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // cancelEditing is a plain function declaration; the lock setup runs
+    // exactly once per editing toggle.
   }, [editing]);
 
   // Build the "shapes" working set when editing starts (we keep view-mode and
@@ -157,17 +157,89 @@ export function PhotoEditor({
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  /**
+   * Inline text editing (replaces window.prompt). `textEditId` is the
+   * annotation whose label is being typed in the toolbar input; `textDraft`
+   * is the in-progress value. Committing an empty label on a brand-new text
+   * shape removes it so we never save an invisible annotation.
+   */
+  const [textEditId, setTextEditId] = useState<string | null>(null);
+  const [textDraft, setTextDraft] = useState("");
 
   function startEditing() {
     setShapes(initialShapes);
     setEditing(true);
     setSelectedId(null);
     setTool("select");
+    setTextEditId(null);
+    setTextDraft("");
   }
   function cancelEditing() {
     setEditing(false);
     setSelectedId(null);
     setMode({ kind: "idle" });
+    setTextEditId(null);
+    setTextDraft("");
+  }
+
+  /**
+   * Select a shape AND mirror its color / thickness / text size / fill into
+   * the toolbar so further edits continue from where that shape is. Done
+   * here (event-driven) rather than in an effect on `selectedId` so React
+   * doesn't pay a cascading render on every selection.
+   */
+  function selectShape(sel: EditableShape) {
+    setSelectedId(sel.id);
+    if (sel.kind === "annotation") {
+      setColor(sel.color);
+      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
+      if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
+      setFill(sel.fill);
+    } else {
+      // Bbox: color falls back to the severity default; fill defaults to
+      // undefined (no fill).
+      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
+      setColor(sel.color ?? sevStroke(sel.severity));
+      setFill(sel.fill);
+    }
+  }
+
+  function beginTextEdit(sel: EditableShape & { kind: "annotation" }) {
+    selectShape(sel);
+    setTextEditId(sel.id);
+    setTextDraft(sel.text ?? "");
+  }
+
+  function commitTextEdit() {
+    if (!textEditId) return;
+    const value = textDraft.trim();
+    setShapes((prev) =>
+      prev.flatMap((s) => {
+        if (s.id !== textEditId || s.kind !== "annotation") return [s];
+        if (!value) return []; // empty label → drop the shape entirely
+        return [{ ...s, text: value.slice(0, 200) }];
+      }),
+    );
+    if (!value) setSelectedId(null);
+    setTextEditId(null);
+    setTextDraft("");
+  }
+
+  function cancelTextEdit() {
+    if (!textEditId) return;
+    // A brand-new shape that never got a label is removed on cancel.
+    setShapes((prev) =>
+      prev.filter(
+        (s) =>
+          !(
+            s.id === textEditId &&
+            s.kind === "annotation" &&
+            !(s.text && s.text.trim().length > 0)
+          ),
+      ),
+    );
+    setTextEditId(null);
+    setTextDraft("");
   }
   function saveAndExit() {
     // Diff bboxes vs original to determine which findings need updates.
@@ -213,13 +285,31 @@ export function PhotoEditor({
 
     const ann = shapes
       .filter((s): s is Annotation & { kind: "annotation" } => s.kind === "annotation")
-      .map(({ kind: _kind, ...a }) => a);
+      // A text shape with no label is invisible — don't persist it.
+      .filter((s) => s.type !== "text" || (s.text && s.text.trim().length > 0))
+      .map((s) => {
+        const a: Annotation & { kind?: string } = { ...s };
+        delete a.kind;
+        return a as Annotation;
+      });
 
     startTransition(async () => {
-      await updatePhotoState(photoId, inspectionId, ann, bboxUpdates);
+      const res = await updatePhotoState(photoId, inspectionId, ann, bboxUpdates);
+      if (!res.ok) {
+        // Stay in the editor — every drawing is still in `shapes`, so the
+        // inspector can retry Save instead of redrawing.
+        showToast({
+          kind: "error",
+          message: `${res.error} Your drawings are still here — try Save again.`,
+        });
+        return;
+      }
+      showToast({ kind: "success", message: "Annotations saved." });
       setEditing(false);
       setSelectedId(null);
       setMode({ kind: "idle" });
+      setTextEditId(null);
+      setTextDraft("");
     });
   }
 
@@ -277,6 +367,9 @@ export function PhotoEditor({
     const p = pointToNorm(clientX, clientY);
     if (!p) return;
 
+    // Tapping the photo while a label is being typed commits it first.
+    if (textEditId) commitTextEdit();
+
     if (tool === "select") {
       const sel = shapes.find((s) => s.id === selectedId);
       if (sel) {
@@ -288,7 +381,7 @@ export function PhotoEditor({
       }
       const hit = topShapeAt(p);
       if (hit) {
-        setSelectedId(hit.id);
+        selectShape(hit);
         setMode({ kind: "moving", pointerStart: p, shapeStart: hit });
         return;
       }
@@ -297,8 +390,9 @@ export function PhotoEditor({
     }
 
     if (tool === "text") {
-      const text = window.prompt("Text:");
-      if (!text || !text.trim()) return;
+      // Drop an empty label at the tap point and open the inline input in
+      // the toolbar. The label is applied on Done/Enter; an empty commit
+      // removes the shape again.
       const newA: EditableShape = {
         kind: "annotation",
         id: makeId(),
@@ -308,12 +402,12 @@ export function PhotoEditor({
         y1: p.y,
         x2: Math.min(1, p.x + 0.18),
         y2: Math.min(1, p.y + 0.04),
-        text: text.trim(),
+        text: "",
         strokeWidth,
         fontSize,
       };
-      setShapes([...shapes, newA]);
-      setSelectedId(newA.id);
+      setShapes((prev) => [...prev, newA]);
+      beginTextEdit(newA as EditableShape & { kind: "annotation" });
       setTool("select");
       return;
     }
@@ -452,28 +546,6 @@ export function PhotoEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, selectedId]);
 
-  // When the user picks a shape, sync the editor's defaults to that shape's
-  // properties so the toolbar reflects the active selection and further edits
-  // continue from there.
-  useEffect(() => {
-    if (!editing || !selectedId) return;
-    const sel = shapes.find((s) => s.id === selectedId);
-    if (!sel) return;
-    if (sel.kind === "annotation") {
-      setColor(sel.color);
-      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
-      if (typeof sel.fontSize === "number") setFontSize(sel.fontSize);
-      setFill(sel.fill);
-    } else if (sel.kind === "bbox") {
-      // Mirror thickness, color, and fill for bboxes. Color falls back to
-      // the severity default; fill defaults to undefined (no fill).
-      if (typeof sel.strokeWidth === "number") setStrokeWidth(sel.strokeWidth);
-      setColor(sel.color ?? SEVERITY_COLOR[sel.severity]);
-      setFill(sel.fill);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
-
   function deleteSelected() {
     if (!selectedId) return;
     setShapes((prev) => {
@@ -543,15 +615,7 @@ export function PhotoEditor({
   function editSelectedText() {
     const sel = shapes.find((s) => s.id === selectedId);
     if (!sel || sel.kind !== "annotation" || sel.type !== "text") return;
-    const next = window.prompt("Text:", sel.text ?? "");
-    if (next == null) return;
-    setShapes((prev) =>
-      prev.map((s) =>
-        s.id === selectedId && s.kind === "annotation"
-          ? { ...s, text: next }
-          : s,
-      ),
-    );
+    beginTextEdit(sel);
   }
 
   /* ---------- render ---------- */
@@ -670,16 +734,7 @@ export function PhotoEditor({
           if (!p) return;
           const hit = topShapeAt(p);
           if (hit && hit.kind === "annotation" && hit.type === "text") {
-            setSelectedId(hit.id);
-            const next = window.prompt("Text:", hit.text ?? "");
-            if (next == null) return;
-            setShapes((prev) =>
-              prev.map((s) =>
-                s.id === hit.id && s.kind === "annotation"
-                  ? { ...s, text: next }
-                  : s,
-              ),
-            );
+            beginTextEdit(hit);
           }
         }}
         onTouchStart={(e) => {
@@ -760,23 +815,33 @@ export function PhotoEditor({
                     if (editing) {
                       e.preventDefault();
                       e.stopPropagation();
-                      setSelectedId(s.id);
+                      selectShape(s as EditableShape);
                     } else {
                       document
                         .getElementById(`finding-${s.id}`)
                         ?.scrollIntoView({ behavior: "smooth", block: "center" });
                     }
                   }}
-                  className="absolute -translate-x-1/3 -translate-y-1/2 rounded-full px-2 py-0.5 text-[11px] font-bold shadow-lg ring-2 ring-black/40 transition hover:scale-110"
+                  // ≥32px tap target; the severity LETTER rides along so the
+                  // badge isn't color-only (Medium vs High used to be the
+                  // same red anyway).
+                  className="absolute flex min-h-[32px] min-w-[32px] -translate-x-1/3 -translate-y-1/2 items-center justify-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold shadow-lg ring-2 ring-black/40 transition hover:scale-110"
                   style={{
-                    background: SEVERITY_COLOR[s.severity],
-                    color: "#0a0d12",
+                    background: sevStroke(s.severity),
+                    color: "#ffffff",
                     left: `${s.x1 * 100}%`,
                     top: `${s.y1 * 100}%`,
                   }}
-                  aria-label={`Finding ${s.index + 1}: ${s.title}`}
+                  aria-label={`Finding ${s.index + 1}, ${s.severity} severity: ${s.title}`}
+                  title={`${s.severity} · ${s.title}`}
                 >
                   #{s.index + 1}
+                  <span
+                    aria-hidden
+                    className="rounded-sm bg-black/25 px-1 text-[9px] leading-tight"
+                  >
+                    {severityColor(s.severity).letter}
+                  </span>
                 </button>
               );
             })}
@@ -794,13 +859,13 @@ export function PhotoEditor({
                         top: `${b.y1 * 100}%`,
                         background: "rgba(7,9,13,0.95)",
                         color: "#f1f5f9",
-                        border: `1px solid ${SEVERITY_COLOR[b.severity]}`,
+                        border: `1px solid ${sevStroke(b.severity)}`,
                         marginTop: "-8px",
                       }}
                     >
                       <div
                         className="mb-0.5 text-[9px] font-bold uppercase tracking-wider"
-                        style={{ color: SEVERITY_COLOR[b.severity] }}
+                        style={{ color: sevStroke(b.severity) }}
                       >
                         {b.severity} · #{b.index + 1}
                       </div>
@@ -849,11 +914,56 @@ export function PhotoEditor({
               type="button"
               onClick={saveAndExit}
               disabled={isPending}
+              aria-busy={isPending}
               className="cl-btn-accent !px-4 !py-1.5 !text-xs"
             >
               {isPending ? "Saving…" : "Save"}
             </button>
           </div>
+
+          {/* Inline label editor — replaces window.prompt for text shapes. */}
+          {textEditId ? (
+            <div className="mb-2 flex items-center gap-2">
+              <label htmlFor="pe-text-label" className="sr-only">
+                Label text
+              </label>
+              <input
+                id="pe-text-label"
+                type="text"
+                autoFocus
+                value={textDraft}
+                maxLength={200}
+                onChange={(e) => setTextDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitTextEdit();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cancelTextEdit();
+                  }
+                }}
+                placeholder="Type the label, then Done"
+                className="h-10 min-w-0 flex-1 rounded-md border border-white/25 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:border-[var(--gold)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={commitTextEdit}
+                className="h-10 shrink-0 rounded-md bg-[var(--gold)] px-3 text-xs font-semibold text-[#0a0d12]"
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={cancelTextEdit}
+                className="h-10 shrink-0 rounded-md px-3 text-xs font-medium text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
 
           {/* Tools strip — horizontally scrollable on small screens.
               Each tool gets a 44px touch target (iOS minimum). */}
@@ -1057,7 +1167,7 @@ function ShapeSvg({
         width={Math.abs(shape.x2 - shape.x1)}
         height={Math.abs(shape.y2 - shape.y1)}
         fill="none"
-        stroke="#f87171"
+        stroke={sevStroke(shape.severity)}
         strokeWidth={2}
         strokeDasharray="6 6"
         opacity={0.35}
@@ -1068,7 +1178,7 @@ function ShapeSvg({
 
   const stroke =
     shape.kind === "bbox"
-      ? (shape.color ?? SEVERITY_COLOR[shape.severity])
+      ? (shape.color ?? sevStroke(shape.severity))
       : shape.color;
   // Stroke widths are in PIXELS because we use vectorEffect="non-scaling-stroke",
   // which means the stroke width is interpreted in the SVG host's pixel space
@@ -1259,7 +1369,8 @@ function ResizeHandlesOverlay({ s }: { s: EditableShape }) {
     ["sw", s.x1, s.y2],
     ["w",  s.x1, (s.y1 + s.y2) / 2],
   ];
-  const color = s.kind === "bbox" ? "#f87171" : (s as Annotation).color;
+  const color =
+    s.kind === "bbox" ? (s.color ?? sevStroke(s.severity)) : (s as Annotation).color;
   return (
     <>
       {handles.map(([name, x, y]) => (

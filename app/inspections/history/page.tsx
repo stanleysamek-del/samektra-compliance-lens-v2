@@ -15,6 +15,8 @@ type SearchParams = {
   q?: string;
   sort?: Sort;
   status?: StatusFilter;
+  /** Team workspace only: show a single folder (group) by id. */
+  folder?: string;
   /** Set by deleteInspection — surfaces a "Deleted X" banner. */
   deleted?: string;
   /** Generic error message bubbled up by deleteInspection on failure. */
@@ -30,6 +32,7 @@ export default async function HistoryPage({
   const q = (params.q ?? "").trim();
   const sort: Sort = (params.sort as Sort) ?? "newest";
   const status: StatusFilter = (params.status as StatusFilter) ?? "all";
+  const folderParam = (params.folder ?? "").trim();
   const deletedFacility = (params.deleted ?? "").trim();
   const errorMessage = (params.error ?? "").trim();
 
@@ -151,6 +154,11 @@ export default async function HistoryPage({
     inspectionCount: inspectionCountByFolder.get(f.id) ?? 0,
   }));
   const folderOptions = folders.map((f) => ({ id: f.id, name: f.name }));
+  // ?folder=<id> (from the Team dashboard's Groups cards) narrows the
+  // list to that one group. Ignored silently if the id isn't one of ours.
+  const activeFolder = folderParam
+    ? folders.find((f) => f.id === folderParam) ?? null
+    : null;
 
   // Counts for the filter pills (run once with no filter so the counts always
   // reflect the user's full library, not the current view).
@@ -233,6 +241,9 @@ export default async function HistoryPage({
         <Card padded={false}>
           <form action="/inspections/history" method="get" className="px-4 py-3">
             <input type="hidden" name="status" value={status} />
+            {activeFolder ? (
+              <input type="hidden" name="folder" value={activeFolder.id} />
+            ) : null}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative flex-1">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-subtle)]">
@@ -274,6 +285,7 @@ export default async function HistoryPage({
               q={q}
               sort={sort}
               status="all"
+              folder={activeFolder?.id ?? null}
             />
             <FilterPill
               label="In progress"
@@ -282,6 +294,7 @@ export default async function HistoryPage({
               q={q}
               sort={sort}
               status="in_progress"
+              folder={activeFolder?.id ?? null}
               tone="warning"
             />
             <FilterPill
@@ -291,6 +304,7 @@ export default async function HistoryPage({
               q={q}
               sort={sort}
               status="completed"
+              folder={activeFolder?.id ?? null}
               tone="success"
             />
             <FilterPill
@@ -300,6 +314,7 @@ export default async function HistoryPage({
               q={q}
               sort={sort}
               status="archived"
+              folder={activeFolder?.id ?? null}
             />
           </div>
         </Card>
@@ -313,10 +328,25 @@ export default async function HistoryPage({
             </span>
             {" · "}
             <Link
-              href={`/inspections/history?status=${status}&sort=${sort}`}
+              href={`/inspections/history?status=${status}&sort=${sort}${activeFolder ? `&folder=${encodeURIComponent(activeFolder.id)}` : ""}`}
               className="text-[var(--primary)] hover:text-[var(--primary-hover)]"
             >
               clear search
+            </Link>
+          </p>
+        ) : null}
+
+        {/* Active group filter (from the Team dashboard's Groups cards) */}
+        {activeFolder ? (
+          <p className="px-1 text-xs text-[var(--fg-muted)]">
+            Showing group{" "}
+            <span className="font-medium text-[var(--fg)]">{activeFolder.name}</span>
+            {" · "}
+            <Link
+              href={`/inspections/history?status=${status}&sort=${sort}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+              className="text-[var(--primary)] hover:text-[var(--primary-hover)]"
+            >
+              show all groups
             </Link>
           </p>
         ) : null}
@@ -343,14 +373,15 @@ export default async function HistoryPage({
                 }> = [];
 
                 const unfiled = inspectionList.filter((r) => !r.folder_id);
-                if (unfiled.length > 0 || folders.length === 0) {
+                if (!activeFolder && (unfiled.length > 0 || folders.length === 0)) {
                   grouped.push({
                     key: "unfiled",
                     label: folders.length > 0 ? "Unfiled" : null,
                     rows: unfiled,
                   });
                 }
-                for (const f of folders) {
+                const visibleFolders = activeFolder ? [activeFolder] : folders;
+                for (const f of visibleFolders) {
                   grouped.push({
                     key: f.id,
                     label: f.name,
@@ -422,10 +453,10 @@ export default async function HistoryPage({
         ) : (
           <Card>
             <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
-              {q || status !== "all" ? "No matching inspections" : totals.all === 0 ? "No inspections yet" : "No inspections in this view"}
+              {q || status !== "all" || activeFolder ? "No matching inspections" : totals.all === 0 ? "No inspections yet" : "No inspections in this view"}
             </p>
             <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
-              {q || status !== "all"
+              {q || status !== "all" || activeFolder
                 ? "Try clearing filters or searching for something else."
                 : totals.all === 0
                   ? "Tap the New button above to start your first inspection."
@@ -518,6 +549,7 @@ function FilterPill({
   q,
   sort,
   status,
+  folder = null,
   tone = "default",
 }: {
   label: string;
@@ -526,12 +558,14 @@ function FilterPill({
   q: string;
   sort: Sort;
   status: StatusFilter;
+  folder?: string | null;
   tone?: "default" | "warning" | "success";
 }) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (sort !== "newest") params.set("sort", sort);
   if (status !== "all") params.set("status", status);
+  if (folder) params.set("folder", folder);
   const href = `/inspections/history${params.toString() ? `?${params}` : ""}`;
 
   const accent =

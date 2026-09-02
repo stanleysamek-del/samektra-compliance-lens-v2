@@ -58,8 +58,8 @@ export function PhotoCardNotVisible({
           <Caret expanded={expanded} />
           {allDone ? "✓ " : "⚠ "}
           {open.length > 0
-            ? `${open.length} ${open.length === 1 ? "item" : "items"} Chip couldn't verify`
-            : "All not-visible items cleared"}
+            ? `${open.length} ${open.length === 1 ? "item" : "items"} Chip couldn't see — re-photograph`
+            : "All re-photograph items cleared"}
           {resolved.length > 0 || skipped.length > 0 ? (
             <span className="font-normal text-[var(--fg-subtle)]">
               {resolved.length > 0 ? ` · ${resolved.length} resolved` : ""}
@@ -242,7 +242,8 @@ function CompactRow({
               // Gold border + ink text so the Resolve action reads as the
               // primary on the cream paper backdrop. var(--primary) was
               // ink-on-ink under the editorial palette and was invisible.
-              className="rounded border px-2 py-0.5 text-[10px] font-medium transition active:scale-[0.97]"
+              // ≥40px tap target on phones; compact from sm up.
+              className="min-h-[40px] rounded border px-3 py-1 text-xs font-medium transition active:scale-[0.97] sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px]"
               style={{
                 borderColor: "var(--gold)",
                 color: "var(--ink)",
@@ -259,12 +260,12 @@ function CompactRow({
                 setMode("skipping");
               }}
               disabled={isPending}
-              className="rounded border px-2 py-0.5 text-[10px] font-medium transition active:scale-[0.97]"
+              className="min-h-[40px] rounded border px-3 py-1 text-xs font-medium transition active:scale-[0.97] sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px]"
               style={{
                 borderColor: "var(--rule-paper)",
                 color: "var(--slate)",
               }}
-              title="Skip — no re-photograph needed (false positive, out of scope, won't fix)"
+              title="Skip — no re-photograph needed (not a finding, out of scope, won't fix)"
             >
               ↷ Skip
             </button>
@@ -277,7 +278,7 @@ function CompactRow({
               reopen();
             }}
             disabled={isPending}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+            className="min-h-[40px] shrink-0 rounded px-2.5 py-1 text-xs font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
             title="Reopen — send back to the to-do list"
           >
             Reopen

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
+import { SubmitButton } from "@/components/submit-button";
 import { getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import { createOrganization, switchCurrentOrg } from "./actions";
 
@@ -72,9 +73,9 @@ export default async function TeamDashboardPage({
               {error ? (
                 <p className="text-xs" style={{ color: "#a8362b" }}>{error}</p>
               ) : null}
-              <button type="submit" className="cl-btn-primary self-start">
+              <SubmitButton className="cl-btn-primary self-start" pendingLabel="Creating…">
                 Create team
-              </button>
+              </SubmitButton>
             </form>
           </Card>
           <Card variant="tinted-teal">
@@ -134,7 +135,7 @@ export default async function TeamDashboardPage({
    * sectioned content with clear headers and counts, generous whitespace.
    * ================================================================= */
   const org = currentOrg!;
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = isoDaysAgo(30);
 
   // --- Members for activity attribution
   const { data: members } = await supabase
@@ -320,28 +321,30 @@ export default async function TeamDashboardPage({
       <div className="flex flex-col gap-6">
         {/* ============== Header: org name + tabs + primary action ============== */}
         <header className="flex flex-col gap-4">
+          {/* Header — same shape on every Team tab: eyebrow = team name,
+              h1 = the tab you're on. */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
-                Team workspace
-              </p>
-              <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-[var(--fg)] sm:text-2xl md:text-3xl">
+              <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
                 {org.name}
+              </p>
+              <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--fg)]">
+                Dashboard
               </h1>
               <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
                 {memberCount} {memberCount === 1 ? "member" : "members"} · you
-                are an{" "}
+                are {org.role === "admin" ? "an" : "a"}{" "}
                 <span className="font-medium text-[var(--fg)]">{org.role}</span>
               </p>
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {allOrgs.length > 1 ? (
-                <form action={switchCurrentOrg}>
+                <form action={switchCurrentOrg} className="flex items-center gap-1.5">
                   <select
                     name="organization_id"
                     defaultValue={org.id}
-                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                    aria-label="Switch team"
                     className="cl-input py-1.5 text-xs"
                   >
                     {allOrgs.map((o) => (
@@ -351,6 +354,9 @@ export default async function TeamDashboardPage({
                     ))}
                     <option value="personal">Personal workspace</option>
                   </select>
+                  <SubmitButton className="cl-btn-outline px-2.5 py-1.5 text-xs" pendingLabel="…">
+                    Switch
+                  </SubmitButton>
                 </form>
               ) : null}
               <Link href="/inspections/new" className="cl-btn-accent shrink-0">
@@ -487,11 +493,13 @@ export default async function TeamDashboardPage({
                   · {folders.length}
                 </span>
               </h2>
+              {/* The folder manager (rename / reorder / delete) lives on
+                  the History page, so that's where "Manage" goes. */}
               <Link
                 href="/inspections/history"
                 className="text-xs font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
               >
-                Manage
+                Manage groups
               </Link>
             </div>
             <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
@@ -500,7 +508,7 @@ export default async function TeamDashboardPage({
                 return (
                   <Link
                     key={f.id}
-                    href="/inspections/history"
+                    href={`/inspections/history?folder=${encodeURIComponent(f.id)}`}
                     className="flex w-52 shrink-0 flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-3 transition hover:border-[var(--primary)]"
                   >
                     <div className="flex items-center gap-2">
@@ -785,6 +793,11 @@ function SevPill({
 
 function severityTone(s: Severity): "high" | "medium" | "low" {
   return s === "High" ? "high" : s === "Medium" ? "medium" : "low";
+}
+
+/** ISO timestamp for N days ago. Server component — evaluated per request. */
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function fmtRelative(iso: string): string {

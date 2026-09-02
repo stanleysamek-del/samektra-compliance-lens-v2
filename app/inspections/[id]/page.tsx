@@ -20,16 +20,31 @@ import {
 import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
 import { InspectionSummary } from "@/components/inspection-summary";
 import { SignaturePad } from "@/components/signature-pad";
+import { HelpTip } from "@/components/help-tip";
+import { SubmitButton } from "@/components/submit-button";
+import { FinalizePreflight } from "@/components/finalize-preflight";
+import { ExportButtons } from "@/components/export-buttons";
+import { scoreItems } from "@/lib/checklists/engine";
+import { formatDate } from "@/lib/format-date";
 import { finalizeInspection } from "./actions";
+
+type SearchParams = {
+  /** Set by finalizeInspection / reopenInspection when the update fails. */
+  error?: string;
+};
 
 export default async function InspectionDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
   let stage = "params";
   try {
     const { id } = await params;
+    const sp = await searchParams;
+    const errorMessage = (sp?.error ?? "").trim();
 
     stage = "supabase-client";
     const supabase = await createClient();
@@ -64,10 +79,12 @@ export default async function InspectionDetailPage({
       .maybeSingle();
 
     if (inspectionErr) {
-      return <Diag user={userShell} stage={stage} message={inspectionErr.message} />;
+      console.error(`[inspection ${id}] stage=${stage}`, inspectionErr);
+      return <Diag user={userShell} stage={stage} />;
     }
     if (!inspection) {
-      return <Diag user={userShell} stage={stage} message={`No inspection with id=${id}.`} />;
+      console.warn(`[inspection ${id}] not found or not visible to user ${user.id}`);
+      return <Diag user={userShell} stage={stage} notFound />;
     }
 
     stage = "photos";
@@ -350,6 +367,12 @@ export default async function InspectionDetailPage({
 
     const isCompleted = inspection.status === "completed";
 
+    // Finalize pre-flight inputs — what's still open before locking.
+    const checklistScore = scoreItems(checklistItems);
+    const unconfirmedAiCount = checklistItems.filter(
+      (i) => i.answered_by_ai && !i.ai_confirmed,
+    ).length;
+
     // Signed display URLs for existing signatures (the columns store
     // storage PATHS in the private `signatures` bucket).
     let inspectorSigUrl: string | null = null;
@@ -377,6 +400,31 @@ export default async function InspectionDetailPage({
     return (
       <AppShell user={userShell}>
         <div className="flex flex-col gap-5">
+          {/* Finalize / reopen failure — the actions redirect here with
+              ?error= ; without this banner a failed finalize was invisible. */}
+          {errorMessage ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+              style={{
+                borderColor: "rgba(168,54,43,0.4)",
+                background: "rgba(168,54,43,0.08)",
+                color: "#a8362b",
+              }}
+            >
+              <span>
+                That didn&apos;t save — the inspection status is unchanged.
+                Try again, or contact support if it keeps happening.
+              </span>
+              <Link
+                href={`/inspections/${inspection.id}`}
+                className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </Link>
+            </div>
+          ) : null}
+
           {/* Header */}
           <Card variant={isCompleted ? "tinted-teal" : "tinted-orange"}>
             <div className="flex items-start justify-between gap-3">
@@ -399,7 +447,10 @@ export default async function InspectionDetailPage({
 
             <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <Field label="Inspector" value={inspection.inspector_name} />
-              <Field label="Date" value={inspection.date_of_inspection} />
+              <Field
+                label="Date"
+                value={inspection.date_of_inspection ? formatDate(inspection.date_of_inspection) : null}
+              />
               <Field label="Manager" value={inspection.manager_assigned} />
               <Field label="Address" value={inspection.facility_address} />
             </dl>
@@ -412,10 +463,18 @@ export default async function InspectionDetailPage({
                   background: "rgba(184,118,42,0.08)",
                   color: "#b8762a",
                 }}
-                title="Items Chip flagged as 'not visible' from current photos — bring this list on your next site visit"
               >
-                ⚠ {unresolvedNotVisibleCount} item
-                {unresolvedNotVisibleCount === 1 ? "" : "s"} need re-photograph
+                <a href="#punch-list" className="no-underline" style={{ color: "inherit" }}>
+                  ⚠ {unresolvedNotVisibleCount} item
+                  {unresolvedNotVisibleCount === 1 ? "" : "s"} need
+                  {unresolvedNotVisibleCount === 1 ? "s" : ""} re-photograph
+                </a>
+                <HelpTip title="Needs re-photograph" side="bottom">
+                  Things the AI couldn&apos;t confirm from your angle — a gauge
+                  turned away, a label out of frame. Not findings; follow-ups.
+                  Re-shoot on your next walk and mark Resolved, or Skip with a
+                  reason.
+                </HelpTip>
               </div>
             ) : null}
 
@@ -426,49 +485,20 @@ export default async function InspectionDetailPage({
             </div>
           </Card>
 
-          {/* Stat-grid summary — photos, findings by severity, punch-list
-              progress, feedback ratings, and a compact timeline strip. */}
-          <InspectionSummary
-            photoCount={photosList.length}
-            findings={{
-              total: totalFindings,
-              high: highFindings,
-              medium: mediumFindings,
-              low: lowFindings,
-            }}
-            punchList={{
-              open: unresolvedNotVisibleCount,
-              resolved: resolvedNotVisibleCount,
-              skipped: skippedNotVisibleCount,
-            }}
-            ratings={{ thumbsUp, thumbsDown }}
-            status={inspection.status}
-            createdAt={inspection.created_at}
-            updatedAt={inspection.updated_at}
-            finalizedAt={
-              inspection.status === "completed"
-                ? inspection.inspector_signed_at ?? inspection.updated_at
-                : null
-            }
-          />
-
-          {/* Aggregate AI-time footnote — sum of the latest successful
-              analysis duration across every photo on this inspection.
-              Renders nothing if no photos have been analyzed yet. */}
-          {totalAiDurationMs > 0 ? (
-            <p
-              className="px-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
-              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-              title="Total time the AI spent analyzing photos on this inspection (most recent run per photo)"
-            >
-              ⏱ Total AI analysis time · {formatDuration(totalAiDurationMs)}
-              {aiDurationByPhoto.size > 0
-                ? ` · avg ${formatDuration(totalAiDurationMs / aiDurationByPhoto.size)} per photo`
-                : ""}
-            </p>
+          {/* Uploader sits DIRECTLY under the header so "Take photo" is on
+              the first screen of a phone. The stat grid that used to live
+              here moved below the photos. The one-liner introduces Chip by
+              name — the rest of the page refers to it without explanation. */}
+          {!isCompleted ? (
+            <>
+              <p className="-mb-2 px-1 text-xs text-[var(--fg-muted)]">
+                <strong className="font-semibold text-[var(--fg)]">Chip</strong>{" "}
+                — the AI — reads each photo and drafts findings with code
+                citations. You confirm, correct, or add your own.
+              </p>
+              <PhotoUploader inspectionId={inspection.id} />
+            </>
           ) : null}
-
-          {!isCompleted ? <PhotoUploader inspectionId={inspection.id} /> : null}
 
           {/* Checklist — the scored question set from the template chosen at
               creation. AI-flagged answers carry a confirm badge. */}
@@ -499,7 +529,7 @@ export default async function InspectionDetailPage({
                   No photos yet
                 </p>
                 <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
-                  Add a photo to start the AI analysis.
+                  Add a photo above — Chip reads it and drafts the findings.
                 </p>
               </Card>
             ) : (
@@ -569,8 +599,13 @@ export default async function InspectionDetailPage({
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img src={url} alt="" className="h-full w-full object-cover" />
                                       ) : (
-                                        <div className="flex h-full items-center justify-center text-xs text-[var(--fg-subtle)]">
-                                          loading…
+                                        // No signed URL came back (storage hiccup or a
+                                        // missing object). Say so — a permanent
+                                        // "loading…" is a lie. The card is a link, so a
+                                        // tap opens the photo page, which retries.
+                                        <div className="flex h-full flex-col items-center justify-center gap-1 px-3 text-center text-xs text-[var(--fg-subtle)]">
+                                          <span>Photo unavailable</span>
+                                          <span className="text-[10px]">tap to retry</span>
                                         </div>
                                       )}
                                     </div>
@@ -671,6 +706,50 @@ export default async function InspectionDetailPage({
             />
           </div>
 
+          {/* Stat-grid summary — photos, findings by severity, punch-list
+              progress, feedback ratings, and a compact timeline strip.
+              Lives BELOW the photos so the uploader stays above the fold on
+              a phone; it's a rollup, not a call to action. */}
+          <InspectionSummary
+            photoCount={photosList.length}
+            findings={{
+              total: totalFindings,
+              high: highFindings,
+              medium: mediumFindings,
+              low: lowFindings,
+            }}
+            punchList={{
+              open: unresolvedNotVisibleCount,
+              resolved: resolvedNotVisibleCount,
+              skipped: skippedNotVisibleCount,
+            }}
+            ratings={{ thumbsUp, thumbsDown }}
+            status={inspection.status}
+            createdAt={inspection.created_at}
+            updatedAt={inspection.updated_at}
+            finalizedAt={
+              inspection.status === "completed"
+                ? inspection.inspector_signed_at ?? inspection.updated_at
+                : null
+            }
+          />
+
+          {/* Aggregate AI-time footnote — sum of the latest successful
+              analysis duration across every photo on this inspection.
+              Renders nothing if no photos have been analyzed yet. */}
+          {totalAiDurationMs > 0 ? (
+            <p
+              className="px-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
+              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+              title="Total time the AI spent analyzing photos on this inspection (most recent run per photo)"
+            >
+              ⏱ Total AI analysis time · {formatDuration(totalAiDurationMs)}
+              {aiDurationByPhoto.size > 0
+                ? ` · avg ${formatDuration(totalAiDurationMs / aiDurationByPhoto.size)} per photo`
+                : ""}
+            </p>
+          ) : null}
+
           <Card>
             {/* Sign-off — inspector + manager. Available before AND after
                 finalize (a manager often signs after reviewing the locked
@@ -694,106 +773,116 @@ export default async function InspectionDetailPage({
               />
             </div>
             {isCompleted ? (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-[var(--fg)]">Inspection finalized</p>
-                    <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                      Download the report below or reopen to make changes.
-                    </p>
-                  </div>
-                  <form action={finalizeInspection}>
-                    <input type="hidden" name="inspection_id" value={inspection.id} />
-                    <input type="hidden" name="status" value="in_progress" />
-                    <button type="submit" className="cl-btn-outline">Reopen</button>
-                  </form>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <a
-                    href={`/api/inspections/${inspection.id}/export/pdf`}
-                    className="cl-btn-accent w-full text-center"
-                  >
-                    Download PDF
-                  </a>
-                  <a
-                    href={`/api/inspections/${inspection.id}/export/cap`}
-                    className="cl-btn-outline w-full text-center"
-                    title="Corrective Action Plan (.xlsx)"
-                  >
-                    Download CAP
-                  </a>
-                  <a
-                    href={`/api/inspections/${inspection.id}/export/lsra`}
-                    className="cl-btn-outline w-full text-center"
-                    title="Life Safety Risk Assessment (.xlsx)"
-                  >
-                    Download LSRA
-                  </a>
-                  <a
-                    href={`/api/inspections/${inspection.id}/export/ilsm`}
-                    title="Interim Life Safety Measures (.xlsx) — TJC LS.01.02.01 / CMS K-291"
-                    className="cl-btn-outline w-full text-center"
-                  >
-                    Download ILSM
-                  </a>
-                </div>
-              </div>
-            ) : (
               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-medium text-[var(--fg)]">Done capturing photos?</p>
+                  <p className="flex items-center gap-1.5 font-medium text-[var(--fg)]">
+                    Inspection finalized
+                    <HelpTip title="Finalized">
+                      The inspection is locked — no new photos, no edits — and
+                      the report and workbooks below are downloadable. Nothing
+                      is deleted; reopen any time to unlock editing.
+                    </HelpTip>
+                  </p>
                   <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                    Finalize to lock the inspection. You can still reopen it later.
+                    Download the report below, or reopen to make changes.
                   </p>
                 </div>
                 <form action={finalizeInspection}>
                   <input type="hidden" name="inspection_id" value={inspection.id} />
-                  <input type="hidden" name="status" value="completed" />
-                  <button type="submit" className="cl-btn-primary">Finalize inspection</button>
+                  <input type="hidden" name="status" value="in_progress" />
+                  <SubmitButton className="cl-btn-outline" pendingLabel="Reopening…">
+                    Reopen
+                  </SubmitButton>
                 </form>
               </div>
+            ) : (
+              <FinalizePreflight
+                inspectionId={inspection.id}
+                checklist={{
+                  total: checklistItems.length,
+                  unanswered: checklistScore.unanswered,
+                  unconfirmedAi: unconfirmedAiCount,
+                }}
+                openPunchList={unresolvedNotVisibleCount}
+                inspectorSigned={Boolean(inspection.inspector_signed_at)}
+                managerSigned={Boolean(inspection.manager_signed_at)}
+              />
             )}
+          </Card>
+
+          {/* Exports — always visible so the user learns what the tool
+              produces before finalizing; disabled until then. */}
+          <Card>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+              Reports &amp; workbooks
+            </h2>
+            <div className="mt-3">
+              <ExportButtons inspectionId={inspection.id} enabled={isCompleted} />
+            </div>
           </Card>
         </div>
       </AppShell>
     );
   } catch (err) {
-    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    // Next.js implements redirect()/notFound() by THROWING — those must
+    // propagate, or a plain redirect("/login") would render as an error.
+    if (isNextControlFlowError(err)) throw err;
+    // Raw error goes to the server log only — never to the screen.
+    console.error(`[inspection] render failed at stage=${stage}`, err);
     return (
       <Diag
         user={{ fullName: "—", organization: null, email: null }}
         stage={stage}
-        message={message}
       />
     );
   }
 }
 
+/** redirect() / notFound() throw sentinel errors that Next handles upstream. */
+function isNextControlFlowError(err: unknown): boolean {
+  const digest =
+    typeof err === "object" && err !== null && "digest" in err
+      ? String((err as { digest?: unknown }).digest ?? "")
+      : "";
+  return (
+    digest.startsWith("NEXT_REDIRECT") ||
+    digest.startsWith("NEXT_NOT_FOUND") ||
+    digest.startsWith("NEXT_HTTP_ERROR_FALLBACK")
+  );
+}
+
+/**
+ * Friendly failure card. The raw Postgres / runtime message is logged
+ * server-side by the caller; the user gets the stage as a support
+ * reference, nothing more.
+ */
 function Diag({
   user,
   stage,
-  message,
+  notFound = false,
 }: {
   user: { fullName: string; organization: string | null; email: string | null };
   stage: string;
-  message: string;
+  notFound?: boolean;
 }) {
   return (
     <AppShell user={user}>
       <Card>
-        <h2 className="font-semibold text-[var(--danger)]">Could not render inspection</h2>
+        <h2 className="font-semibold text-[var(--danger)]">
+          {notFound ? "Inspection not found" : "Something went wrong loading this inspection"}
+        </h2>
         <p className="mt-2 text-sm text-[var(--fg-muted)]">
-          Failed at stage: <code className="text-[var(--fg)]">{stage}</code>
+          {notFound
+            ? "It may have been deleted, or it belongs to a workspace you're not currently in — check the workspace switcher in the header."
+            : "Try again, or contact support with reference "}
+          {notFound ? null : <code className="text-[var(--fg)]">{stage}</code>}
+          {notFound ? null : "."}
         </p>
-        <p className="mt-2 text-sm text-[var(--fg-muted)]">
-          Error: <code className="text-[var(--fg)]">{message}</code>
-        </p>
-        <Link
-          href="/inspections"
-          className="mt-4 inline-block text-sm font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
-        >
-          ← Back to inspections
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link href="/inspections" className="cl-btn-outline">
+            ← Back to inspections
+          </Link>
+        </div>
       </Card>
     </AppShell>
   );

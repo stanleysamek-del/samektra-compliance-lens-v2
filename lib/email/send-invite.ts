@@ -16,13 +16,32 @@
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://compliancelens.app";
 
+export type InviteRole = "admin" | "member" | "viewer";
+
 export type InviteEmailInput = {
   toEmail: string;
   inviterName: string;
   orgName: string;
-  role: "admin" | "member";
+  role: InviteRole;
   token: string;
 };
+
+/**
+ * One-line, plain-English description of what each role can do — the
+ * same wording the members page uses, so the email and the UI agree.
+ */
+const ROLE_DESCRIPTIONS: Record<InviteRole, string> = {
+  admin:
+    "As an admin you can invite and remove people, edit Chip's rules, and delete the team.",
+  member:
+    "As a member you can create and edit inspections, assign corrective actions, and close them out.",
+  viewer:
+    "As a viewer you can read inspections and download exports, but can't change anything.",
+};
+
+function roleLabel(role: InviteRole): string {
+  return role === "viewer" ? "viewer (read-only)" : role;
+}
 
 export async function sendInviteEmail(input: InviteEmailInput): Promise<{
   ok: boolean;
@@ -48,7 +67,8 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{
   // so it renders reliably across Gmail, Outlook, Apple Mail, etc. without
   // a heavy email-template framework.
   const text =
-    `${input.inviterName} has invited you to join ${input.orgName} on Compliance Lens as a ${input.role}.\n\n` +
+    `${input.inviterName} has invited you to join ${input.orgName} on Compliance Lens as a ${roleLabel(input.role)}.\n` +
+    `${ROLE_DESCRIPTIONS[input.role]}\n\n` +
     `Open this link to accept:\n${link}\n\n` +
     `If you don't have an account yet, you can create one on the same page.\n\n` +
     `The link expires in 7 days. If you weren't expecting this invite you can safely ignore it.`;
@@ -65,7 +85,10 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{
       </h1>
       <p style="margin:0 0 12px 0;line-height:1.55;color:#cbd5e1">
         <strong style="color:#f8fafc">${escapeHtml(input.inviterName)}</strong>
-        has invited you to collaborate as a <strong>${escapeHtml(input.role)}</strong>.
+        has invited you to collaborate as a <strong>${escapeHtml(roleLabel(input.role))}</strong>.
+      </p>
+      <p style="margin:0 0 12px 0;line-height:1.55;color:#94a3b8;font-size:13px">
+        ${escapeHtml(ROLE_DESCRIPTIONS[input.role])}
       </p>
       <p style="margin:0 0 24px 0;line-height:1.55;color:#cbd5e1">
         Click the button below to accept. If you don't have an account yet you'll

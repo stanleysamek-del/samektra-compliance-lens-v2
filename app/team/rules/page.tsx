@@ -5,6 +5,8 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
 import { HelpTip } from "@/components/help-tip";
+import { SubmitButton } from "@/components/submit-button";
+import { formatDate } from "@/lib/format-date";
 import { getCurrentOrg } from "@/lib/org/current";
 import {
   createLearnedRule,
@@ -46,13 +48,58 @@ export default async function TeamRulesPage({
 
   const { error } = await searchParams;
   const currentOrg = await getCurrentOrg();
+
+  const rulesTip = (
+    <HelpTip title="What are Chip's rules?" side="bottom">
+      <p>
+        Rules are plain-English instructions added to every photo analysis
+        for this team (&ldquo;in our ORs, always check door bottom
+        clearance&rdquo;). They apply from the next photo on and never
+        change the underlying model.
+      </p>
+      <p className="mt-1.5">
+        &ldquo;Teach Chip this&rdquo; in a Coach thread saves the correction
+        here.
+      </p>
+    </HelpTip>
+  );
+
   if (!currentOrg) {
-    // Personal workspace doesn't support org rules — send the user back
-    // to the team picker.
-    redirect("/team");
+    // Personal workspace has no shared rules to show. Explain why instead
+    // of bouncing to /team — a silent redirect reads as a broken tab.
+    return (
+      <AppShell user={userShell}>
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+              Personal workspace
+            </p>
+            <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-semibold tracking-tight text-[var(--fg)]">
+              Chip&apos;s rules
+              {rulesTip}
+            </h1>
+          </div>
+
+          <TeamNav />
+
+          <Card>
+            <p className="text-sm font-medium text-[var(--fg)]">
+              Chip&apos;s rules are shared per team.
+            </p>
+            <p className="mt-1 text-sm text-[var(--fg-muted)]">
+              Create or join a team to teach Chip house rules that apply to
+              every photo your team analyzes.
+            </p>
+            <Link href="/team" className="cl-btn-primary mt-4 inline-block">
+              Create or join a team
+            </Link>
+          </Card>
+        </div>
+      </AppShell>
+    );
   }
 
-  const org = currentOrg!;
+  const org = currentOrg;
   const isAdmin = org.role === "admin";
 
   // Pull rules — RLS limits members to active rules, admins see everything.
@@ -85,12 +132,15 @@ export default async function TeamRulesPage({
   return (
     <AppShell user={userShell}>
       <div className="flex flex-col gap-5">
+        {/* Header — same shape on every Team tab: eyebrow = team name,
+            h1 = the tab you're on. */}
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
-            Current team
+          <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--fg-subtle)]">
+            {org.name}
           </p>
-          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--fg)]">
+          <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-semibold tracking-tight text-[var(--fg)]">
             Chip&apos;s rules
+            {rulesTip}
           </h1>
           <p className="mt-1 text-sm text-[var(--fg-muted)]">
             House rules that Chip applies on every photo this team analyzes.
@@ -140,9 +190,9 @@ export default async function TeamRulesPage({
                 style={{ minHeight: 96 }}
               />
               <div className="flex justify-end">
-                <button type="submit" className="cl-btn-accent">
+                <SubmitButton className="cl-btn-accent" pendingLabel="Saving…">
                   Save rule
-                </button>
+                </SubmitButton>
               </div>
             </form>
           </Card>
@@ -186,7 +236,7 @@ export default async function TeamRulesPage({
                       Applied {r.times_applied}{" "}
                       {r.times_applied === 1 ? "time" : "times"} ·{" "}
                       {authorNames.get(r.created_by as string) ?? "—"} ·{" "}
-                      {new Date(r.created_at).toLocaleDateString()}
+                      {formatDate(r.created_at)}
                       {r.source_finding_id ? " · taught from a finding" : ""}
                     </p>
                     {isAdmin ? (
@@ -274,20 +324,17 @@ export default async function TeamRulesPage({
                           history stays continuous.
                         </p>
                       </HelpTip>
-                      {/* Delete is a server-action form. Archive-first is
-                          the recommended flow (the dashed/strikethrough
-                          state above already makes the rule inactive), so
-                          we deliberately skip a confirm dialog here —
-                          delete is only ever reachable from archived. */}
+                      {/* Delete is only reachable from archived, but it is
+                          permanent, so it still confirms. */}
                       <form action={deleteLearnedRule}>
                         <input type="hidden" name="rule_id" value={r.id} />
-                        <button
-                          type="submit"
-                          className="rounded px-2 py-1 text-[11px] font-medium transition hover:bg-[rgba(168,54,43,0.08)]"
-                          style={{ color: "#a8362b" }}
+                        <SubmitButton
+                          className="rounded px-2 py-1 text-[11px] font-medium text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.08)] disabled:opacity-50"
+                          pendingLabel="Deleting…"
+                          confirmMessage="Delete this rule permanently? Archive keeps the history; delete does not."
                         >
                           Delete
-                        </button>
+                        </SubmitButton>
                       </form>
                       <HelpTip title="What does Delete do?">
                         <p>

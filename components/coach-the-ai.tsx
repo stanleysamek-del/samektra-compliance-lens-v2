@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithRetry } from "@/lib/retry";
 import { TeachChipButton } from "@/components/teach-chip-button";
+import { showToast } from "@/components/toaster";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
 type Turn = {
@@ -120,7 +121,9 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
     const text = (override ?? draft).trim();
     if (!text || status.kind === "sending") return;
     setStatus({ kind: "sending", pendingText: text });
-    setDraft("");
+    // NOTE: the draft is NOT cleared here. It only clears once Chip has
+    // actually answered — a failed request leaves the hint in the box so
+    // the inspector can retry without retyping.
 
     // Build the annotationRef payload if the user attached one. We use
     // normalized bbox + type + color so the server route can both reference
@@ -155,9 +158,11 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
       };
 
       if (!res.ok || !json.ok) {
-        setStatus({
+        const message = json.error ?? `Coach failed (HTTP ${res.status})`;
+        setStatus({ kind: "error", message });
+        showToast({
           kind: "error",
-          message: json.error ?? `Coach failed (HTTP ${res.status})`,
+          message: `${message} Your hint is still in the box.`,
         });
         // Inspector turn was already saved server-side; reload the thread so
         // we don't lose the hint from the UI.
@@ -173,6 +178,9 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
       if (json.aiTurn) newTurns.push(json.aiTurn);
       setTurns((prev) => [...prev, ...newTurns]);
       setStatus({ kind: "idle" });
+      // Success — only now is it safe to drop the draft. A chip-answer
+      // (override) never touched the draft, so leave it alone in that case.
+      if (override === undefined) setDraft("");
       // Clear the annotation selection so the inspector doesn't accidentally
       // tag the next hint with the same region.
       setSelectedAnnotationId(null);
@@ -180,9 +188,11 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
       // Refresh the page so the Findings panel reflects the new analysis.
       router.refresh();
     } catch (err) {
-      setStatus({
+      const message = err instanceof Error ? err.message : "Network error";
+      setStatus({ kind: "error", message });
+      showToast({
         kind: "error",
-        message: err instanceof Error ? err.message : "Network error",
+        message: `${message} Your hint is still in the box.`,
       });
     }
   }
@@ -279,10 +289,9 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
                     meta={t.ai_meta}
                     canAnswerClarification={isLatestAI}
                     onAnswerClarification={(answer) => {
-                      setDraft(answer);
-                      // Tiny defer so React commits the draft before send()
-                      // reads it via state.
-                      requestAnimationFrame(() => send(answer));
+                      // Chip answers send directly — the typed draft (if
+                      // any) is left untouched so nothing is lost.
+                      send(answer);
                     }}
                     priorInspectorHint={priorInspectorHint}
                     photoId={photoId}
@@ -409,7 +418,8 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
             type="button"
             onClick={() => send()}
             disabled={isSending || draft.trim().length === 0}
-            className="cl-btn-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-busy={isSending}
+            className="cl-btn-accent"
           >
             {isSending ? (
               <>

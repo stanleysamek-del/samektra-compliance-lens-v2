@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AuthLayout } from "@/components/auth-layout";
+import { SubmitButton } from "@/components/submit-button";
+import { formatDate } from "@/lib/format-date";
 import { acceptInvite } from "@/app/team/actions";
 
 type InvitePeek = {
   email: string;
-  role: "admin" | "member";
+  role: "admin" | "member" | "viewer";
   expires_at: string;
   accepted_at: string | null;
   org_name: string;
@@ -71,10 +73,17 @@ export default async function AcceptInvitePage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  const nextPath = `/team/invite/${token}`;
+  const roleBlurb: Record<InvitePeek["role"], string> = {
+    admin: "an admin — you can invite people, edit Chip's rules, and manage the team",
+    member: "a member — you can create and edit inspections and work corrective actions",
+    viewer: "a viewer — you can read inspections and download exports",
+  };
+
   return (
     <AuthLayout
       title={`Join ${peek.org_name}`}
-      subtitle={`You've been invited to join as a ${peek.role}.`}
+      subtitle={`You've been invited as ${roleBlurb[peek.role] ?? `a ${peek.role}`}.`}
     >
       <div className="flex flex-col gap-4">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs text-[var(--fg-muted)]">
@@ -98,29 +107,36 @@ export default async function AcceptInvitePage({
         {user ? (
           <form action={acceptInvite}>
             <input type="hidden" name="token" value={token} />
-            <button type="submit" className="cl-btn-primary w-full">
+            <SubmitButton className="cl-btn-primary w-full" pendingLabel="Joining…">
               Accept invite
-            </button>
+            </SubmitButton>
           </form>
         ) : (
           <>
+            {/* Most invitees are brand new to the app, so account creation
+                is the primary path; existing users get the secondary link.
+                Both carry ?next= so they land back here after auth. */}
             <Link
-              href={`/login?next=${encodeURIComponent(`/team/invite/${token}`)}`}
+              href={`/signup?next=${encodeURIComponent(nextPath)}`}
               className="cl-btn-primary w-full text-center"
-            >
-              Sign in to accept
-            </Link>
-            <Link
-              href={`/signup?next=${encodeURIComponent(`/team/invite/${token}`)}`}
-              className="cl-btn-outline w-full text-center"
             >
               Create an account
             </Link>
+            <Link
+              href={`/login?next=${encodeURIComponent(nextPath)}`}
+              className="cl-btn-outline w-full text-center"
+            >
+              Sign in
+            </Link>
+            <p className="text-center text-[11px] text-[var(--fg-subtle)]">
+              Already have a Compliance Lens account? Use Sign in. Either way
+              you&apos;ll come straight back here to accept.
+            </p>
           </>
         )}
 
         <p className="text-center text-[11px] text-[var(--fg-subtle)]">
-          Expires {new Date(peek.expires_at).toLocaleDateString()}
+          Expires {formatDate(peek.expires_at)}
         </p>
       </div>
     </AuthLayout>

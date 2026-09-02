@@ -193,6 +193,7 @@ button, [role="button"], a.btn {
 .cl-btn-outline:hover {
   background: rgba(15, 21, 24, 0.04);
 }
+.cl-btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .cl-btn-accent {
   display: inline-flex;
@@ -212,6 +213,7 @@ button, [role="button"], a.btn {
 }
 .cl-btn-accent:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
 .cl-btn-accent:active { transform: translateY(1px); }
+.cl-btn-accent:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* =====================================================================
  *  Inputs — paper background, 1px ink border, gold focus ring.

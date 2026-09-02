@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
-import { SamektraMark } from "@/components/logo";
 import { ScrollToTop } from "@/components/scroll-to-top";
 import { SessionGuard } from "@/components/session-guard";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { HelpDrawer } from "@/components/help-drawer";
+import { Toaster } from "@/components/toaster";
 
 /* =====================================================================
  * AppShell
@@ -44,8 +44,10 @@ const NAV: NavItem[] = [
 
 /**
  * Mobile tab bar shows 5 items max, with Upload in the center as the
- * raised gold button. Profile lives in the header avatar dropdown on
- * mobile, so it's omitted here — desktop sidebar still shows it via NAV.
+ * raised gold button. Profile is reached through the header avatar (a
+ * link to /profile); Team and Templates are reachable from Profile on
+ * mobile — the tab bar carries the day-to-day loop only. Desktop sidebar
+ * still shows everything via NAV.
  * Order matters: the .accent item MUST be at index 2 (the middle slot)
  * for the raised-button styling to position correctly.
  */
@@ -59,7 +61,7 @@ const MOBILE_NAV: NavItem[] = [
     accent: true,
   },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
-  { href: "/team", label: "Team", icon: <TeamIcon /> },
+  { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
 ];
 
 type Props = PropsWithChildren<{
@@ -213,6 +215,9 @@ export function AppShell({ user, children }: Props) {
 
       {/* ===== Floating scroll-to-top (appears after ~400px scroll) ===== */}
       <ScrollToTop />
+
+      {/* ===== App-wide toast stack (showToast() from any client component) ===== */}
+      <Toaster />
     </div>
   );
 }
@@ -339,9 +344,12 @@ function UserAvatar({ name }: { name: string }) {
       .slice(0, 2)
       .join("")
       .toUpperCase() || "·";
+  // A LINK, not a div: on phones this is the only route to Profile (and
+  // from there Team, Templates, and Sign out) — the tab bar has no room.
   return (
-    <div
-      className="flex h-9 w-9 items-center justify-center text-xs"
+    <Link
+      href="/profile"
+      className="flex h-9 w-9 items-center justify-center text-xs transition hover:opacity-90"
       style={{
         background: "var(--gold)",
         color: "var(--ink)",
@@ -349,11 +357,13 @@ function UserAvatar({ name }: { name: string }) {
         fontFamily: "var(--font-instrument-serif)",
         fontSize: 13,
         lineHeight: 1,
+        textDecoration: "none",
       }}
-      title={name}
+      title={`${name} · Profile, team, templates, sign out`}
+      aria-label={`Open profile for ${name} — team, templates, and sign out`}
     >
       {initials}
-    </div>
+    </Link>
   );
 }
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/card";
+import { HelpTip } from "@/components/help-tip";
 import {
   deleteChecklistTemplate,
   saveChecklistTemplate,
@@ -15,6 +15,10 @@ import type { TemplateSection } from "@/lib/checklists/builtin-templates";
  * "duplicate a built-in", and "edit my template". Sections hold questions;
  * each question can carry a code reference and AI match terms (the
  * substrings the analyzer scores findings against for auto-filing).
+ *
+ * Work-loss guards: removing a section or a question with text asks
+ * first; Cancel asks when there are unsaved changes; and the browser's
+ * own leave-page prompt fires while the editor is dirty.
  */
 
 type Props = {
@@ -29,19 +33,55 @@ type Props = {
   orgName?: string | null;
 };
 
+const EMPTY_SECTIONS: TemplateSection[] = [
+  { code: "A1", title: "", items: [{ q: "" }] },
+];
+
 export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [occupancy, setOccupancy] = useState(initial.occupancy);
   const [sections, setSections] = useState<TemplateSection[]>(
-    initial.sections.length > 0
-      ? initial.sections
-      : [{ code: "A1", title: "", items: [{ q: "" }] }],
+    initial.sections.length > 0 ? initial.sections : EMPTY_SECTIONS,
   );
   const [shareWithOrg, setShareWithOrg] = useState(Boolean(orgId));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Snapshot of the initial state so "dirty" means "differs from what was
+  // loaded", not "any keystroke ever". Captured once on mount (lazy
+  // useState — never updated, so it's stable across renders).
+  const [initialSnapshot] = useState(() =>
+    JSON.stringify({
+      name: initial.name,
+      description: initial.description,
+      occupancy: initial.occupancy,
+      sections: initial.sections.length > 0 ? initial.sections : EMPTY_SECTIONS,
+      shareWithOrg: Boolean(orgId),
+    }),
+  );
+  const currentSnapshot = useMemo(
+    () => JSON.stringify({ name, description, occupancy, sections, shareWithOrg }),
+    [name, description, occupancy, sections, shareWithOrg],
+  );
+  const dirty = currentSnapshot !== initialSnapshot;
+
+  // Once a save/delete succeeds we navigate away — don't let the
+  // beforeunload guard (or Cancel) fire on that navigation.
+  const leavingRef = useRef(false);
+
+  useEffect(() => {
+    if (!dirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (leavingRef.current) return;
+      e.preventDefault();
+      // Legacy browsers need returnValue set to show the prompt.
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   function patchSection(idx: number, patch: Partial<TemplateSection>) {
     setSections((prev) =>
@@ -77,6 +117,30 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
     );
   }
 
+  function removeSection(sIdx: number) {
+    const section = sections[sIdx];
+    const filled = section.items.filter((i) => i.q.trim().length > 0).length;
+    const label = section.title.trim() || section.code.trim() || "this section";
+    const ok = window.confirm(
+      filled > 0
+        ? `Remove ${label} and its ${filled} question${filled === 1 ? "" : "s"}? This can't be undone once you save.`
+        : `Remove ${label}?`,
+    );
+    if (!ok) return;
+    setSections((prev) => prev.filter((_, i) => i !== sIdx));
+  }
+
+  function removeQuestion(sIdx: number, iIdx: number) {
+    const item = sections[sIdx].items[iIdx];
+    if (item.q.trim().length > 0) {
+      const preview = item.q.trim().length > 60 ? `${item.q.trim().slice(0, 57)}…` : item.q.trim();
+      if (!window.confirm(`Remove this question?\n\n“${preview}”`)) return;
+    }
+    patchSection(sIdx, {
+      items: sections[sIdx].items.filter((_, j) => j !== iIdx),
+    });
+  }
+
   function save() {
     setError(null);
     // Strip empty questions/sections before validating server-side.
@@ -100,9 +164,21 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
         setError(res.error ?? "Couldn't save the template.");
         return;
       }
+      leavingRef.current = true;
       router.push("/templates");
       router.refresh();
     });
+  }
+
+  function cancel() {
+    if (
+      dirty &&
+      !window.confirm("Discard your unsaved changes to this template?")
+    ) {
+      return;
+    }
+    leavingRef.current = true;
+    router.push("/templates");
   }
 
   function remove() {
@@ -116,6 +192,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
         setError(res.error ?? "Couldn't delete the template.");
         return;
       }
+      leavingRef.current = true;
       router.push("/templates");
       router.refresh();
     });
@@ -131,8 +208,9 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col sm:col-span-2">
-            <label className="cl-label">Template name *</label>
+            <label className="cl-label" htmlFor="tpl-name">Template name *</label>
             <input
+              id="tpl-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="cl-input"
@@ -140,8 +218,9 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
             />
           </div>
           <div className="flex flex-col">
-            <label className="cl-label">Occupancy</label>
+            <label className="cl-label" htmlFor="tpl-occupancy">Occupancy</label>
             <input
+              id="tpl-occupancy"
               value={occupancy}
               onChange={(e) => setOccupancy(e.target.value)}
               className="cl-input"
@@ -149,8 +228,9 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
             />
           </div>
           <div className="flex flex-col">
-            <label className="cl-label">Description</label>
+            <label className="cl-label" htmlFor="tpl-description">Description</label>
             <input
+              id="tpl-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="cl-input"
@@ -173,13 +253,20 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
       {sections.map((section, sIdx) => (
         <Card key={sIdx}>
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={section.code}
-              onChange={(e) => patchSection(sIdx, { code: e.target.value })}
-              className="cl-input w-20"
-              placeholder="A1"
-              aria-label="Section code"
-            />
+            <div className="flex items-center gap-1">
+              <input
+                value={section.code}
+                onChange={(e) => patchSection(sIdx, { code: e.target.value })}
+                className="cl-input w-20"
+                placeholder="A1"
+                aria-label="Section code"
+              />
+              <HelpTip title="Section code" side="bottom">
+                Short code that prefixes each question number on the report
+                (A1 → A1.1, A1.2…). Match your existing paper forms so
+                surveyors recognize the numbering.
+              </HelpTip>
+            </div>
             <input
               value={section.title}
               onChange={(e) => patchSection(sIdx, { title: e.target.value })}
@@ -189,9 +276,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
             />
             <button
               type="button"
-              onClick={() =>
-                setSections((prev) => prev.filter((_, i) => i !== sIdx))
-              }
+              onClick={() => removeSection(sIdx)}
               className="cl-btn-outline px-3 py-1.5 text-xs"
             >
               Remove section
@@ -214,15 +299,12 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
                     rows={2}
                     className="cl-input flex-1 text-sm"
                     placeholder="Question — phrased so 'Yes' means compliant"
+                    aria-label={`Question ${section.code || "?"}.${iIdx + 1}`}
                   />
                   <button
                     type="button"
-                    onClick={() =>
-                      patchSection(sIdx, {
-                        items: section.items.filter((_, j) => j !== iIdx),
-                      })
-                    }
-                    className="cl-btn-outline px-2 py-1 text-xs"
+                    onClick={() => removeQuestion(sIdx, iIdx)}
+                    className="cl-btn-outline min-h-[40px] min-w-[40px] px-2 py-1 text-xs"
                     aria-label="Remove question"
                   >
                     ✕
@@ -238,16 +320,26 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
                     }
                     className="cl-input text-xs"
                     placeholder="Code ref (optional) — NFPA 80 §5.2"
+                    aria-label="Code reference"
                   />
-                  <input
-                    defaultValue={(item.match ?? []).join(", ")}
-                    onChange={(e) =>
-                      patchItem(sIdx, iIdx, { matchText: e.target.value })
-                    }
-                    className="cl-input text-xs"
-                    placeholder="AI match terms (optional) — door latch, latching"
-                    title="Comma-separated substrings. When AI photo analysis produces a finding containing one of these, this question is auto-marked No for you to confirm."
-                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      defaultValue={(item.match ?? []).join(", ")}
+                      onChange={(e) =>
+                        patchItem(sIdx, iIdx, { matchText: e.target.value })
+                      }
+                      className="cl-input flex-1 text-xs"
+                      placeholder="AI match terms (optional) — door latch, latching"
+                      aria-label="AI match terms"
+                    />
+                    <HelpTip title="AI match terms" side="bottom">
+                      Comma-separated words Chip watches for. When a photo
+                      produces a finding whose text contains one of these,
+                      this question is auto-marked No for you to confirm.
+                      Leave blank for questions only a human can judge, like
+                      a records review.
+                    </HelpTip>
+                  </div>
                 </div>
               </div>
             ))}
@@ -278,7 +370,10 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
       </button>
 
       {error ? (
-        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
       ) : null}
@@ -288,13 +383,19 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
           type="button"
           onClick={save}
           disabled={pending}
+          aria-busy={pending}
           className="cl-btn-accent"
         >
           {pending ? "Saving…" : templateId ? "Save changes" : "Create template"}
         </button>
-        <Link href="/templates" className="cl-btn-outline">
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={pending}
+          className="cl-btn-outline"
+        >
           Cancel
-        </Link>
+        </button>
         {templateId ? (
           <button
             type="button"
@@ -308,6 +409,11 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
         <span className="w-full text-xs text-[var(--fg-subtle)]">
           {totalQuestions} question{totalQuestions === 1 ? "" : "s"} across{" "}
           {sections.length} section{sections.length === 1 ? "" : "s"}
+          {dirty ? (
+            <span className="ml-2 font-medium" style={{ color: "#b8762a" }}>
+              · Unsaved changes
+            </span>
+          ) : null}
         </span>
       </div>
     </div>

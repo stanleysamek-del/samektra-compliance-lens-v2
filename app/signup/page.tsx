@@ -18,11 +18,18 @@ export default async function SignupPage({
     redirect(params.next ?? "/inspections");
   }
 
+  // Arriving from a team invite link: frame the page around joining.
+  const isInvite = Boolean(params.next?.startsWith("/team/invite/"));
+
   return (
     <AuthLayout
-      eyebrow="§ 09 — Sign up"
-      title="Create your account."
-      subtitle="Free during the v2 staging build."
+      eyebrow={isInvite ? "§ 09 — Team invite" : "§ 09 — Sign up"}
+      title={isInvite ? "Join your team on Compliance Lens" : "Create your account."}
+      subtitle={
+        isInvite
+          ? "Create a free account to accept the invitation. Already have one? Sign in below."
+          : "Free tier, free forever. No credit card."
+      }
     >
       <SignupForm
         action={signUp}

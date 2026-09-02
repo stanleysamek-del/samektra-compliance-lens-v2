@@ -8,6 +8,7 @@ import {
   moveFolder,
   setFolderColor,
 } from "@/app/inspections/folders/actions";
+import { showToast } from "@/components/toaster";
 
 export type FolderRow = {
   id: string;
@@ -56,7 +57,12 @@ export function FoldersManager({ organizationId, folders }: Props) {
     fd.append("organization_id", organizationId);
     fd.append("name", name);
     startTransition(async () => {
-      await createFolder(fd);
+      const res = await createFolder(fd);
+      if (!res.ok) {
+        // Keep the composer open with the typed name so nothing is lost.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setNewName("");
       setAdding(false);
     });
@@ -68,11 +74,24 @@ export function FoldersManager({ organizationId, folders }: Props) {
       setEditingId(null);
       return;
     }
+    // Unchanged name → nothing to save (also stops the blur-after-Enter
+    // double submit).
+    const current = folders.find((f) => f.id === folderId);
+    if (current && current.name === name) {
+      setEditingId(null);
+      return;
+    }
+    if (isPending) return;
     const fd = new FormData();
     fd.append("folder_id", folderId);
     fd.append("name", name);
     startTransition(async () => {
-      await renameFolder(fd);
+      const res = await renameFolder(fd);
+      if (!res.ok) {
+        // Stay in edit mode with the typed name intact.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setEditingId(null);
     });
   }
@@ -88,7 +107,8 @@ export function FoldersManager({ organizationId, folders }: Props) {
     const fd = new FormData();
     fd.append("folder_id", folderId);
     startTransition(async () => {
-      await deleteFolder(fd);
+      const res = await deleteFolder(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -97,7 +117,8 @@ export function FoldersManager({ organizationId, folders }: Props) {
     fd.append("folder_id", folderId);
     fd.append("color", color ?? "");
     startTransition(async () => {
-      await setFolderColor(fd);
+      const res = await setFolderColor(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -106,7 +127,8 @@ export function FoldersManager({ organizationId, folders }: Props) {
     fd.append("folder_id", folderId);
     fd.append("direction", direction);
     startTransition(async () => {
-      await moveFolder(fd);
+      const res = await moveFolder(fd);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
@@ -159,6 +181,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
                         if (e.key === "Escape") setEditingId(null);
                       }}
                       onBlur={() => submitRename(f.id)}
+                      disabled={isPending}
                       className="cl-input py-1 text-sm"
                     />
                   ) : (
@@ -247,9 +270,10 @@ export function FoldersManager({ organizationId, folders }: Props) {
             type="button"
             onClick={submitNew}
             disabled={isPending || newName.trim().length === 0}
-            className="cl-btn-accent px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            aria-busy={isPending}
+            className="cl-btn-accent px-3 py-1 text-xs"
           >
-            Add
+            {isPending ? "Adding…" : "Add"}
           </button>
           <button
             type="button"

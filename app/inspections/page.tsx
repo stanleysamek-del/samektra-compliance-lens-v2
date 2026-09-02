@@ -5,6 +5,9 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
 import { TeamTipBanner } from "@/components/team-tip-banner";
+import { HelpTip } from "@/components/help-tip";
+import { scoreItems } from "@/lib/checklists/engine";
+import { formatDate } from "@/lib/format-date";
 
 /**
  * Runs a Supabase query with a hard timeout. If Supabase is slow we return
@@ -36,8 +39,14 @@ async function withQueryTimeout<T>(
   }
 }
 
+/** ISO timestamp for "7 days ago" — computed once per request. */
+function sevenDaysAgoIso(): string {
+  return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export default async function InspectionsPage() {
   const supabase = await createClient();
+  const sevenDaysAgo = sevenDaysAgoIso();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -84,25 +93,19 @@ export default async function InspectionsPage() {
         "recent",
       ),
       withQueryTimeout(
-        (async () => {
-          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-          return supabase
-            .from("photos")
-            .select("id", { count: "exact", head: true })
-            .gte("created_at", sevenDaysAgo);
-        })(),
+        supabase
+          .from("photos")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", sevenDaysAgo),
         4000,
         "weekly_scans",
       ),
       withQueryTimeout(
-        (async () => {
-          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-          return supabase
-            .from("findings")
-            .select("id", { count: "exact", head: true })
-            .eq("severity", "High")
-            .gte("created_at", sevenDaysAgo);
-        })(),
+        supabase
+          .from("findings")
+          .select("id", { count: "exact", head: true })
+          .eq("severity", "High")
+          .gte("created_at", sevenDaysAgo),
         4000,
         "weekly_high_findings",
       ),
@@ -112,6 +115,61 @@ export default async function InspectionsPage() {
   const recent = recentResult?.data ?? null;
   const weeklyScans = weeklyScansResult?.count ?? null;
   const weeklyHighFindings = weeklyHighFindingsResult?.count ?? null;
+
+  // Third tile: a TRUTHFUL number. The old "Compliance %" was 100 − high×5
+  // — invented, and the kind of figure that gets quoted in a meeting. If
+  // the recent inspections carry checklists, average their real scores
+  // (yes ÷ (yes + no), N.A. excluded — the same math as the report).
+  // Otherwise fall back to a plain count of High-severity findings on
+  // those inspections.
+  const recentIds = Array.from(
+    new Set([...(recent ?? []).map((r) => r.id), ...(inProgress ?? []).map((r) => r.id)]),
+  );
+  let checklistAvgPct: number | null = null;
+  let checklistScoredCount = 0;
+  let recentHighFindings: number | null = null;
+  if (recentIds.length > 0) {
+    const [clResult, highResult] = await Promise.all([
+      withQueryTimeout(
+        supabase
+          .from("inspection_checklist_items")
+          .select("inspection_id, answer")
+          .in("inspection_id", recentIds),
+        4000,
+        "checklist_scores",
+      ),
+      withQueryTimeout(
+        supabase
+          .from("findings")
+          .select("id", { count: "exact", head: true })
+          .eq("severity", "High")
+          .in("inspection_id", recentIds),
+        4000,
+        "recent_high_findings",
+      ),
+    ]);
+    const rows = (clResult?.data ?? []) as Array<{
+      inspection_id: string;
+      answer: "yes" | "no" | "na" | null;
+    }>;
+    const byInspection = new Map<string, Array<{ answer: "yes" | "no" | "na" | null }>>();
+    for (const r of rows) {
+      const arr = byInspection.get(r.inspection_id) ?? [];
+      arr.push({ answer: r.answer });
+      byInspection.set(r.inspection_id, arr);
+    }
+    const pcts: number[] = [];
+    for (const items of byInspection.values()) {
+      const s = scoreItems(items);
+      if (s.pct !== null) pcts.push(s.pct);
+    }
+    if (pcts.length > 0) {
+      checklistScoredCount = pcts.length;
+      checklistAvgPct = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+    }
+    recentHighFindings = highResult?.count ?? null;
+  }
+  const hasAnyInspection = (recent?.length ?? 0) > 0 || (inProgress?.length ?? 0) > 0;
   // True when at least one section couldn't load — surfaces a banner.
   const anySectionDegraded =
     inProgressResult === null ||
@@ -174,9 +232,20 @@ export default async function InspectionsPage() {
             <Link href="/inspections/history" className="cl-btn-outline">
               History
             </Link>
-            <Link href="/inspections/new" className="cl-btn-accent">
-              + New inspection
-            </Link>
+            <span className="relative inline-flex">
+              {!hasAnyInspection && recentResult !== null ? (
+                <span
+                  aria-hidden
+                  className="absolute -top-5 right-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Start here ↓
+                </span>
+              ) : null}
+              <Link href="/inspections/new" className="cl-btn-accent">
+                + New inspection
+              </Link>
+            </span>
           </div>
         </header>
 
@@ -204,16 +273,36 @@ export default async function InspectionsPage() {
               }
               tone="warning"
             />
-            <HomeStat
-              label="Compliance"
-              value={
-                (weeklyScans ?? 0) === 0
-                  ? "—"
-                  : `${Math.max(0, 100 - Math.min(100, (weeklyHighFindings ?? 0) * 5))}%`
-              }
-              sub="this week"
-              tone="primary"
-            />
+            {checklistAvgPct !== null ? (
+              <HomeStat
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Checklist score
+                    <HelpTip title="Checklist score" side="bottom">
+                      Score = Yes ÷ (Yes + No). N.A. (&ldquo;not applicable —
+                      this building doesn&apos;t have that system&rdquo;) is
+                      removed from the math, so it never hurts your score.
+                      Unanswered questions aren&apos;t counted but show as
+                      gaps on the report.
+                    </HelpTip>
+                  </span>
+                }
+                value={`${checklistAvgPct}%`}
+                sub={`avg of ${checklistScoredCount} recent inspection${checklistScoredCount === 1 ? "" : "s"}`}
+                tone="primary"
+              />
+            ) : (
+              <HomeStat
+                label="High-severity findings"
+                value={recentHighFindings === null ? "—" : String(recentHighFindings)}
+                sub={
+                  recentIds.length === 0
+                    ? "no inspections yet"
+                    : `across ${recentIds.length} recent inspection${recentIds.length === 1 ? "" : "s"}`
+                }
+                tone="primary"
+              />
+            )}
           </div>
         </Card>
 
@@ -253,7 +342,7 @@ export default async function InspectionsPage() {
                     </p>
                   ) : null}
                   <p className="mt-3 text-[11px] text-[var(--fg-subtle)]">
-                    {row.date_of_inspection ?? "No date"}
+                    {row.date_of_inspection ? formatDate(row.date_of_inspection) : "No date"}
                   </p>
                 </Link>
               ))}
@@ -312,17 +401,26 @@ export default async function InspectionsPage() {
                     Ready for your first inspection?
                   </h3>
                   <p className="max-w-md text-sm text-[var(--fg-muted)]">
-                    The loop is fast: snap photos of equipment, Chip flags
-                    violations with code citations, you confirm or correct,
-                    then export the signed report.
+                    <strong className="font-semibold text-[var(--fg)]">
+                      Chip is the AI that reads your photos.
+                    </strong>{" "}
+                    Snap a photo of equipment, an exit, a panel — Chip drafts
+                    the finding with the code citation. You confirm or
+                    correct, assign the fix, sign, and export the report.
                   </p>
                 </div>
                 <ol className="mx-auto grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-                  <EmptyStep n={1} title="Create" body="Set up a facility and a date — under a minute." />
-                  <EmptyStep n={2} title="Snap & coach" body="Add photos. Chip writes findings. You correct anything wrong." />
-                  <EmptyStep n={3} title="Export" body="PDF, CAP, LSRA, ILSM — all generated for you." />
+                  <EmptyStep n={1} title="Create" body="Pick an inspection type and a facility — under a minute." />
+                  <EmptyStep n={2} title="Snap" body="Add photos. Chip drafts findings and answers checklist questions. You confirm or correct." />
+                  <EmptyStep n={3} title="Sign & export" body="Assign actions, sign, finalize. PDF, CAP, LSRA, ILSM — generated for you." />
                 </ol>
-                <div className="flex flex-wrap justify-center gap-2 pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                    style={{ background: "rgba(249,115,22,0.14)", color: "var(--accent)" }}
+                  >
+                    Start here
+                  </span>
                   <Link href="/inspections/new" className="cl-btn-accent">
                     + Start your first inspection
                   </Link>
@@ -399,7 +497,7 @@ function HomeStat({
   sub,
   tone = "default",
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
   sub: React.ReactNode;
   tone?: "default" | "primary" | "warning";

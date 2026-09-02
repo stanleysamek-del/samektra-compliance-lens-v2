@@ -70,10 +70,12 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
             }}
           >
             <input type="hidden" name="inspection_id" value={inspectionId} />
+            {/* deleteInspection redirects to this verbatim; History reads
+                ?deleted= and shows the "Deleted <facility>" banner. */}
             <input
               type="hidden"
               name="redirect_to"
-              value="/inspections/history"
+              value={`/inspections/history?deleted=${encodeURIComponent(facilityName)}`}
             />
             <button
               type="submit"

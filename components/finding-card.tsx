@@ -13,6 +13,8 @@ import {
   type ActionFields,
   type OrgMember,
 } from "@/components/action-strip";
+import { showToast } from "@/components/toaster";
+import { severityColor } from "@/lib/severity";
 
 export type FindingRow = {
   id: string;
@@ -113,20 +115,36 @@ export function FindingCard({
 
   function rate(next: 1 | -1) {
     // Toggling the same rating clears it.
-    const target = localRating === next ? null : next;
+    const previous = localRating;
+    const target = previous === next ? null : next;
     setLocalRating(target);
     startTransition(async () => {
-      await rateFinding(finding.id, finding.inspection_id, target);
+      const res = await rateFinding(finding.id, finding.inspection_id, target);
+      if (!res.ok) {
+        // Revert the optimistic flip so the UI never claims a rating the
+        // server didn't record.
+        setLocalRating(previous);
+        showToast({ kind: "error", message: res.error });
+      }
     });
   }
 
   function save() {
+    if (!draft.title.trim()) {
+      showToast({ kind: "error", message: "A finding needs a title." });
+      return;
+    }
     startTransition(async () => {
       const patch: FindingPatch = { ...draft };
       if (bboxDraft !== undefined) {
         patch.bbox = bboxDraft;
       }
-      await updateFinding(finding.id, finding.inspection_id, patch);
+      const res = await updateFinding(finding.id, finding.inspection_id, patch);
+      if (!res.ok) {
+        // Stay in edit mode — the draft + bbox draft are still in state.
+        showToast({ kind: "error", message: res.error });
+        return;
+      }
       setBboxDraft(undefined);
       setEditing(false);
     });
@@ -135,11 +153,12 @@ export function FindingCard({
   function remove() {
     if (!confirm("Delete this finding? This cannot be undone.")) return;
     startTransition(async () => {
-      await deleteFinding(finding.id, finding.inspection_id);
+      const res = await deleteFinding(finding.id, finding.inspection_id);
+      if (!res.ok) showToast({ kind: "error", message: res.error });
     });
   }
 
-  const sev = severityStyles(finding.severity);
+  const sev = severityColor(finding.severity);
 
   return (
     <div className="cl-card p-4 sm:p-5">
@@ -197,7 +216,7 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(1)}
                 className={[
-                  "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
+                  "flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06] sm:min-h-0 sm:min-w-0",
                   localRating === 1
                     ? "text-[#607a3a] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
@@ -216,7 +235,7 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(-1)}
                 className={[
-                  "rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06]",
+                  "flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06] sm:min-h-0 sm:min-w-0",
                   localRating === -1
                     ? "text-[#a8362b] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
@@ -228,7 +247,7 @@ export function FindingCard({
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)]"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)] sm:min-h-0"
               >
                 Edit
               </button>
@@ -236,9 +255,9 @@ export function FindingCard({
                 type="button"
                 disabled={isPending}
                 onClick={remove}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[#a8362b]"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[#a8362b] sm:min-h-0"
               >
-                Delete
+                {isPending ? "Deleting…" : "Delete"}
               </button>
             </>
           ) : (
@@ -247,15 +266,16 @@ export function FindingCard({
                 type="button"
                 disabled={isPending}
                 onClick={() => setEditing(false)}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)]"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)] sm:min-h-0"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={isPending}
+                aria-busy={isPending}
                 onClick={save}
-                className="rounded-md bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:opacity-50"
+                className="min-h-[40px] rounded-md bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
               >
                 {isPending ? "Saving…" : "Save"}
               </button>
@@ -443,12 +463,6 @@ function Field({
       {children}
     </label>
   );
-}
-
-function severityStyles(s: "Low" | "Medium" | "High") {
-  if (s === "High") return { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" };
-  if (s === "Medium") return { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" };
-  return { bg: "rgba(96,122,58,0.10)", fg: "#607a3a" };
 }
 
 function ThumbsUpIcon({ filled }: { filled: boolean }) {

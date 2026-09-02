@@ -3,24 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import { switchCurrentOrg } from "@/app/team/actions";
 import { useOutsideClick } from "@/lib/use-outside-click";
+import { HelpTip } from "@/components/help-tip";
 
-type Org = { id: string; name: string; role: "admin" | "member" };
+type Role = "admin" | "member" | "viewer";
+type Org = { id: string; name: string; role: Role };
 
 type Ctx = {
-  current: { id: string; name: string; role: "admin" | "member" } | null;
+  current: { id: string; name: string; role: Role } | null;
   all: Org[];
 };
 
 /**
- * Compact org switcher dropdown mounted in the AppShell header. Fetches
- * its data on first mount via /api/team/context, then renders a button
- * showing the current workspace name (or "Personal"). Click expands a
- * menu listing every team the user belongs to plus a "Personal
- * workspace" option. Selecting calls switchCurrentOrg() which sets the
- * cookie and revalidates.
+ * Compact workspace indicator + switcher mounted in the AppShell header.
+ * Fetches its data on first mount via /api/team/context.
  *
- * Renders nothing while loading and nothing when the user has no teams
- * (in which case there's nothing to switch).
+ * Always renders once loaded — even for a user with zero teams — because
+ * the "workspace" concept otherwise appears out of nowhere the first time
+ * an invite is accepted. With no teams it's a static "Personal workspace"
+ * pill plus a ? explaining what a workspace is; with teams it becomes a
+ * dropdown listing every team plus the personal option.
  */
 export function OrgSwitcher() {
   const [ctx, setCtx] = useState<Ctx | null>(null);
@@ -46,12 +47,46 @@ export function OrgSwitcher() {
   useOutsideClick(menuRef, open, () => setOpen(false));
 
   if (!ctx) return null;
-  if (ctx.all.length === 0) return null;
 
   const label = ctx.current ? ctx.current.name : "Personal workspace";
+  const hasTeams = ctx.all.length > 0;
+
+  const tip = (
+    <HelpTip title="Workspaces" side="bottom" ariaLabel="What is a workspace?">
+      <p>
+        <span className="font-medium">Personal workspace</span> is yours
+        alone — nobody else sees those inspections.
+      </p>
+      <p className="mt-1.5">
+        A <span className="font-medium">team workspace</span> is shared:
+        every member sees the team&apos;s inspections, folders, findings,
+        and Chip&apos;s rules.
+      </p>
+      <p className="mt-1.5">
+        Switching changes what you see everywhere and where new inspections
+        are saved.
+      </p>
+    </HelpTip>
+  );
+
+  // No teams yet: a static pill, not a dropdown with one dead option.
+  if (!hasTeams) {
+    return (
+      <div className="inline-flex items-center gap-1">
+        <span
+          className="inline-flex max-w-[180px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--fg-muted)]"
+          title="You're in your personal workspace"
+        >
+          <PersonGlyph />
+          <span className="truncate">Personal workspace</span>
+        </span>
+        {tip}
+      </div>
+    );
+  }
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative inline-flex items-center gap-1" ref={menuRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -60,15 +95,16 @@ export function OrgSwitcher() {
         aria-expanded={open}
         title="Switch workspace"
       >
-        <TeamGlyph />
+        {ctx.current ? <TeamGlyph /> : <PersonGlyph />}
         <span className="truncate">{label}</span>
         <CaretIcon />
       </button>
+      {tip}
 
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-lg"
         >
           <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
             Switch workspace
