@@ -345,11 +345,11 @@ export default async function PhotoDetailPage({
           </Card>
         )}
 
-        {/* Full-resolution original (migration 0023). The viewer above shows
-            the 1024px analysis copy; this opens the untouched camera file in
-            a new tab, where the browser's native pinch/scroll zoom does the
-            rest. Absent on older photos and on uploads where the best-effort
-            original save failed. */}
+        {/* High-resolution zoom copy (migration 0023, up to 2560px). The
+            viewer above shows the 1024px analysis copy; this opens the zoom
+            copy in a new tab, where the browser's native pinch/scroll zoom
+            does the rest. Absent on older photos and on uploads where the
+            best-effort save failed. */}
         {originalPhotoUrl ? (
           <p className="flex items-center gap-1.5 px-1 text-xs text-[var(--fg-muted)]">
             <a
@@ -358,15 +358,15 @@ export default async function PhotoDetailPage({
               rel="noopener noreferrer"
               className="font-medium text-[var(--accent)] underline"
             >
-              View full-resolution original ↗
+              View high-resolution photo ↗
             </a>
-            <HelpTip title="Original photo">
-              The image above is the 1024px copy Chip analyzed. This opens the
-              untouched file from the camera, so a surveyor or insurer can zoom
-              into fine detail — a gauge needle, a label, a hairline crack. The
-              photo&apos;s SHA-256 fingerprint on record was taken from this
-              exact file, so it doubles as proof it hasn&apos;t been altered
-              since capture.
+            <HelpTip title="High-resolution copy">
+              The image above is the 1024px copy Chip analyzed. This opens a
+              2560px copy of the camera file, so a surveyor or insurer can zoom
+              into fine detail — a gauge needle, a label, a hairline crack.
+              The photo&apos;s SHA-256 fingerprint on record was taken from the
+              untouched original at capture time, so the record still proves
+              the photo wasn&apos;t altered.
             </HelpTip>
           </p>
         ) : null}

@@ -47,7 +47,11 @@ type QueueItem = {
   startedAt?: number;
 };
 
-const MAX_BYTES = 10 * 1024 * 1024;
+// Raw camera files are accepted up to 40 MB — modern phones routinely
+// shoot 12-25 MB JPEGs — because everything is downscaled in the browser
+// before upload (1024px analysis copy + 2560px zoom copy). The server's own
+// 10 MB cap applies to those downscaled uploads, not the file picked.
+const MAX_BYTES = 40 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
 // Rotating "thinking" messages shown while AI analysis is in flight.
@@ -145,14 +149,16 @@ export function PhotoUploader({ inspectionId }: Props) {
         const formData = new FormData();
         formData.append("inspection_id", inspectionId);
         formData.append("image", resized, resized.name);
-        // Full-resolution original alongside the resized analysis copy —
-        // best-effort on the server; keeping it lets a surveyor or insurer
-        // zoom into fine detail the resized 1024px copy can't show. Only
-        // worth sending when it's a genuinely different file — small
-        // photos already skip resizing (see resizeImageForUpload) and
-        // shipping the same bytes twice would just double the upload.
-        if (resized !== item.file) {
-          formData.append("original", item.file, item.file.name);
+        // Zoom copy alongside the 1024px analysis copy — capped at 2560px
+        // on the long edge (~1 MB) rather than the raw camera file (which
+        // can be 10-25 MB on modern phones and would fill storage fast).
+        // 2560px is plenty to read a gauge needle or a label; the SHA-256
+        // above still fingerprints the untouched original. Best-effort on
+        // the server. Skipped when it would be the same bytes as the
+        // analysis copy (small photos skip resizing entirely).
+        const zoom = await resizeImageForUpload(item.file, 2560, 0.85);
+        if (zoom !== resized && zoom.size <= 10 * 1024 * 1024) {
+          formData.append("original", zoom, zoom.name);
         }
         if (item.photoLocation) formData.append("photo_location", item.photoLocation);
         if (integrity.sha256) formData.append("original_sha256", integrity.sha256);
@@ -255,7 +261,7 @@ export function PhotoUploader({ inspectionId }: Props) {
           previewUrl: URL.createObjectURL(file),
           photoLocation,
           status: "failed",
-          error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB; max 10 MB).`,
+          error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB; max 40 MB).`,
         });
         continue;
       }
