@@ -45,10 +45,13 @@ const GEMINI_FLASH_MODEL = "gemini-2.5-flash";
 const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 
 // Per-provider hard timeout. Vercel functions cap at 60s on Hobby and 90s
-// on Pro; we set 45s so a slow provider can be abandoned in time to fall
-// through to the next one (Anthropic → Google → OpenAI) without the whole
-// function getting killed by Vercel's gateway with a 504.
-const REQUEST_TIMEOUT_MS = 45_000;
+// on Pro (upload/reanalyze routes set maxDuration=90). 45s was too tight —
+// a real-world Haiku vision call on a busy photo routinely takes 20-44s,
+// so the old value was aborting healthy in-flight requests and burning the
+// fallback chain on providers that would also time out. 70s leaves ~15s
+// of the 90s budget for the rest of the route (DB writes, storage,
+// checklist pre-fill) after the AI call returns.
+const REQUEST_TIMEOUT_MS = 70_000;
 
 // Per-million-token pricing in USD. Tweak as Google / Anthropic / OpenAI
 // re-price; the cost dashboard reads these.
@@ -231,10 +234,15 @@ async function callAnthropic(
       signal: controller.signal,
       body: JSON.stringify({
         model,
-        // Real outputs are 500-1500 tokens. Capping at 2048 instead of
-        // 4096 doesn't change speed for normal cases but caps the
-        // worst-case runaway response.
-        max_tokens: 2048,
+        // Real outputs are usually 500-1500 tokens, but a busy photo with
+        // several violations plus full whatToLookFor/notVisible arrays can
+        // run well past 4096 and get cut off mid-JSON — an unparseable
+        // response that read to the user as "all providers failed" with no
+        // findings shown at all (confirmed against real inspection photos,
+        // scripts/vision-eval.ts). max_tokens is a ceiling, not a cost —
+        // billing is only for tokens actually generated — so there's no
+        // reason to keep it tight.
+        max_tokens: 8192,
         system: [
           {
             type: "text",
@@ -331,7 +339,9 @@ async function callOpenAI(
       signal: controller.signal,
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        max_tokens: 2048,
+        // See the matching comment in callAnthropic — a low cap truncates
+        // valid JSON on busier photos.
+        max_tokens: 8192,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

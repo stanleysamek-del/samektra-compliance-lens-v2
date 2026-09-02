@@ -99,17 +99,35 @@ export type FindingForMatch = {
   code: string | null;
 };
 
+/** Characters that make a regex special; escaped so a term can be dropped
+ *  straight into a pattern without breaking it. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Score a finding against one item's match terms. Multi-word phrases are
  * worth more than single words — "supported by the sprinkler" hitting is
  * far stronger evidence than the bare word "sprinkler".
+ *
+ * Single-word terms match on a WORD BOUNDARY, not a raw substring — a bare
+ * `hay.includes("ppe")` matched inside "equipped", "shipped", "stopped",
+ * every past-tense verb ending "-pped", which produced wrong AI-flagged
+ * answers on real inspection photos (scripts/vision-eval.ts). Multi-word
+ * phrases stay substring matches: they're long enough that a false hit
+ * inside another phrase is vanishingly unlikely, and word-boundary regexes
+ * for a full phrase get expensive to build/verify for no real benefit.
  */
 function scoreItem(hay: string, terms: string[]): number {
   let score = 0;
   for (const term of terms) {
     const t = term.toLowerCase();
     if (!t) continue;
-    if (hay.includes(t)) score += t.includes(" ") ? 2 : 1;
+    if (t.includes(" ")) {
+      if (hay.includes(t)) score += 2;
+    } else {
+      if (new RegExp(`\\b${escapeRegExp(t)}\\b`).test(hay)) score += 1;
+    }
   }
   return score;
 }
