@@ -205,30 +205,30 @@ export default async function NewInspectionPage({
                   />
                 </div>
               </div>
-
-              {params.error ? (
-                <p
-                  className="rounded-lg border px-3 py-2 text-sm"
-                  style={{
-                    borderColor: "rgba(168,54,43,0.4)",
-                    background: "rgba(168,54,43,0.08)",
-                    color: "#a8362b",
-                  }}
-                >
-                  {params.error}
-                </p>
-              ) : null}
-
-              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-                <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
-                  Create & start uploading
-                </button>
-                <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
-                  Cancel
-                </Link>
-              </div>
               </div>
             </details>
+
+            {params.error ? (
+              <p
+                className="rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  borderColor: "rgba(168,54,43,0.4)",
+                  background: "rgba(168,54,43,0.08)",
+                  color: "#a8362b",
+                }}
+              >
+                {params.error}
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+              <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
+                Create & start uploading
+              </button>
+              <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
+                Cancel
+              </Link>
+            </div>
           </form>
         </Card>
 
