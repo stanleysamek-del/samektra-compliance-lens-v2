@@ -37,6 +37,7 @@ const NAV: NavItem[] = [
   },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
   { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
+  { href: "/templates", label: "Templates", icon: <TemplatesIcon /> },
   { href: "/team", label: "Team", icon: <TeamIcon /> },
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
 ];
@@ -477,6 +478,34 @@ function FindingsIcon() {
     </svg>
   );
 }
+function TemplatesIcon() {
+  // Clipboard with checklist lines — the question sets inspections start from.
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 5h8v3H8z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 6h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 12.5l1 1 2-2M13.5 12.5H16M8.5 16.5l1 1 2-2M13.5 16.5H16"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ActionsIcon() {
   // Clipboard with an arrow — "the finding goes to somebody to fix".
   return (

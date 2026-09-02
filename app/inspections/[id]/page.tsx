@@ -10,6 +10,8 @@ import {
   type CompactFinding,
 } from "@/components/photo-card-findings";
 import { SectionsManager, type SectionRow } from "@/components/sections-manager";
+import { ChecklistPanel } from "@/components/checklist-panel";
+import type { ChecklistItemRow } from "@/lib/checklists/engine";
 import { PhotoMoveMenu } from "@/components/photo-move-menu";
 import {
   NotVisibleChecklist,
@@ -81,6 +83,24 @@ export default async function InspectionDetailPage({
     // Hoisted so sections / not-visible / findings stages can all reference
     // it without re-declaring (which would also be a temporal-dead-zone error).
     const photoIds = photosList.map((p) => p.id);
+
+    stage = "checklist";
+    // Checklist items (migration 0022). Errors — including the table not
+    // existing pre-migration — degrade to "no checklist" rather than
+    // failing the whole page.
+    let checklistItems: ChecklistItemRow[] = [];
+    try {
+      const { data: clData } = await supabase
+        .from("inspection_checklist_items")
+        .select(
+          "id, inspection_id, template_ref, template_name, section_code, section_title, sort, question, code_ref, match_terms, answer, note, answered_by, answered_by_ai, ai_confirmed, photo_id, finding_id, answered_at",
+        )
+        .eq("inspection_id", id)
+        .order("sort", { ascending: true });
+      checklistItems = (clData as ChecklistItemRow[]) ?? [];
+    } catch (err) {
+      console.error("[inspection] checklist load", err);
+    }
 
     stage = "sections";
     const { data: sectionsData } = await supabase
@@ -449,6 +469,16 @@ export default async function InspectionDetailPage({
           ) : null}
 
           {!isCompleted ? <PhotoUploader inspectionId={inspection.id} /> : null}
+
+          {/* Checklist — the scored question set from the template chosen at
+              creation. AI-flagged answers carry a confirm badge. */}
+          {checklistItems.length > 0 ? (
+            <ChecklistPanel
+              inspectionId={inspection.id}
+              items={checklistItems}
+              readOnly={isCompleted}
+            />
+          ) : null}
 
           {/* Photo-organization manager — sits above the photo grid so it's
               easy to add sections before/while shooting. Empty state nudges

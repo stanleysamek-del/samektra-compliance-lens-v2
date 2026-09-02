@@ -164,12 +164,46 @@ export async function GET(
     const counts = { High: 0, Medium: 0, Low: 0 };
     for (const f of allFindings) counts[f.severity] += 1;
     const totalFindings = allFindings.length;
-    // Customer-style score: deficiencies vs. (deficiencies + photos).
-    // Not a perfect mapping but a reasonable proxy until we add a real
-    // checklist with Y/N questions.
-    const totalChecks = Math.max(photoList.length * 5, 5); // assume 5 checks per photo
-    const flagged = totalFindings;
-    const passed = Math.max(0, totalChecks - flagged);
+
+    // Real checklist (migration 0022), when this inspection has one. The
+    // answered questions REPLACE the photos×5 proxy score below, and a
+    // checklist-summary section renders after the audit body.
+    let checklistItems: Array<{
+      section_code: string;
+      section_title: string;
+      question: string;
+      code_ref: string | null;
+      answer: "yes" | "no" | "na" | null;
+      note: string | null;
+      answered_by_ai: boolean;
+      template_name: string | null;
+    }> = [];
+    try {
+      const { data: clData } = await supabase
+        .from("inspection_checklist_items")
+        .select(
+          "section_code, section_title, question, code_ref, answer, note, answered_by_ai, template_name",
+        )
+        .eq("inspection_id", inspectionId)
+        .order("sort", { ascending: true });
+      checklistItems = (clData as typeof checklistItems) ?? [];
+    } catch {
+      // Pre-migration or transient error — fall back to the proxy score.
+    }
+    const clYes = checklistItems.filter((i) => i.answer === "yes").length;
+    const clNo = checklistItems.filter((i) => i.answer === "no").length;
+    const hasChecklistScore = clYes + clNo > 0;
+
+    // Score: real checklist when answered; otherwise the historical
+    // deficiencies-vs-(photos×5) proxy so pre-checklist inspections keep
+    // rendering a number.
+    const totalChecks = hasChecklistScore
+      ? clYes + clNo
+      : Math.max(photoList.length * 5, 5);
+    const flagged = hasChecklistScore ? clNo : totalFindings;
+    const passed = hasChecklistScore
+      ? clYes
+      : Math.max(0, totalChecks - totalFindings);
     const scorePct = totalChecks > 0 ? (passed / totalChecks) * 100 : 0;
 
     // ---- Build PDF ----
@@ -533,6 +567,104 @@ export async function GET(
           col = 0;
           py -= cellH;
         }
+      }
+    }
+
+    /* ====================== CHECKLIST SUMMARY ====================== */
+    // Real question-by-question record (migration 0022): per-section
+    // scores + every "No" with its note. Renders only when the inspection
+    // ran with a checklist template.
+    if (checklistItems.length > 0) {
+      let clPage = pdf.addPage([PAGE_W, PAGE_H]);
+      let cy = PAGE_H - MARGIN - 10;
+      const ensure = (needed: number) => {
+        if (cy - needed < MARGIN) {
+          clPage = pdf.addPage([PAGE_W, PAGE_H]);
+          cy = PAGE_H - MARGIN - 10;
+        }
+      };
+
+      clPage.drawText(
+        safeText(
+          `Checklist — ${checklistItems[0].template_name ?? "Inspection checklist"}`,
+        ),
+        { x: MARGIN, y: cy, size: 14, font: helvBold, color: FG },
+      );
+      cy -= 18;
+      const clNa = checklistItems.filter((i) => i.answer === "na").length;
+      const clOpen = checklistItems.filter((i) => i.answer === null).length;
+      clPage.drawText(
+        safeText(
+          `Score ${clYes}/${clYes + clNo} (${scorePct.toFixed(2)}%) · ${clNa} N.A. · ${clOpen} unanswered`,
+        ),
+        { x: MARGIN, y: cy, size: 10, font: helv, color: MUTED },
+      );
+      cy -= 22;
+
+      // Group by section, preserving sort order.
+      const bySection = new Map<string, typeof checklistItems>();
+      for (const item of checklistItems) {
+        const key = `${item.section_code}. ${item.section_title}`;
+        if (!bySection.has(key)) bySection.set(key, []);
+        bySection.get(key)!.push(item);
+      }
+
+      for (const [header, rows] of bySection) {
+        const yes = rows.filter((r) => r.answer === "yes").length;
+        const no = rows.filter((r) => r.answer === "no").length;
+        const scored = yes + no;
+        const pct = scored > 0 ? ((yes / scored) * 100).toFixed(1) : "—";
+        ensure(40);
+        clPage.drawText(
+          safeText(`${header}  -  ${yes}/${scored} (${pct}%)`),
+          { x: MARGIN, y: cy, size: 11, font: helvBold, color: FG },
+        );
+        cy -= 16;
+
+        for (const row of rows) {
+          const answerLabel =
+            row.answer === "yes"
+              ? "Yes"
+              : row.answer === "no"
+                ? "No"
+                : row.answer === "na"
+                  ? "N.A."
+                  : "—";
+          ensure(30);
+          const color = row.answer === "no" ? RED : MUTED;
+          clPage.drawText(safeText(answerLabel), {
+            x: MARGIN,
+            y: cy,
+            size: 9,
+            font: helvBold,
+            color,
+          });
+          cy = drawWrapped(
+            clPage,
+            `${row.question}${row.code_ref ? `  (${row.code_ref})` : ""}${row.answered_by_ai ? "  [AI-flagged]" : ""}`,
+            MARGIN + 34,
+            cy,
+            PAGE_W - MARGIN * 2 - 34,
+            9,
+            helv,
+            row.answer === "no" ? FG : MUTED,
+          );
+          if (row.answer === "no" && row.note) {
+            ensure(24);
+            cy = drawWrapped(
+              clPage,
+              row.note,
+              MARGIN + 34,
+              cy - 1,
+              PAGE_W - MARGIN * 2 - 34,
+              8.5,
+              helv,
+              RED,
+            );
+          }
+          cy -= 4;
+        }
+        cy -= 8;
       }
     }
 

@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { createInspection } from "./actions";
+import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
 
 export default async function NewInspectionPage({
   searchParams,
@@ -24,6 +26,12 @@ export default async function NewInspectionPage({
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
+
+  // Checklist templates: built-ins from code + this user's/org's customs.
+  const { data: customTemplates } = await supabase
+    .from("checklist_templates")
+    .select("id, name, occupancy")
+    .order("name");
 
   return (
     <AppShell
@@ -88,6 +96,42 @@ export default async function NewInspectionPage({
               />
               <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
                 Department, smoke compartment, suite, or other inspection scope.
+              </p>
+            </div>
+
+            <div className="flex flex-col">
+              <label htmlFor="template_id" className="cl-label">
+                Inspection checklist
+              </label>
+              <select id="template_id" name="template_id" className="cl-input">
+                <option value="">No checklist — photos only</option>
+                <optgroup label="Built-in templates">
+                  {BUILTIN_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.occupancy})
+                    </option>
+                  ))}
+                </optgroup>
+                {customTemplates && customTemplates.length > 0 ? (
+                  <optgroup label="Your templates">
+                    {customTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.occupancy ? ` (${t.occupancy})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
+              <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
+                Picking a template adds a scored question set (Yes / No /
+                N.A.) grouped into sections — the AI auto-flags questions as
+                findings come in, and your photos file under the same groups.
+                Manage templates on the{" "}
+                <Link href="/templates" className="underline">
+                  Templates
+                </Link>{" "}
+                page.
               </p>
             </div>
 
@@ -174,9 +218,9 @@ export default async function NewInspectionPage({
               <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
                 Create & start uploading
               </button>
-              <a href="/inspections" className="cl-btn-outline w-full sm:w-auto">
+              <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
                 Cancel
-              </a>
+              </Link>
             </div>
           </form>
         </Card>

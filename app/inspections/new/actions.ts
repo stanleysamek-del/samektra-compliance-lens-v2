@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org/current";
+import { attachTemplate, resolveTemplate } from "@/lib/checklists/engine";
 
 function clean(value: FormDataEntryValue | null): string | null {
   if (typeof value !== "string") return null;
@@ -56,6 +57,42 @@ export async function createInspection(formData: FormData) {
     redirect(
       `/inspections/new?error=${encodeURIComponent(error.message ?? "Could not create inspection")}`,
     );
+  }
+
+  // Optional checklist template: snapshot its questions onto the
+  // inspection AND create matching photo sections, so photos file under
+  // the same groups the questions live in. Best-effort — a checklist
+  // failure never loses the inspection that was just created.
+  const templateId = clean(formData.get("template_id"));
+  if (templateId) {
+    try {
+      const template = await resolveTemplate(supabase, templateId);
+      if (template) {
+        const { error: attachErr, sectionTitles } = await attachTemplate(
+          supabase,
+          data.id,
+          template,
+        );
+        if (attachErr) {
+          console.error("[createInspection] checklist attach", attachErr);
+        } else if (sectionTitles.length > 0) {
+          const { error: sectionsErr } = await supabase
+            .from("inspection_sections")
+            .insert(
+              sectionTitles.map((name, idx) => ({
+                inspection_id: data.id,
+                name,
+                sort_order: idx,
+              })),
+            );
+          if (sectionsErr) {
+            console.error("[createInspection] sections", sectionsErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[createInspection] checklist", err);
+    }
   }
 
   redirect(`/inspections/${data.id}`);

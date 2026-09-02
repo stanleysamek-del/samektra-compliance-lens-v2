@@ -9,6 +9,7 @@ import {
   reapplyRatings,
 } from "@/lib/findings/preserve-ratings";
 import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
+import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -228,25 +229,43 @@ export async function POST(
     .eq("skipped", false);
 
   if (analysis.violations.length > 0) {
-    await supabase.from("findings").insert(
-      analysis.violations.map((v) => ({
-        inspection_id: photo.inspection_id,
-        photo_id: photo.id,
-        title: v.title,
-        category: v.category,
-        code: v.code,
-        severity: v.severity,
-        description: v.description,
-        location: v.location,
-        remediation: v.remediation,
-        references: v.references,
-        bbox_x1: v.coordinates.x1,
-        bbox_y1: v.coordinates.y1,
-        bbox_x2: v.coordinates.x2,
-        bbox_y2: v.coordinates.y2,
-        ai_confidence: v.confidence,
-      })),
-    );
+    const { data: insertedFindings } = await supabase
+      .from("findings")
+      .insert(
+        analysis.violations.map((v) => ({
+          inspection_id: photo.inspection_id,
+          photo_id: photo.id,
+          title: v.title,
+          category: v.category,
+          code: v.code,
+          severity: v.severity,
+          description: v.description,
+          location: v.location,
+          remediation: v.remediation,
+          references: v.references,
+          bbox_x1: v.coordinates.x1,
+          bbox_y1: v.coordinates.y1,
+          bbox_x2: v.coordinates.x2,
+          bbox_y2: v.coordinates.y2,
+          ai_confidence: v.confidence,
+        })),
+      )
+      .select("id, title, description, code");
+
+    // Checklist AI pre-fill — same hook as the upload route. Only touches
+    // unanswered or unconfirmed-AI questions; never a human answer.
+    if (insertedFindings && insertedFindings.length > 0) {
+      try {
+        await prefillChecklistFromFindings(
+          supabase,
+          photo.inspection_id,
+          insertedFindings,
+          photo.id,
+        );
+      } catch (err) {
+        console.warn("[reanalyze] checklist prefill", err);
+      }
+    }
   }
   if (analysis.whatToLookFor.length > 0) {
     await supabase.from("what_to_look_for").insert(
