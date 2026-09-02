@@ -155,7 +155,12 @@ async function main() {
         const correctT = tokens(`${sc.correct} ${sc.q} ${sc.why ?? ""}`);
         const correctOverlap = overlap(ft, correctT);
         const bestDistractorOverlap = Math.max(0, ...sc.d.map((d) => overlap(ft, tokens(d))));
-        const hit = correctOverlap >= 3 && correctOverlap > bestDistractorOverlap;
+        // Scenes whose correct call is "no finding" (sev === "none") are a
+        // HIT when Chip reports nothing — the test there is restraint.
+        const hit =
+          sc.sev === "none"
+            ? res.analysis.violations.length === 0
+            : correctOverlap >= 3 && correctOverlap > bestDistractorOverlap;
         rows.push({
           id: sc.id,
           cat: sc.cat,
