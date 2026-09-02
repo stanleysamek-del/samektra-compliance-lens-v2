@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeImage } from "@/lib/ai/client";
+import { loadChecklistFocus } from "@/lib/checklists/focus";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import { formatCoachThread, type CoachTurn } from "@/lib/prompts/coach";
 import {
@@ -304,6 +305,7 @@ export async function POST(
     // for A/B testing.
     const coachTier =
       process.env.AI_COACH_TIER === "deep" ? "deep" : "default";
+    const checklistFocus = await loadChecklistFocus(supabase, photo.inspection_id);
     const result = await analyzeImage(
       base64,
       mimeType,
@@ -311,6 +313,7 @@ export async function POST(
       coachContext,
       [], // no two-stage focus hint for coach turns (already focused via conversation)
       orgRules,
+      checklistFocus,
     );
     analysis = result.analysis;
     aiProvider = result.provider;

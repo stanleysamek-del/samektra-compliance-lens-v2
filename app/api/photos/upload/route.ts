@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { analyzeImage, analyzeImageTwoStage } from "@/lib/ai/client";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
+import { loadChecklistFocus } from "@/lib/checklists/focus";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -179,6 +180,9 @@ export async function POST(request: NextRequest) {
 
   const base64 = Buffer.from(bytes).toString("base64");
   const useTwoStage = process.env.AI_TWO_STAGE === "1";
+  // Open checklist questions ride along so Chip knows what this walk is
+  // verifying (see formatChecklistFocus). Empty when no template.
+  const checklistFocus = await loadChecklistFocus(supabase, inspectionId);
 
   // Kick off both operations concurrently. We use allSettled so a
   // failure in one doesn't lose the result of the other (we need the
@@ -208,8 +212,8 @@ export async function POST(request: NextRequest) {
     Awaited<ReturnType<typeof analyzeImage>>
     | Awaited<ReturnType<typeof analyzeImageTwoStage>>
   > = useTwoStage
-    ? analyzeImageTwoStage(base64, file.type, "default", [], orgRules)
-    : analyzeImage(base64, file.type, "default", [], [], orgRules);
+    ? analyzeImageTwoStage(base64, file.type, "default", [], orgRules, checklistFocus)
+    : analyzeImage(base64, file.type, "default", [], [], orgRules, checklistFocus);
 
   // originalUploadPromise never rejects and its outcome is only a
   // side-effect (originalStoragePath cleared on failure) — settle it

@@ -25,6 +25,7 @@ import {
   CONTEXT_QUESTIONS_USER,
   formatUserContext,
   formatOrgRules,
+  formatChecklistFocus,
   type ContextAnswer,
 } from "@/lib/prompts/compliance";
 import {
@@ -98,6 +99,7 @@ export async function analyzeImage(
   userContext: ContextAnswer[] = [],
   focusCategories: DetectCategory[] = [],
   orgRules: string[] = [],
+  checklistQuestions: string[] = [],
 ): Promise<AnalyzeResult> {
   const start = Date.now();
   // Order: schema/instructions → focus hint → org house rules →
@@ -109,6 +111,7 @@ export async function analyzeImage(
     USER_QUERY +
     formatFocusHint(focusCategories) +
     formatOrgRules(orgRules) +
+    formatChecklistFocus(checklistQuestions) +
     formatUserContext(userContext);
 
   // Resolve the per-tier model id for each provider.
@@ -1144,6 +1147,7 @@ export async function analyzeImageTwoStage(
   tier: Tier = "default",
   userContext: ContextAnswer[] = [],
   orgRules: string[] = [],
+  checklistQuestions: string[] = [],
 ): Promise<TwoStageResult> {
   const start = Date.now();
   let detection: TwoStageResult["detection"] = null;
@@ -1174,6 +1178,7 @@ export async function analyzeImageTwoStage(
     userContext,
     focus,
     orgRules,
+    checklistQuestions,
   );
   // Override durationMs with the wall-clock time across BOTH stages so
   // callers see honest total latency, not just stage 2.

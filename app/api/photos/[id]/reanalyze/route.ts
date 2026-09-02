@@ -10,6 +10,7 @@ import {
 } from "@/lib/findings/preserve-ratings";
 import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
 import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
+import { loadChecklistFocus } from "@/lib/checklists/focus";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -159,7 +160,8 @@ export async function POST(
   let aiDurationMs = 0;
 
   try {
-    const result = await analyzeImage(base64, mimeType, tier, answers);
+    const checklistFocus = await loadChecklistFocus(supabase, photo.inspection_id);
+    const result = await analyzeImage(base64, mimeType, tier, answers, [], [], checklistFocus);
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;

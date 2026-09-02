@@ -443,3 +443,32 @@ export function formatOrgRules(rules: string[]): string {
   const lines = valid.map((r, i) => `${i + 1}. ${r}`).join("\n");
   return `\n\nORG-SPECIFIC HOUSE RULES (taught by this organization's inspectors — apply alongside the SPECIAL INSTRUCTIONS above whenever the photo's contents match the rule's premise. These represent accumulated experience from past inspections and should be treated as authoritative for this organization):\n${lines}\n`;
 }
+
+/**
+ * INSPECTION CHECKLIST focus block. When the inspection runs a checklist
+ * template (migration 0022), the open questions ride along on every photo
+ * so the model knows what THIS walk is verifying. Measured need: on real
+ * hospital photos the default prompt returned zero findings for an
+ * unmounted extinguisher, a missing self-closer, a missing splash guard —
+ * conditions a checklist names outright. Appended to the user message
+ * (not the cached system prompt) because it is per-inspection. Empty
+ * string when there are no questions so callers can concatenate safely.
+ */
+export function formatChecklistFocus(questions: string[]): string {
+  const valid = questions
+    .map((q) => (q ?? "").trim())
+    .filter((q) => q.length > 0)
+    .slice(0, 90);
+  if (valid.length === 0) return "";
+  const lines = valid.map((q) => `- ${q}`).join("\n");
+  return (
+    "\n\nINSPECTION CHECKLIST (the inspector is answering these Yes/No questions on this walk). " +
+    "If the photo shows evidence bearing on any of them, say so explicitly: report a deficiency as a " +
+    "finding and name the question it answers in the description (e.g. \"Checklist: Are fire " +
+    "extinguishers installed per code…\"). A visible condition that a question asks about counts even " +
+    "when it looks minor. Do NOT invent a condition just because a question exists — if the photo " +
+    "doesn't show it, don't report it.\n" +
+    lines +
+    "\n"
+  );
+}
