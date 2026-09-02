@@ -125,12 +125,25 @@ export async function analyzeImage(
   for (const provider of providers) {
     try {
       if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-        const { analysis, usage } = await callAnthropic(
-          imageBase64,
-          mimeType,
-          anthropicModel,
-          userPrompt,
-        );
+        // One retry on the same provider for transient failures — a
+        // malformed JSON reply (an unescaped quote in a description, seen
+        // ~1 in 40 real photos) or an overloaded/5xx response. NOT for
+        // timeouts: a second 70s attempt would blow the route's 90s
+        // budget, and the fallback providers are usually unconfigured, so
+        // without this retry one bad token meant "all providers failed"
+        // and zero findings for a perfectly good photo.
+        let attempt = 0;
+        let result: Awaited<ReturnType<typeof callAnthropic>> | null = null;
+        while (result === null) {
+          try {
+            result = await callAnthropic(imageBase64, mimeType, anthropicModel, userPrompt);
+          } catch (err) {
+            attempt += 1;
+            if (attempt >= 2 || !isRetryableModelError(err)) throw err;
+            console.warn("[ai] anthropic transient failure, retrying once:", (err as Error)?.message);
+          }
+        }
+        const { analysis, usage } = result;
         return {
           analysis,
           provider: "anthropic",
@@ -191,6 +204,17 @@ export async function analyzeImage(
   throw new AnalyzeError(
     "No AI provider configured. Set at least one of ANTHROPIC_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.",
   );
+}
+
+/**
+ * Errors worth ONE immediate retry on the same provider: the model
+ * returned unparseable JSON, or the API was overloaded / threw a 5xx.
+ * Aborts (our own timeout) and auth/4xx errors are not retried.
+ */
+function isRetryableModelError(err: unknown): boolean {
+  const msg = String((err as Error)?.message ?? err ?? "");
+  if (/aborted|AbortError/i.test(msg)) return false;
+  return /non-JSON|JSON at position|Unexpected token|Expected ',' or|overloaded|529|rate limit|\b50[0-4]\b/i.test(msg);
 }
 
 /** Resolve the provider chain from the AI_PROVIDER env var. */

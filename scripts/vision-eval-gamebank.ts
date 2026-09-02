@@ -109,7 +109,15 @@ async function main() {
         : track === "all"
           ? [...bank.SCENES, ...bank.CLINICAL_SCENES, ...bank.HARDCORE_SCENES]
           : bank.SCENES;
-  scenes = scenes.slice(offset, offset + limit);
+  // --ids a,b,c re-scores just those scenes (e.g. the ones that errored
+  // in a previous run) so a comparison stays apples-to-apples.
+  const idsArg = arg("--ids", "");
+  if (idsArg) {
+    const want = new Set(idsArg.split(",").map((x) => x.trim()).filter(Boolean));
+    scenes = scenes.filter((sc) => want.has(sc.id));
+  } else {
+    scenes = scenes.slice(offset, offset + limit);
+  }
   await fs.mkdir(out, { recursive: true });
   console.log(`Scoring ${scenes.length} ${track} scenes (tier=${tier}, concurrency=${concurrency})`);
 
