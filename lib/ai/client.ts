@@ -140,7 +140,19 @@ export async function analyzeImage(
           } catch (err) {
             attempt += 1;
             if (attempt >= 2 || !isRetryableModelError(err)) throw err;
-            console.warn("[ai] anthropic transient failure, retrying once:", (err as Error)?.message);
+            // Wait what Anthropic asked for on 429/529 (capped so the retry
+            // still fits the route's 90s budget), a short pause otherwise.
+            const hinted = (err as { retryAfterMs?: number }).retryAfterMs;
+            const status = (err as { status?: number }).status;
+            const waitMs = Math.min(
+              hinted ?? (status === 429 || status === 529 ? 8000 : 1500),
+              15000,
+            );
+            console.warn(
+              `[ai] anthropic transient failure (${status ?? "parse"}), retrying once in ${waitMs}ms:`,
+              (err as Error)?.message?.slice(0, 160),
+            );
+            await new Promise((r) => setTimeout(r, waitMs));
           }
         }
         const { analysis, usage } = result;
@@ -214,7 +226,7 @@ export async function analyzeImage(
 function isRetryableModelError(err: unknown): boolean {
   const msg = String((err as Error)?.message ?? err ?? "");
   if (/aborted|AbortError/i.test(msg)) return false;
-  return /non-JSON|JSON at position|Unexpected token|Expected ',' or|overloaded|529|rate limit|\b50[0-4]\b/i.test(msg);
+  return /non-JSON|JSON at position|Unexpected token|Expected ',' or|overloaded|rate.?limit|Anthropic (429|500|502|503|504|529)\b/i.test(msg);
 }
 
 /** Resolve the provider chain from the AI_PROVIDER env var. */
@@ -295,10 +307,20 @@ async function callAnthropic(
 
     if (!res.ok) {
       const body = await res.text();
-      throw new AnalyzeError(
+      // 429 / 529 carry a retry-after (seconds). Stash it on the error so
+      // the caller's single retry can wait what Anthropic asked for instead
+      // of hammering straight back.
+      const retryAfterHeader = res.headers.get("retry-after");
+      const err = new AnalyzeError(
         `Anthropic ${res.status}: ${body.slice(0, 500)}`,
         "anthropic",
-      );
+      ) as AnalyzeError & { retryAfterMs?: number; status?: number };
+      err.status = res.status;
+      err.retryAfterMs =
+        retryAfterHeader && Number.isFinite(Number(retryAfterHeader))
+          ? Number(retryAfterHeader) * 1000
+          : undefined;
+      throw err;
     }
 
     const data = (await res.json()) as {
