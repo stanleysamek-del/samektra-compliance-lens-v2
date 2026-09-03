@@ -23,7 +23,7 @@ export async function createInspection(formData: FormData) {
     redirect("/inspections/new?error=Facility%20name%20is%20required");
   }
 
-  const facility_address = clean(formData.get("facility_address"));
+  let facility_address = clean(formData.get("facility_address"));
   const location = clean(formData.get("location"));
   const inspector_name = clean(formData.get("inspector_name"));
   const manager_assigned = clean(formData.get("manager_assigned"));
@@ -35,27 +35,74 @@ export async function createInspection(formData: FormData) {
   // to that org so every team member sees it. Personal workspace = null.
   const currentOrg = await getCurrentOrg();
 
-  const { data, error } = await supabase
+  // Facility link (migration 0025). "" → none (legacy behavior), "__new__"
+  // → create a facility from the typed name, <uuid> → link + prefill the
+  // address when the inspector left it blank. Any failure here degrades to
+  // "no facility" so an inspection is never lost over a missing table.
+  const facilityChoice = clean(formData.get("facility_id"));
+  let facility_id: string | null = null;
+  if (facilityChoice === "__new__") {
+    const { data: created, error: facErr } = await supabase
+      .from("facilities")
+      .insert({
+        name: facility_name,
+        address: facility_address,
+        organization_id: currentOrg?.id ?? null,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+    if (facErr) console.warn("[createInspection] facility create skipped:", facErr.message);
+    else facility_id = created.id as string;
+  } else if (facilityChoice && /^[0-9a-f-]{36}$/i.test(facilityChoice)) {
+    const { data: fac, error: facErr } = await supabase
+      .from("facilities")
+      .select("id, address")
+      .eq("id", facilityChoice)
+      .maybeSingle();
+    if (facErr) console.warn("[createInspection] facility lookup skipped:", facErr.message);
+    else if (fac) {
+      facility_id = fac.id as string;
+      if (!facility_address && fac.address) facility_address = fac.address as string;
+    }
+  }
+
+  const baseRow = {
+    facility_name,
+    facility_address,
+    location,
+    inspector_name,
+    manager_assigned,
+    manager_assigned_email,
+    date_of_inspection,
+    date_assigned,
+    organization_id: currentOrg?.id ?? null,
+    status: "in_progress",
+  };
+
+  const row: Record<string, unknown> = { ...baseRow };
+  if (facility_id) row.facility_id = facility_id;
+
+  let { data, error } = await supabase
     .from("inspections")
-    .insert({
-      facility_name,
-      facility_address,
-      location,
-      inspector_name,
-      manager_assigned,
-      manager_assigned_email,
-      date_of_inspection,
-      date_assigned,
-      organization_id: currentOrg?.id ?? null,
-      status: "in_progress",
-    })
+    .insert(row)
     .select("id")
     .single();
 
-  if (error) {
+  // Pre-0025 database: the facility_id column doesn't exist. Retry without it.
+  if (error && facility_id && /facility_id/i.test(error.message ?? "")) {
+    console.warn("[createInspection] facility_id column missing — inserting without it");
+    ({ data, error } = await supabase
+      .from("inspections")
+      .insert(baseRow)
+      .select("id")
+      .single());
+  }
+
+  if (error || !data) {
     console.error("[createInspection]", error);
     redirect(
-      `/inspections/new?error=${encodeURIComponent(error.message ?? "Could not create inspection")}`,
+      `/inspections/new?error=${encodeURIComponent(error?.message ?? "Could not create inspection")}`,
     );
   }
 

@@ -10,6 +10,15 @@ import {
 } from "@/lib/exports/audit-sections";
 import { lswLinksForCitation } from "@/lib/lsw-links";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
+import { numberFindings } from "@/components/plans/pin-numbering";
+import {
+  PIN_COLORS,
+  PIN_SELECT,
+  PLAN_SELECT,
+  toPinRow,
+  type PinRow,
+  type PlanRow,
+} from "@/components/plans/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -97,6 +106,9 @@ export async function GET(
     photoList.forEach((p, i) => photoIndexById.set(p.id as string, i + 1));
 
     let allFindings: Finding[] = [];
+    // Inspection-wide finding numbers for the Plan-markup page (same rule
+    // as the on-screen plan legend: creation order across all photos).
+    let findingNumberById = new Map<string, number>();
     if (photoIds.length > 0) {
       const { data: findings } = await supabase
         .from("findings")
@@ -106,6 +118,12 @@ export async function GET(
         .in("photo_id", photoIds)
         .order("severity", { ascending: false })
         .order("created_at", { ascending: true });
+      findingNumberById = numberFindings(
+        (findings ?? []).map((f) => ({
+          id: f.id as string,
+          created_at: (f.created_at as string | null) ?? null,
+        })),
+      );
       allFindings = (findings ?? []).map((f) => {
         const pid = f.photo_id as string;
         const fAny = f as {
@@ -667,6 +685,214 @@ export async function GET(
         }
         cy -= 8;
       }
+    }
+
+    /* ========================= PLAN MARKUP ========================= */
+    // One page per facility plan that carries pins for THIS inspection:
+    // the plan image scaled to fit, a numbered circle at every pin, and a
+    // legend "N - finding title (Photo M)". Skips silently when the
+    // inspection has no facility, the facility has no plans, no pins were
+    // placed, or migration 0025 isn't applied (every read degrades).
+    try {
+      const { data: facRow, error: facErr } = await supabase
+        .from("inspections")
+        .select("facility_id")
+        .eq("id", inspectionId)
+        .maybeSingle();
+      const facilityId = facErr ? null : ((facRow?.facility_id as string | null) ?? null);
+      if (facilityId) {
+        const [{ data: planRows, error: planErr }, { data: pinRows, error: pinErr }] =
+          await Promise.all([
+            supabase
+              .from("facility_plans")
+              .select(PLAN_SELECT)
+              .eq("facility_id", facilityId)
+              .order("sort", { ascending: true })
+              .order("page", { ascending: true }),
+            supabase.from("plan_pins").select(PIN_SELECT).eq("inspection_id", inspectionId),
+          ]);
+        const plans = planErr ? [] : ((planRows ?? []) as PlanRow[]);
+        const pins: PinRow[] = pinErr
+          ? []
+          : ((pinRows ?? []) as Record<string, unknown>[]).map(toPinRow);
+        const findingById = new Map(allFindings.map((f) => [f.id, f]));
+        const photoLocationById = new Map<string, string | null>();
+        photoList.forEach((p) =>
+          photoLocationById.set(p.id as string, (p.photo_location as string | null) ?? null),
+        );
+
+        for (const plan of plans) {
+          const planPins = pins.filter((p) => p.plan_id === plan.id);
+          if (planPins.length === 0) continue;
+
+          // Resolve each pin to a number + legend line.
+          type Resolved = {
+            pin: PinRow;
+            number: number | null;
+            color: RGB;
+            legend: string;
+          };
+          const resolved: Resolved[] = planPins.map((pin) => {
+            if (pin.kind === "finding" && pin.finding_id) {
+              const f = findingById.get(pin.finding_id);
+              const n = findingNumberById.get(pin.finding_id) ?? null;
+              const photoLabel = f?.photo_index ? ` (Photo ${f.photo_index})` : "";
+              return {
+                pin,
+                number: n,
+                color: f ? severityColor(f.severity) : RED,
+                legend: `${n ?? "-"} - ${f?.title ?? "Finding"}${photoLabel}${pin.label ? ` - ${pin.label}` : ""}`,
+              };
+            }
+            if (pin.kind === "photo" && pin.photo_id) {
+              const idx = photoIndexById.get(pin.photo_id);
+              const loc = photoLocationById.get(pin.photo_id);
+              return {
+                pin,
+                number: null,
+                color: hexToRgb(PIN_COLORS.photo),
+                legend: `Photo ${idx ?? "?"}${loc ? ` - ${loc}` : ""}${pin.label ? ` - ${pin.label}` : ""}`,
+              };
+            }
+            return {
+              pin,
+              number: null,
+              color: hexToRgb(PIN_COLORS[pin.kind] ?? PIN_COLORS.note),
+              legend: `${pin.kind === "device" ? "Device" : "Note"}${pin.label ? ` - ${pin.label}` : ""}`,
+            };
+          });
+          resolved.sort((a, b) => (a.number ?? 9999) - (b.number ?? 9999));
+
+          let mpPage = pdf.addPage([PAGE_W, PAGE_H]);
+          let my = PAGE_H - MARGIN - 10;
+          mpPage.drawText(safeText(`Plan markup - ${plan.name}`), {
+            x: MARGIN,
+            y: my,
+            size: 14,
+            font: helvBold,
+            color: TEAL,
+          });
+          my -= 8;
+          mpPage.drawLine({
+            start: { x: MARGIN, y: my },
+            end: { x: COL_RIGHT, y: my },
+            thickness: 0.6,
+            color: TEAL,
+          });
+          my -= 14;
+
+          // Image: fit within the content width and leave room for the legend.
+          const LEGEND_RESERVE = Math.min(220, 40 + resolved.length * 13);
+          const maxW = PAGE_W - MARGIN * 2;
+          const maxH = my - MARGIN - LEGEND_RESERVE;
+          try {
+            const { data: blob } = await supabase.storage
+              .from("drawings")
+              .download(plan.storage_path);
+            if (blob) {
+              const buf = Buffer.from(await blob.arrayBuffer());
+              const isPng =
+                (blob.type || "").includes("png") || /\.png$/i.test(plan.storage_path);
+              const img = isPng ? await pdf.embedPng(buf) : await pdf.embedJpg(buf);
+              const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+              const w = img.width * scale;
+              const h = img.height * scale;
+              const x = MARGIN + (maxW - w) / 2;
+              const y = my - h;
+              mpPage.drawImage(img, { x, y, width: w, height: h });
+              mpPage.drawRectangle({
+                x,
+                y,
+                width: w,
+                height: h,
+                borderColor: SUBTLE,
+                borderWidth: 0.5,
+              });
+
+              for (const r of resolved) {
+                const cx = x + r.pin.x * w;
+                const cy = y + h - r.pin.y * h; // PDF y is bottom-up
+                const radius = r.number != null ? 9 : 5;
+                mpPage.drawCircle({
+                  x: cx,
+                  y: cy,
+                  size: radius,
+                  color: r.color,
+                  borderColor: rgb(1, 1, 1),
+                  borderWidth: 1.2,
+                });
+                if (r.number != null) {
+                  const label = String(r.number);
+                  const size = label.length > 2 ? 7 : 8.5;
+                  const tw = helvBold.widthOfTextAtSize(label, size);
+                  mpPage.drawText(label, {
+                    x: cx - tw / 2,
+                    y: cy - size * 0.36,
+                    size,
+                    font: helvBold,
+                    color: rgb(1, 1, 1),
+                  });
+                }
+              }
+              my = y - 16;
+            }
+          } catch (err) {
+            console.error("[pdf] plan embed failed", err);
+            mpPage.drawText(safeText("Plan image could not be embedded."), {
+              x: MARGIN,
+              y: my - 12,
+              size: 9,
+              font: helv,
+              color: MUTED,
+            });
+            my -= 30;
+          }
+
+          // Legend
+          mpPage.drawText(safeText("Legend"), {
+            x: MARGIN,
+            y: my,
+            size: 10,
+            font: helvBold,
+            color: FG,
+          });
+          my -= 14;
+          for (const r of resolved) {
+            if (my < MARGIN + 20) {
+              mpPage = pdf.addPage([PAGE_W, PAGE_H]);
+              my = PAGE_H - MARGIN - 10;
+              mpPage.drawText(safeText(`Plan markup - ${plan.name} (legend, continued)`), {
+                x: MARGIN,
+                y: my,
+                size: 11,
+                font: helvBold,
+                color: TEAL,
+              });
+              my -= 18;
+            }
+            mpPage.drawCircle({
+              x: MARGIN + 5,
+              y: my + 3,
+              size: 4,
+              color: r.color,
+            });
+            my = drawWrapped(
+              mpPage,
+              r.legend,
+              MARGIN + 16,
+              my,
+              PAGE_W - MARGIN * 2 - 16,
+              9,
+              helv,
+              FG,
+            );
+            my -= 2;
+          }
+        }
+      }
+    } catch (err) {
+      // Never let the plan page take the whole report down.
+      console.error("[pdf] plan markup skipped", err);
     }
 
     /* ========================= SIGN-OFF PAGE ========================= */

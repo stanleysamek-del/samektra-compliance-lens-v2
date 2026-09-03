@@ -16,6 +16,15 @@ import { LswLearnMore } from "@/components/lsw-learn-more";
 import { HelpTip } from "@/components/help-tip";
 import { DeletePhotoButton } from "@/components/delete-photo-button";
 import { PhotoBackLink } from "@/components/photo-back-link";
+import { PlaceOnPlanButton } from "@/components/plans/place-on-plan-button";
+import { PinList } from "@/components/plans/pin-list";
+import { numberFindings } from "@/components/plans/pin-numbering";
+import {
+  PIN_SELECT,
+  toPinRow,
+  type PinRow,
+  type ViewerPin,
+} from "@/components/plans/types";
 
 export default async function PhotoDetailPage({
   params,
@@ -223,6 +232,72 @@ export default async function PhotoDetailPage({
     .createSignedUrl(photo.storage_path, 60 * 60);
   const photoUrl = signed?.signedUrl ?? "";
 
+  // ---- Plan pins (migration 0025) --------------------------------------
+  // Every read here degrades to "no facility / no pins" when the column or
+  // tables don't exist yet, so this page never breaks pre-migration.
+  let facilityId: string | null = null;
+  {
+    const { data: facRow, error: facErr } = await supabase
+      .from("inspections")
+      .select("facility_id")
+      .eq("id", inspectionId)
+      .maybeSingle();
+    if (!facErr) facilityId = (facRow?.facility_id as string | null) ?? null;
+  }
+  let inspectionPins: PinRow[] = [];
+  const planNameById = new Map<string, string>();
+  const findingNumberById = new Map<string, number>();
+  if (facilityId) {
+    const [pinsRes, plansRes, allFindingsRes] = await Promise.all([
+      supabase.from("plan_pins").select(PIN_SELECT).eq("inspection_id", inspectionId),
+      supabase.from("facility_plans").select("id, name").eq("facility_id", facilityId),
+      supabase.from("findings").select("id, created_at").eq("inspection_id", inspectionId),
+    ]);
+    if (!pinsRes.error) {
+      inspectionPins = ((pinsRes.data ?? []) as Record<string, unknown>[]).map(toPinRow);
+    }
+    for (const p of plansRes.data ?? []) planNameById.set(p.id as string, p.name as string);
+    for (const [id, n] of numberFindings(
+      (allFindingsRes.data ?? []) as Array<{ id: string; created_at: string | null }>,
+    )) {
+      findingNumberById.set(id, n);
+    }
+  }
+  const pinByFindingId = new Map<string, PinRow>();
+  for (const p of inspectionPins) if (p.finding_id) pinByFindingId.set(p.finding_id, p);
+  const photoPin = inspectionPins.find((p) => p.kind === "photo" && p.photo_id === photoId) ?? null;
+  const photoPlanPins: ViewerPin[] = [];
+  for (const f of sortedFindings) {
+    const pin = pinByFindingId.get(f.id as string);
+    if (!pin) continue;
+    photoPlanPins.push({
+      id: pin.id,
+      kind: "finding",
+      x: pin.x,
+      y: pin.y,
+      label: pin.label,
+      number: findingNumberById.get(f.id as string) ?? null,
+      title: f.title as string,
+      subtitle: `${f.severity} · ${planNameById.get(pin.plan_id) ?? "Plan"}`,
+      href: `/inspections/${inspectionId}#plan-markup`,
+      severity: f.severity as "Low" | "Medium" | "High",
+    });
+  }
+  if (photoPin) {
+    photoPlanPins.push({
+      id: photoPin.id,
+      kind: "photo",
+      x: photoPin.x,
+      y: photoPin.y,
+      label: photoPin.label,
+      number: null,
+      title: photo.photo_location || "This photo",
+      subtitle: planNameById.get(photoPin.plan_id) ?? "Plan",
+      href: `/inspections/${inspectionId}#plan-markup`,
+    });
+  }
+  const planReadOnly = isInspectionCompleted || isViewer;
+
   // Full-resolution original (migration 0023) — nullable: older photos and
   // any upload where the best-effort original save failed have none. Mint
   // its own signed URL only when a path exists.
@@ -371,6 +446,47 @@ export default async function PhotoDetailPage({
           </p>
         ) : null}
 
+        {/* On the plan (migration 0025): pin THIS photo's location on the
+            facility's life-safety plan, plus the pins its findings already
+            have. Renders a one-line nudge when the inspection has no
+            facility; nothing at all pre-migration with no facility column. */}
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+                On the plan
+              </h3>
+              {facilityId ? (
+                <Link
+                  href={`/inspections/${inspectionId}#plan-markup`}
+                  className="text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+                >
+                  View plan markup →
+                </Link>
+              ) : null}
+            </div>
+            <PlaceOnPlanButton
+              facilityId={facilityId}
+              inspectionId={inspectionId}
+              kind="photo"
+              photoId={photo.id}
+              label={photo.photo_location || "This photo"}
+              existingPin={
+                photoPin
+                  ? { id: photoPin.id, planName: planNameById.get(photoPin.plan_id) ?? "plan" }
+                  : null
+              }
+              readOnly={planReadOnly}
+            />
+            {facilityId ? (
+              <PinList
+                pins={photoPlanPins}
+                emptyText="Nothing from this photo is on the plan yet — use “Place on plan” on a finding below."
+              />
+            ) : null}
+          </div>
+        </Card>
+
         {/* Per-photo "Not visible" dropdown — sits directly under the
             photo viewer for quick reference. Collapsed by default; expand
             to see each item and resolve/skip/reopen inline. Renders nothing
@@ -411,6 +527,17 @@ export default async function PhotoDetailPage({
                     index={idx}
                     photoUrl={photoUrl || null}
                     actionContext={actionContext}
+                    planContext={{
+                      facilityId,
+                      inspectionId,
+                      existingPin: (() => {
+                        const pin = pinByFindingId.get(f.id as string);
+                        return pin
+                          ? { id: pin.id, planName: planNameById.get(pin.plan_id) ?? "plan" }
+                          : null;
+                      })(),
+                      readOnly: planReadOnly,
+                    }}
                   />
                 </li>
               ))}

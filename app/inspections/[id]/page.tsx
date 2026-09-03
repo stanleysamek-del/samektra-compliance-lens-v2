@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { AnalysisProgress } from "@/components/analysis-progress";
 import { formatDuration } from "@/lib/format-duration";
 import {
   PhotoCardFindings,
@@ -24,6 +25,7 @@ import { HelpTip } from "@/components/help-tip";
 import { SubmitButton } from "@/components/submit-button";
 import { FinalizePreflight } from "@/components/finalize-preflight";
 import { ExportButtons } from "@/components/export-buttons";
+import { InspectionPlansSection } from "@/components/plans/inspection-plans-section";
 import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
 import { finalizeInspection } from "./actions";
@@ -88,15 +90,46 @@ export default async function InspectionDetailPage({
     }
 
     stage = "photos";
-    const { data: photos } = await supabase
+    // analysis_status / analysis_error arrive with migration 0024. Before
+    // it's applied the select errors on the unknown columns — re-select
+    // without them and treat every photo as 'done' (they were analyzed
+    // inline at upload).
+    const PHOTO_COLS =
+      "id, storage_path, photo_location, analyzed_at, created_at, section_id, sort_order";
+    let { data: photos, error: photosErr } = await supabase
       .from("photos")
-      .select(
-        "id, storage_path, photo_location, analyzed_at, created_at, section_id, sort_order",
-      )
+      .select(`${PHOTO_COLS}, analysis_status, analysis_error`)
       .eq("inspection_id", id)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
-    const photosList = photos ?? [];
+    if (photosErr && /analysis_status|analysis_error/.test(photosErr.message ?? "")) {
+      // Same row shape minus the two 0024 columns — widen so the
+      // destructure type-checks against the first select.
+      ({ data: photos, error: photosErr } = (await supabase
+        .from("photos")
+        .select(PHOTO_COLS)
+        .eq("inspection_id", id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false })) as unknown as {
+        data: typeof photos;
+        error: typeof photosErr;
+      });
+    }
+    if (photosErr) console.error("[inspection] photos query", photosErr.message);
+    type PhotoAnalysisState = "queued" | "analyzing" | "done" | "failed";
+    const photosList = (photos ?? []).map((p) => ({
+      ...p,
+      analysis_status: (String(
+        (p as { analysis_status?: string | null }).analysis_status ?? "done",
+      ) as PhotoAnalysisState),
+      analysis_error:
+        ((p as { analysis_error?: string | null }).analysis_error as string | null | undefined) ?? null,
+    }));
+    const analysisCounts = {
+      queued: photosList.filter((p) => p.analysis_status === "queued").length,
+      analyzing: photosList.filter((p) => p.analysis_status === "analyzing").length,
+      failed: photosList.filter((p) => p.analysis_status === "failed").length,
+    };
     // Hoisted so sections / not-visible / findings stages can all reference
     // it without re-declaring (which would also be a temporal-dead-zone error).
     const photoIds = photosList.map((p) => p.id);
@@ -367,6 +400,21 @@ export default async function InspectionDetailPage({
 
     const isCompleted = inspection.status === "completed";
 
+    // Facility link (migration 0025). Separate defensive select so the page
+    // keeps rendering before the migration exists — the main inspection
+    // select above deliberately doesn't include facility_id.
+    let facilityId: string | null = null;
+    try {
+      const { data: fac } = await supabase
+        .from("inspections")
+        .select("facility_id")
+        .eq("id", id)
+        .maybeSingle();
+      facilityId = ((fac as { facility_id?: string | null } | null)?.facility_id ?? null) as string | null;
+    } catch {
+      facilityId = null;
+    }
+
     // Finalize pre-flight inputs — what's still open before locking.
     const checklistScore = scoreItems(checklistItems);
     const unconfirmedAiCount = checklistItems.filter(
@@ -500,6 +548,10 @@ export default async function InspectionDetailPage({
             </>
           ) : null}
 
+          {/* "2 photos analyzing · 1 queued" — polls while anything is
+              pending and refreshes the page as each photo finishes. */}
+          <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
+
           {/* Checklist — the scored question set from the template chosen at
               creation. AI-flagged answers carry a confirm badge. */}
           {checklistItems.length > 0 ? (
@@ -509,6 +561,16 @@ export default async function InspectionDetailPage({
               readOnly={isCompleted}
             />
           ) : null}
+
+          {/* Life-safety plan markup (migration 0025): the facility's plans
+              with this inspection's numbered finding pins — move / relabel /
+              delete inline. Self-contained server component; degrades to a
+              "set a facility" nudge when the inspection has none. */}
+          <InspectionPlansSection
+            inspectionId={inspection.id}
+            facilityId={facilityId}
+            readOnly={isCompleted}
+          />
 
           {/* Photo-organization manager — sits above the photo grid so it's
               easy to add sections before/while shooting. Empty state nudges
@@ -611,9 +673,42 @@ export default async function InspectionDetailPage({
                                     </div>
                                     <div className="px-4 pb-2 pt-3">
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-[var(--fg)]">
-                                          {counts.total} finding{counts.total === 1 ? "" : "s"}
-                                        </span>
+                                        {p.analysis_status !== "done" ? (
+                                          <span
+                                            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                            style={
+                                              p.analysis_status === "failed"
+                                                ? { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
+                                                : p.analysis_status === "analyzing"
+                                                  ? { background: "rgba(184,118,42,0.12)", color: "#b8762a" }
+                                                  : { background: "rgba(15,21,24,0.06)", color: "var(--fg-muted)" }
+                                            }
+                                            title={
+                                              p.analysis_status === "failed"
+                                                ? p.analysis_error ?? "Analysis failed — open the photo to retry."
+                                                : p.analysis_status === "analyzing"
+                                                  ? "Chip is reading this photo now."
+                                                  : "Waiting for Chip — analysis starts as soon as there is room in line."
+                                            }
+                                          >
+                                            {p.analysis_status === "analyzing" ? (
+                                              <span
+                                                aria-hidden
+                                                className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+                                                style={{ background: "#b8762a" }}
+                                              />
+                                            ) : null}
+                                            {p.analysis_status === "failed"
+                                              ? "Failed"
+                                              : p.analysis_status === "analyzing"
+                                                ? "Analyzing…"
+                                                : "Queued"}
+                                          </span>
+                                        ) : (
+                                          <span className="text-sm font-medium text-[var(--fg)]">
+                                            {counts.total} finding{counts.total === 1 ? "" : "s"}
+                                          </span>
+                                        )}
                                         {counts.high > 0 ? (
                                           <span
                                             className="rounded-full px-2 py-0.5 text-[11px] font-medium"
@@ -626,6 +721,11 @@ export default async function InspectionDetailPage({
                                       {p.photo_location ? (
                                         <p className="mt-1 truncate text-xs text-[var(--fg-muted)]">
                                           {p.photo_location}
+                                        </p>
+                                      ) : null}
+                                      {p.analysis_status === "failed" && p.analysis_error ? (
+                                        <p className="mt-1 text-[11px] leading-snug" style={{ color: "#a8362b" }}>
+                                          {p.analysis_error}
                                         </p>
                                       ) : null}
                                       {/* AI analysis time — small mono caption so the user can

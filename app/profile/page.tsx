@@ -81,6 +81,11 @@ export default async function ProfilePage() {
               description="Share inspections with coworkers, manage members, and teach Chip house rules."
             />
             <WorkspaceLink
+              href="/facilities"
+              title="Facilities"
+              description="Buildings you inspect, with their life safety plans — pin findings on the plan."
+            />
+            <WorkspaceLink
               href="/templates"
               title="Checklist templates"
               description="The question sets an inspection follows. Duplicate a built-in or write your own."

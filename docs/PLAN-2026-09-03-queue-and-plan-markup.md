@@ -120,3 +120,69 @@ pdf-lib draws circles/text natively; no new dependency.
 3. Prompt iteration on the 13 persistent misses from the labeled eval
    (see memory / `scripts/vision-eval-gamebank.ts`) — each run costs ~$1.30
    and takes ~20 min single-file.
+
+
+## 5. Technician mode — devices with barcodes on the plan (next build)
+
+Stanley's ask (2026-09-02): "for fire extinguishers, emergency lights, exit
+signs, fire door inspections — the tech scans a barcode on the device and
+it shows the device's location on the LS plan (placed/edited manually the
+first time). Maybe tabs for Inspector / Technician."
+
+**Why the plan/pin model above already fits:** a pin is polymorphic
+(`kind = 'device'`), the plan belongs to the FACILITY (so it persists across
+rounds), and `assets` (migration 0026) carry the barcode + type + one pin.
+Nothing has to be re-modeled; the technician module is UI + per-type
+checklists on top of tables that exist now.
+
+**Scope boundary (Stanley, 2026-09-02): barcodes are ONLY for device rounds.** An EOC round, a loss-control survey, or any checklist-template walk has no barcode step at all — it stays photo-driven in Inspector mode, and findings are pinned on the plan by hand. Technician mode is a separate, additive workflow for the devices that DO carry labels (extinguishers, emergency lights, exit signs, fire doors…).
+
+**Two modes, one app.** A mode switch (header toggle, remembered per user
+in `profiles.default_mode`) changes the home screen and the mobile tab bar:
+- *Inspector*: Home · History · Upload · Findings · Actions (today's app).
+- *Technician*: Scan · Devices · Rounds · Due · Facilities.
+Both modes share facilities, plans, pins, exports, and the Team.
+
+**Scan flow.** `/scan` opens the camera: Android Chrome has the native
+`BarcodeDetector` API; iOS Safari doesn't, so fall back to `@zxing/browser`
+(CDN, dynamic import, same pattern as pdf.js). Result → look up
+`assets.barcode` within the facility (facility chosen once per round, or
+inferred from the last scan) → device page. Unknown barcode → "Register
+this device": pick type, label, snap a photo, **place it on the plan**
+(the same PlanViewer in place mode), save. Manual entry field for damaged
+labels.
+
+**Device page.** Type, label, location text, the plan thumbnail with its
+pin (tap → full viewer; move/delete as any pin), last result, next due,
+history list. Big buttons: *Inspect now*, *Report a problem* (creates a
+finding + action against the device, pinned automatically).
+
+**Per-type checklists live in code** like the inspection templates
+(`lib/assets/device-checklists.ts`): extinguisher monthly (NFPA 10 §7.2 —
+location/access, gauge, pin+seal, tag, condition), emergency light monthly
+30-second test + annual 90-minute (NFPA 101 §7.9.3), exit sign monthly/
+annual (§7.10.9), fire door annual (NFPA 80 §5.2 — the 13 items), pull
+station, eyewash weekly (ANSI Z358.1), AED monthly. Each answer set is
+snapshotted into `asset_inspections.checklist` so a device's history is
+exact even after the checklist changes.
+
+**Rounds.** "Start a round" = pick facility + device type(s) → the app
+lists devices in plan order (nearest-pin walk) with checkmarks as each is
+scanned; a round is an inspection row (`inspections.kind = 'round'`, new
+column) so it gets the same finalize/sign/export machinery; the PDF adds a
+device table (label, location, result, due). Missed devices are the
+report's first page — the point of a round is completeness.
+
+**Due dates.** `assets.next_due_at` is computed from the type's cadence
+after each inspection; the Technician home shows *Due this week / Overdue*
+per facility; the existing daily cron can email a weekly "devices due" list
+to the facility contact (reuse the action-notification mailer).
+
+**Barcodes themselves.** Any Code-128/QR label works. For facilities
+without labels the app can generate a printable sheet of QR codes
+(label + facility id) — cheap win, `qrcode` is already a dependency.
+
+**Build order (≈2 days):** mode switch + Devices list/detail + register-
+with-pin (½ day) → scan (BarcodeDetector + ZXing fallback) (½ day) →
+per-type checklists + asset_inspections + due dates (½ day) → rounds as
+inspections + PDF device table + due digest (½ day).

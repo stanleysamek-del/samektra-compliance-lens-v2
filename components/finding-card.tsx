@@ -16,6 +16,16 @@ import {
 } from "@/components/action-strip";
 import { showToast } from "@/components/toaster";
 import { severityColor } from "@/lib/severity";
+import { PlaceOnPlanButton } from "@/components/plans/place-on-plan-button";
+
+/** Everything "Place on plan" needs; the photo page passes it. */
+export type FindingPlanContext = {
+  facilityId: string | null;
+  inspectionId: string;
+  /** This finding's existing pin, when the page loaded one. */
+  existingPin?: { id: string; planName: string } | null;
+  readOnly?: boolean;
+};
 
 export type FindingRow = {
   id: string;
@@ -67,6 +77,7 @@ export function FindingCard({
   index,
   photoUrl,
   actionContext,
+  planContext,
 }: {
   finding: FindingRow;
   index: number;
@@ -80,6 +91,8 @@ export function FindingCard({
     currentUserId: string;
     readOnly?: boolean;
   };
+  /** If provided, renders the "Place on plan" control (migration 0025). */
+  planContext?: FindingPlanContext;
 }) {
   const initialBbox: Bbox | null =
     finding.bbox_x1 != null &&
@@ -426,6 +439,20 @@ export function FindingCard({
             </p>
           ) : null}
           <LswLinks code={finding.code} />
+          {planContext ? (
+            <div className="mt-1">
+              <PlaceOnPlanButton
+                facilityId={planContext.facilityId}
+                inspectionId={planContext.inspectionId}
+                kind="finding"
+                findingId={finding.id}
+                label={finding.title}
+                existingPin={planContext.existingPin ?? null}
+                readOnly={planContext.readOnly}
+                compact
+              />
+            </div>
+          ) : null}
         </div>
       )}
 

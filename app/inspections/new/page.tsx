@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { createInspection } from "./actions";
 import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
+import { FacilityPicker, type FacilityOption } from "./facility-picker";
 
 export default async function NewInspectionPage({
   searchParams,
@@ -33,6 +34,19 @@ export default async function NewInspectionPage({
     .select("id, name, occupancy")
     .order("name");
 
+  // Facilities (migration 0025) for the picker. An error — including the
+  // table not existing yet — degrades to "no facilities", which renders the
+  // form exactly as it was before facilities existed.
+  const { data: facilityRows } = await supabase
+    .from("facilities")
+    .select("id, name, address")
+    .order("name", { ascending: true });
+  const facilities: FacilityOption[] = (facilityRows ?? []).map((f) => ({
+    id: f.id as string,
+    name: f.name as string,
+    address: (f.address as string | null) ?? null,
+  }));
+
   return (
     <AppShell
       user={{
@@ -56,19 +70,9 @@ export default async function NewInspectionPage({
 
         <Card>
           <form action={createInspection} className="flex flex-col gap-4">
-            <div className="flex flex-col">
-              <label htmlFor="facility_name" className="cl-label">
-                Facility name <span style={{ color: "var(--danger)" }}>*</span>
-              </label>
-              <input
-                id="facility_name"
-                name="facility_name"
-                type="text"
-                required
-                placeholder="Mercy Health — Atlanta Campus"
-                className="cl-input"
-              />
-            </div>
+            {/* Facility select + facility_name input (the picker owns both
+                so choosing a facility prefills the name). */}
+            <FacilityPicker facilities={facilities} />
 
             <div className="flex flex-col">
               <label htmlFor="location" className="cl-label">

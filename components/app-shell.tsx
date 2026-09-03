@@ -35,6 +35,7 @@ const NAV: NavItem[] = [
     icon: <UploadIcon />,
     accent: true,
   },
+  { href: "/facilities", label: "Facilities", icon: <FacilitiesIcon /> },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
   { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
   { href: "/templates", label: "Templates", icon: <TemplatesIcon /> },
@@ -484,6 +485,26 @@ function FindingsIcon() {
         strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function FacilitiesIcon() {
+  // Simple building — the facility that owns the life-safety plans.
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 10h4a1 1 0 0 1 1 1v10M3 21h18"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 8h2M10.5 8h2M7.5 11.5h2M10.5 11.5h2M7.5 15h2M10.5 15h2M17.5 14h1M17.5 17h1M9 21v-3h2v3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
       />
     </svg>
   );

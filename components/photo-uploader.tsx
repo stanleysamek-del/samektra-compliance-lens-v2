@@ -14,21 +14,36 @@ type Props = {
 };
 
 /**
- * Multi-photo uploader with a sequential queue.
+ * Multi-photo uploader with a sequential upload queue + server-side
+ * analysis polling.
  *
  *  - Pick / shoot several photos at once; each becomes a row.
- *  - Files upload ONE AT A TIME (the route runs the AI per photo and is
- *    capped at 90s — parallel uploads would just queue on the server and
- *    make every timer lie).
- *  - The page does NOT navigate away. After each success we
- *    router.refresh() so the new photo card appears below, toast the
- *    finding count, and leave a "View analysis" link on the row.
+ *  - Files UPLOAD one at a time. The upload route saves the photo and
+ *    enqueues its analysis (migration 0024), answering in a second or two
+ *    with `{ queued: true, position }`. Each row then polls
+ *    /api/photos/[id]/status every 3s — "Queued (N ahead)" → "Chip is
+ *    analyzing…" → "N findings" / "Failed — Retry analysis" — so the next
+ *    file starts uploading while the previous one is still being read.
+ *  - The page does NOT navigate away. When a photo finishes we
+ *    router.refresh() so the new card appears below, toast the finding
+ *    count, and leave a "View analysis" link on the row.
  *  - NO automatic retry on the upload POST. A retried POST after a dropped
  *    connection can duplicate the photo AND the AI charge (the server has
- *    no idempotency key). Failed rows get a manual Retry button instead.
+ *    no idempotency key). Failed uploads get a manual Retry button; a photo
+ *    that uploaded but whose ANALYSIS failed gets "Retry analysis", which
+ *    re-queues the existing photo (no second upload).
+ *  - Pre-migration the route still answers `{ findingsCount }` inline and
+ *    the row goes straight to done.
  */
 
-type ItemStatus = "queued" | "uploading" | "analyzing" | "done" | "failed";
+type ItemStatus =
+  | "queued"
+  | "uploading"
+  | "saving"
+  | "server_queued"
+  | "server_analyzing"
+  | "done"
+  | "failed";
 
 type QueueItem = {
   id: string;
@@ -41,7 +56,9 @@ type QueueItem = {
   error?: string;
   photoId?: string;
   findingsCount?: number;
-  /** Wall-clock ms the upload + analysis took (set on done/failed). */
+  /** Place in the server queue while server_queued (0 = next up). */
+  position?: number;
+  /** Wall-clock ms from upload start to analysis settled (set on done/failed). */
   tookMs?: number;
   /** Date.now() when this item went in flight — drives the live timer. */
   startedAt?: number;
@@ -53,6 +70,9 @@ type QueueItem = {
 // 10 MB cap applies to those downscaled uploads, not the file picked.
 const MAX_BYTES = 40 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+
+const POLL_MS = 3000;
+const POLL_MAX_MS = 5 * 60 * 1000;
 
 // Rotating "thinking" messages shown while AI analysis is in flight.
 // Generic compliance-inspection language so they read sensibly regardless of
@@ -72,11 +92,21 @@ const THINKING_MESSAGES = [
   "Compiling a \"what to look for\" checklist for the on-site inspector…",
 ];
 
+type StatusJson = {
+  status?: "queued" | "analyzing" | "done" | "failed" | string;
+  error?: string | null;
+  findingsCount?: number;
+  position?: number | null;
+};
+
 let seq = 0;
 function nextId() {
   seq += 1;
   return `q${Date.now().toString(36)}-${seq}`;
 }
+
+const isInFlight = (s: ItemStatus) => s === "uploading" || s === "saving";
+const isServerPending = (s: ItemStatus) => s === "server_queued" || s === "server_analyzing";
 
 export function PhotoUploader({ inspectionId }: Props) {
   const router = useRouter();
@@ -94,16 +124,27 @@ export function PhotoUploader({ inspectionId }: Props) {
   const [now, setNow] = useState(0);
   // Guards the sequential pump so two triggers can't start two uploads.
   const pumpingRef = useRef(false);
+  // Item ids with a live status poll; cleared on unmount so a poll can't
+  // patch state into a dead component.
+  const pollingRef = useRef<Set<string>>(new Set());
+  const unmountedRef = useRef(false);
 
-  const active = queue.find((q) => q.status === "uploading" || q.status === "analyzing") ?? null;
-  const busy = active !== null;
+  // The preview panel follows the upload in flight, else the photo Chip
+  // is reading right now, else the first one waiting in line.
+  const active =
+    queue.find((q) => isInFlight(q.status)) ??
+    queue.find((q) => q.status === "server_analyzing") ??
+    queue.find((q) => q.status === "server_queued") ??
+    null;
+  const busy = queue.some((q) => isInFlight(q.status));
   const pendingCount = queue.filter((q) => q.status === "queued").length;
+  const serverPendingCount = queue.filter((q) => isServerPending(q.status)).length;
   const elapsedMs = active?.startedAt ? Math.max(0, now - active.startedAt) : 0;
 
   // Rotate the thinking message every 2.2s while analyzing. (Reset to 0
   // happens in processItem, an event context — not here.)
   useEffect(() => {
-    if (active?.status !== "analyzing") return;
+    if (active?.status !== "server_analyzing") return;
     const interval = setInterval(() => {
       setThinkingIdx((i) => (i + 1) % THINKING_MESSAGES.length);
     }, 2200);
@@ -128,6 +169,95 @@ export function PhotoUploader({ inspectionId }: Props) {
       update((prev) => prev.map((q) => (q.id === id ? { ...q, ...p } : q)));
     },
     [update],
+  );
+
+  const finishDone = useCallback(
+    (id: string, photoId: string, findingsCount: number | undefined, startedAt: number) => {
+      patch(id, {
+        status: "done",
+        photoId,
+        findingsCount,
+        position: undefined,
+        error: undefined,
+        tookMs: Date.now() - startedAt,
+      });
+      showToast({
+        kind: "success",
+        message:
+          findingsCount === undefined
+            ? "Photo analyzed."
+            : `Photo analyzed — ${findingsCount} finding${findingsCount === 1 ? "" : "s"}.`,
+      });
+      // Pull the new photo card into the page without leaving it.
+      router.refresh();
+    },
+    [patch, router],
+  );
+
+  /**
+   * Poll /api/photos/[id]/status until the analysis settles (or 5 minutes
+   * pass). Detached from the upload pump on purpose — the next file must
+   * start uploading while this one waits its turn on the server.
+   */
+  const pollStatus = useCallback(
+    (id: string, photoId: string, startedAt: number) => {
+      if (pollingRef.current.has(id)) return;
+      pollingRef.current.add(id);
+      const pollStart = Date.now();
+
+      const stop = () => pollingRef.current.delete(id);
+
+      const tick = async () => {
+        if (unmountedRef.current || !pollingRef.current.has(id)) return;
+        if (Date.now() - pollStart > POLL_MAX_MS) {
+          stop();
+          patch(id, {
+            status: "failed",
+            error:
+              "Still waiting on Chip after 5 minutes. The photo is saved — refresh the page to check on it, or tap Retry analysis.",
+            tookMs: Date.now() - startedAt,
+          });
+          return;
+        }
+        try {
+          const res = await fetch(`/api/photos/${photoId}/status`, { cache: "no-store" });
+          if (res.ok) {
+            const json = (await res.json()) as StatusJson;
+            if (unmountedRef.current || !pollingRef.current.has(id)) return;
+            if (json.status === "done") {
+              stop();
+              finishDone(id, photoId, json.findingsCount, startedAt);
+              return;
+            }
+            if (json.status === "failed") {
+              stop();
+              patch(id, {
+                status: "failed",
+                error: json.error ?? "Chip couldn't analyze this photo.",
+                position: undefined,
+                tookMs: Date.now() - startedAt,
+              });
+              // The card below shows the failed chip — refresh so it appears.
+              router.refresh();
+              return;
+            }
+            if (json.status === "analyzing") {
+              patch(id, { status: "server_analyzing", position: undefined });
+            } else {
+              const ahead =
+                typeof json.position === "number" && json.position > 0 ? json.position - 1 : 0;
+              patch(id, { status: "server_queued", position: ahead });
+            }
+          }
+        } catch {
+          // Network blip — keep polling.
+        }
+        setTimeout(tick, POLL_MS);
+      };
+
+      setTimeout(tick, POLL_MS);
+    },
+    [patch, finishDone, router],
   );
 
   const processItem = useCallback(
@@ -166,7 +296,7 @@ export function PhotoUploader({ inspectionId }: Props) {
         if (integrity.lng !== null) formData.append("exif_lng", String(integrity.lng));
         if (integrity.takenAt) formData.append("exif_taken_at", integrity.takenAt);
 
-        patch(item.id, { status: "analyzing" });
+        patch(item.id, { status: "saving" });
 
         // Single attempt, on purpose — see the header comment. If the
         // connection drops mid-request we cannot know whether the server
@@ -176,34 +306,36 @@ export function PhotoUploader({ inspectionId }: Props) {
           ok?: boolean;
           photoId?: string;
           findingsCount?: number;
+          queued?: boolean;
+          position?: number;
           error?: string;
         };
 
         if (!res.ok || !json.ok || !json.photoId) {
           patch(item.id, {
             status: "failed",
+            // A photoId on a failure means the upload landed and only the
+            // (inline) analysis failed — Retry analysis re-queues it.
+            photoId: json.photoId,
             error: json.error ?? `Upload failed (HTTP ${res.status}).`,
             tookMs: Date.now() - startedAt,
           });
+          if (json.photoId) router.refresh();
           return;
         }
 
+        if (json.queued) {
+          const ahead = typeof json.position === "number" ? json.position : 0;
+          patch(item.id, { status: "server_queued", photoId: json.photoId, position: ahead });
+          // Show the saved photo's card (with its Queued chip) right away.
+          router.refresh();
+          pollStatus(item.id, json.photoId, startedAt);
+          return;
+        }
+
+        // Inline (pre-queue) response — analysis already ran.
         const findingsCount = typeof json.findingsCount === "number" ? json.findingsCount : undefined;
-        patch(item.id, {
-          status: "done",
-          photoId: json.photoId,
-          findingsCount,
-          tookMs: Date.now() - startedAt,
-        });
-        showToast({
-          kind: "success",
-          message:
-            findingsCount === undefined
-              ? "Photo analyzed."
-              : `Photo analyzed — ${findingsCount} finding${findingsCount === 1 ? "" : "s"}.`,
-        });
-        // Pull the new photo card into the page without leaving it.
-        router.refresh();
+        finishDone(item.id, json.photoId, findingsCount, startedAt);
       } catch (err) {
         const raw = err instanceof Error ? err.message : "Upload failed";
         // Map low-level network errors to a friendly message. We do NOT
@@ -214,7 +346,7 @@ export function PhotoUploader({ inspectionId }: Props) {
         patch(item.id, { status: "failed", error: message, tookMs: Date.now() - startedAt });
       }
     },
-    [inspectionId, router, patch],
+    [inspectionId, router, patch, pollStatus, finishDone],
   );
 
   // The pump: start the next queued item when nothing is in flight, then
@@ -231,9 +363,13 @@ export function PhotoUploader({ inspectionId }: Props) {
     });
   }
 
-  // Revoke object URLs on unmount.
+  // Revoke object URLs + stop polls on unmount.
   useEffect(() => {
+    unmountedRef.current = false;
+    const polling = pollingRef.current;
     return () => {
+      unmountedRef.current = true;
+      polling.clear();
       for (const q of queueRef.current) URL.revokeObjectURL(q.previewUrl);
     };
   }, []);
@@ -292,7 +428,54 @@ export function PhotoUploader({ inspectionId }: Props) {
     pump();
   }
 
+  /**
+   * The photo is already saved; only its analysis failed. Re-queue it
+   * server-side (no second upload, no duplicate photo) and poll again.
+   */
+  const retryAnalysis = useCallback(async (id: string) => {
+    const item = queueRef.current.find((q) => q.id === id);
+    if (!item?.photoId) return;
+    const startedAt = Date.now();
+    setNow(startedAt);
+    patch(id, { status: "server_queued", error: undefined, tookMs: undefined, startedAt, position: undefined });
+    try {
+      const res = await fetch(`/api/photos/${item.photoId}/status`, { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as StatusJson & { ok?: boolean };
+      if (!res.ok || !json.ok) {
+        patch(id, {
+          status: "failed",
+          error: (json as { error?: string }).error ?? `Could not re-queue (HTTP ${res.status}).`,
+          tookMs: Date.now() - startedAt,
+        });
+        return;
+      }
+      if (json.status === "done") {
+        finishDone(id, item.photoId, json.findingsCount, startedAt);
+        return;
+      }
+      if (json.status === "failed") {
+        patch(id, {
+          status: "failed",
+          error: json.error ?? "Chip couldn't analyze this photo.",
+          tookMs: Date.now() - startedAt,
+        });
+        return;
+      }
+      const ahead = typeof json.position === "number" && json.position > 0 ? json.position - 1 : 0;
+      patch(id, { status: "server_queued", position: ahead });
+      router.refresh();
+      pollStatus(id, item.photoId, startedAt);
+    } catch (err) {
+      patch(id, {
+        status: "failed",
+        error: err instanceof Error ? err.message : "Could not re-queue the analysis.",
+        tookMs: Date.now() - startedAt,
+      });
+    }
+  }, [patch, finishDone, pollStatus, router]);
+
   function remove(id: string) {
+    pollingRef.current.delete(id);
     update((prev) => {
       const row = prev.find((q) => q.id === id);
       if (row) URL.revokeObjectURL(row.previewUrl);
@@ -323,6 +506,18 @@ export function PhotoUploader({ inspectionId }: Props) {
   const doneCount = queue.filter((q) => q.status === "done").length;
   const failedCount = queue.filter((q) => q.status === "failed").length;
 
+  let activeLine: string | null = null;
+  if (active) {
+    if (active.status === "uploading") activeLine = `Uploading ${active.name}…`;
+    else if (active.status === "saving") activeLine = "Saving photo…";
+    else if (active.status === "server_queued")
+      activeLine =
+        active.position && active.position > 0
+          ? `In line — ${active.position} photo${active.position === 1 ? "" : "s"} ahead…`
+          : "Next up — waiting for Chip…";
+    else activeLine = THINKING_MESSAGES[thinkingIdx];
+  }
+
   return (
     <Card variant="tinted-teal">
       <div className="flex flex-col gap-1">
@@ -331,8 +526,8 @@ export function PhotoUploader({ inspectionId }: Props) {
         </h2>
         <p className="text-xs text-[var(--fg-muted)]">
           Take several at once — they upload one after another and Chip
-          analyzes each the moment it lands. Aim for clear, straight-on
-          shots; bounding boxes get tighter that way.
+          analyzes each as soon as there is room in line. Aim for clear,
+          straight-on shots; bounding boxes get tighter that way.
         </p>
       </div>
 
@@ -417,29 +612,27 @@ export function PhotoUploader({ inspectionId }: Props) {
               alt="Uploading preview"
               className="h-full w-full object-contain"
             />
-            {/* Scanning beam animation */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <div
-                className="absolute left-0 right-0 h-[2px]"
-                style={{
-                  background:
-                    "linear-gradient(90deg, transparent, rgba(200,155,60,0.85), transparent)",
-                  boxShadow: "0 0 16px 4px rgba(200,155,60,0.55)",
-                  animation: "cl-scan 2.4s ease-in-out infinite",
-                }}
-              />
-            </div>
+            {/* Scanning beam animation — only while Chip is actually reading. */}
+            {active.status === "server_analyzing" ? (
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div
+                  className="absolute left-0 right-0 h-[2px]"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(200,155,60,0.85), transparent)",
+                    boxShadow: "0 0 16px 4px rgba(200,155,60,0.55)",
+                    animation: "cl-scan 2.4s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            ) : null}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-6">
               <div
                 className="flex items-center gap-2 text-xs font-medium text-white"
                 style={{ textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}
               >
                 <Spinner small />
-                {active.status === "uploading" ? (
-                  <span className="truncate">Uploading {active.name}…</span>
-                ) : (
-                  <span className="truncate">{THINKING_MESSAGES[thinkingIdx]}</span>
-                )}
+                <span className="truncate">{activeLine}</span>
               </div>
               <div
                 className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 tabular-nums"
@@ -458,8 +651,9 @@ export function PhotoUploader({ inspectionId }: Props) {
                   {formatDuration(elapsedMs)}
                 </span>
                 <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  · usually under 30 seconds per photo
-                  {pendingCount > 0 ? ` · ${pendingCount} more waiting` : ""}
+                  · usually under 30 seconds per photo once it&rsquo;s Chip&rsquo;s turn
+                  {pendingCount > 0 ? ` · ${pendingCount} more to upload` : ""}
+                  {serverPendingCount > 1 ? ` · ${serverPendingCount} in line` : ""}
                 </span>
               </div>
             </div>
@@ -475,6 +669,7 @@ export function PhotoUploader({ inspectionId }: Props) {
               {queue.length} photo{queue.length === 1 ? "" : "s"}
               {doneCount > 0 ? ` · ${doneCount} done` : ""}
               {failedCount > 0 ? ` · ${failedCount} failed` : ""}
+              {serverPendingCount > 0 ? ` · ${serverPendingCount} with Chip` : ""}
               {pendingCount > 0 ? ` · ${pendingCount} waiting` : ""}
             </span>
             {doneCount > 0 ? (
@@ -495,6 +690,7 @@ export function PhotoUploader({ inspectionId }: Props) {
                 inspectionId={inspectionId}
                 busy={busy}
                 onRetry={() => retry(q.id)}
+                onRetryAnalysis={() => void retryAnalysis(q.id)}
                 onRemove={() => remove(q.id)}
               />
             ))}
@@ -519,32 +715,47 @@ function QueueRow({
   inspectionId,
   busy,
   onRetry,
+  onRetryAnalysis,
   onRemove,
 }: {
   item: QueueItem;
   inspectionId: string;
   busy: boolean;
   onRetry: () => void;
+  onRetryAnalysis: () => void;
   onRemove: () => void;
 }) {
-  const retryable =
-    item.status === "failed" && ALLOWED.includes(item.file.type) && item.file.size <= MAX_BYTES;
+  // Upload never landed → re-upload. Upload landed, analysis failed →
+  // re-queue the saved photo (never a second upload).
+  const analysisRetryable = item.status === "failed" && Boolean(item.photoId);
+  const uploadRetryable =
+    item.status === "failed" &&
+    !item.photoId &&
+    ALLOWED.includes(item.file.type) &&
+    item.file.size <= MAX_BYTES;
   const statusLabel: Record<ItemStatus, string> = {
-    queued: "Waiting",
+    queued: "Waiting to upload",
     uploading: "Uploading…",
-    analyzing: "Chip is analyzing…",
+    saving: "Saving…",
+    server_queued:
+      item.position && item.position > 0
+        ? `Queued (${item.position} ahead)`
+        : "Queued (next up)",
+    server_analyzing: "Chip is analyzing…",
     done:
       item.findingsCount === undefined
         ? "Analyzed"
         : `${item.findingsCount} finding${item.findingsCount === 1 ? "" : "s"}`,
-    failed: "Failed",
+    failed: item.photoId ? "Analysis failed" : "Failed",
   };
+  const spinning =
+    item.status === "uploading" || item.status === "saving" || item.status === "server_analyzing";
   const tone =
     item.status === "done"
       ? "#607a3a"
       : item.status === "failed"
         ? "#a8362b"
-        : item.status === "queued"
+        : item.status === "queued" || item.status === "server_queued"
           ? "var(--fg-subtle)"
           : "#b8762a";
 
@@ -566,7 +777,7 @@ function QueueRow({
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="font-medium" style={{ color: tone }}>
-            {item.status === "uploading" || item.status === "analyzing" ? (
+            {spinning ? (
               <span className="inline-flex items-center gap-1">
                 <Spinner small dark />
                 {statusLabel[item.status]}
@@ -578,12 +789,12 @@ function QueueRow({
           {item.status === "done" && item.tookMs ? (
             <span className="text-[var(--fg-subtle)]">· {formatDuration(item.tookMs)}</span>
           ) : null}
-          {item.status === "done" && item.photoId ? (
+          {(item.status === "done" || isServerPending(item.status)) && item.photoId ? (
             <Link
               href={`/inspections/${inspectionId}/photos/${item.photoId}`}
               className="font-medium text-[var(--primary)] underline-offset-2 hover:underline"
             >
-              View analysis →
+              {item.status === "done" ? "View analysis →" : "View photo →"}
             </Link>
           ) : null}
         </div>
@@ -594,7 +805,15 @@ function QueueRow({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        {retryable ? (
+        {analysisRetryable ? (
+          <button
+            type="button"
+            onClick={onRetryAnalysis}
+            className="cl-btn-outline px-2.5 py-1 text-[11px]"
+          >
+            Retry analysis
+          </button>
+        ) : uploadRetryable ? (
           <button
             type="button"
             onClick={onRetry}
