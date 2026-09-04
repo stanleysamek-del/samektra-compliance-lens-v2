@@ -235,7 +235,10 @@ export async function POST(request: NextRequest) {
     ({ data: photo, error: photoErr } = await insertPhoto(photoRow));
   }
   if (photoErr || !photo) {
-    console.error("[upload] photo insert", photoErr);
+    console.error("[upload] photo insert", {
+      code: photoErr?.code,
+      message: photoErr?.message?.slice(0, 200),
+    });
     await supabase.storage
       .from("photos")
       .remove(originalStoragePath ? [storagePath, originalStoragePath] : [storagePath]);

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateContextQuestions } from "@/lib/ai/client";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
+import { assertAiBudget } from "@/lib/ai/budget";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -38,7 +39,7 @@ export async function POST(
 
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path, annotations")
+    .select("id, inspection_id, storage_path, annotations, created_by")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
@@ -77,7 +78,7 @@ export async function POST(
 
   const { data: inspection } = await supabase
     .from("inspections")
-    .select("id, status")
+    .select("id, status, organization_id")
     .eq("id", photo.inspection_id)
     .maybeSingle();
   if (!inspection) {
@@ -91,6 +92,15 @@ export async function POST(
       { ok: false, error: "Inspection is finalized" },
       { status: 409 },
     );
+  }
+
+  // Daily AI spend cap — metered against the photo's owner + the org.
+  const budget = await assertAiBudget(supabase, {
+    userId: (photo.created_by as string | null) ?? user.id,
+    orgId: inspection.organization_id as string | null,
+  });
+  if (!budget.ok) {
+    return NextResponse.json({ ok: false, error: budget.error }, { status: 429 });
   }
 
   // Download the photo bytes.

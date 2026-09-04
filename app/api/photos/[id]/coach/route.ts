@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeImage } from "@/lib/ai/client";
+import { assertAiBudget } from "@/lib/ai/budget";
 import { loadChecklistFocus } from "@/lib/checklists/focus";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import { formatCoachThread, type CoachTurn } from "@/lib/prompts/coach";
@@ -103,7 +104,7 @@ export async function POST(
   // ---- Load photo + parent inspection ----
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path, photo_location, annotations")
+    .select("id, inspection_id, storage_path, photo_location, annotations, created_by")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
@@ -126,6 +127,15 @@ export async function POST(
       { ok: false, error: "Inspection is finalized" },
       { status: 409 },
     );
+  }
+
+  // Daily AI spend cap — metered against the photo's owner + the org.
+  const budget = await assertAiBudget(supabase, {
+    userId: (photo.created_by as string | null) ?? user.id,
+    orgId: inspection.organization_id as string | null,
+  });
+  if (!budget.ok) {
+    return NextResponse.json({ ok: false, error: budget.error }, { status: 429 });
   }
 
   // ---- Load existing turns to build the conversation ----

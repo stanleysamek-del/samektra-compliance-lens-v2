@@ -92,6 +92,19 @@ export async function createPlans(input: {
     return { ok: false, error: "Nothing to save." };
   }
 
+  // The drawings bucket is facility-scoped (<facilityId>/<file>, 0025).
+  // A row pointing at another facility's folder would let the signed-URL
+  // helpers serve a plan the caller can't read from storage directly.
+  const prefix = `${input.facilityId}/`;
+  const validPath = (p: unknown) =>
+    typeof p === "string" && p.startsWith(prefix) && !p.includes("..");
+  for (const p of input.plans) {
+    if (!validPath(p.storagePath)) return { ok: false, error: "Invalid plan path" };
+    if (p.sourcePath != null && !validPath(p.sourcePath)) {
+      return { ok: false, error: "Invalid plan path" };
+    }
+  }
+
   // Append after the facility's existing plans so upload order is kept.
   const { data: last } = await supabase
     .from("facility_plans")

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendActionEmail } from "@/lib/email/send-action-notification";
+import { checkCronAuth } from "@/lib/cron-auth";
 
 /**
  * Daily corrective-action digest cron (vercel.json schedules it).
@@ -12,9 +13,11 @@ import { sendActionEmail } from "@/lib/email/send-action-notification";
  *     an email every single morning forever. The cadence is stateless —
  *     computed from the date gap — so no bookkeeping table is needed.
  *
- * Auth: when CRON_SECRET is set, Vercel sends it as a Bearer token on
- * cron invocations and we require it; unset (local dev), the route runs
- * open — it only sends emails, and only if Resend is also configured.
+ * Auth (lib/cron-auth.ts): when CRON_SECRET is set, Vercel sends it as a
+ * Bearer token on cron invocations and we require it (constant-time
+ * compare); unset in local dev the route runs open — it only sends
+ * emails, and only if Resend is also configured; unset in production it
+ * refuses with 500.
  *
  * Assignees are emailed at assigned_email (set on every assignment,
  * member or not — assignAction resolves member emails at assign time),
@@ -33,12 +36,9 @@ function shouldNudge(daysPast: number): boolean {
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const auth = checkCronAuth(request);
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
 
   const supabase = createServiceClient();

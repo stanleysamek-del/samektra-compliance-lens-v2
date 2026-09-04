@@ -106,6 +106,28 @@ export async function inviteMember(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Rate cap: 20 invites per inviter per hour. A compromised admin account
+  // (or a runaway script) shouldn't be able to turn Resend into a spam
+  // relay. invited_by defaults to auth.uid() on the row (0014), so the
+  // count is per caller, not per org.
+  const INVITES_PER_HOUR = 20;
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: recentInvites, error: countErr } = await supabase
+    .from("organization_invites")
+    .select("id", { count: "exact", head: true })
+    .eq("invited_by", user.id)
+    .gte("created_at", oneHourAgo);
+  if (countErr) {
+    console.error("[inviteMember] rate-cap count", {
+      code: countErr.code,
+      message: countErr.message?.slice(0, 200),
+    });
+  } else if ((recentInvites ?? 0) >= INVITES_PER_HOUR) {
+    membersError(
+      `You've sent ${INVITES_PER_HOUR} invites in the last hour — please wait a bit before inviting more`,
+    );
+  }
+
   // Insert the invite row AND select back the generated token so we can
   // build the link + send the email in one pass. The token is created
   // server-side via the gen_random_uuid default in the schema.
@@ -119,7 +141,7 @@ export async function inviteMember(formData: FormData) {
     .select("token")
     .maybeSingle();
   if (error) {
-    console.error("[inviteMember]", error);
+    console.error("[inviteMember]", { code: error.code, message: error.message?.slice(0, 200) });
     membersError(
       /duplicate|unique/i.test(error.message)
         ? `${emailRaw} already has a pending invite to this team`

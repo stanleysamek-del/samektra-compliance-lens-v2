@@ -19,8 +19,9 @@ import { createPlans, type NewPlanInput } from "@/app/actions/plans";
  * as a single plan.
  *
  * pdf.js is loaded on demand via a runtime `import()` that the bundler
- * cannot see (`new Function`), so it ships nothing until someone actually
- * drops a PDF.
+ * is told to leave alone (webpackIgnore / turbopackIgnore), so it ships
+ * nothing until someone actually drops a PDF — and it works under a CSP
+ * without 'unsafe-eval' (the previous `new Function` trick did not).
  * ===================================================================== */
 
 const PDFJS_VERSION = "4.10.38";
@@ -64,11 +65,18 @@ type PdfJsLib = {
 let pdfjsPromise: Promise<PdfJsLib> | null = null;
 function loadPdfJs(): Promise<PdfJsLib> {
   if (!pdfjsPromise) {
-    // Runtime dynamic import the bundler leaves alone.
-    const importer = new Function("u", "return import(u)") as (
-      u: string,
-    ) => Promise<PdfJsLib>;
-    pdfjsPromise = importer(PDFJS_URL)
+    // Runtime dynamic import the bundler leaves alone. Subresource
+    // Integrity can't be applied to a dynamic import() (no <script> tag
+    // to carry the hash), so the URL is version-pinned and the origin is
+    // allow-listed in the CSP. Vendoring pdfjs-dist is the follow-up that
+    // would remove the CDN dependency entirely.
+    pdfjsPromise = (
+      import(
+        /* webpackIgnore: true */
+        /* turbopackIgnore: true */
+        PDFJS_URL
+      ) as Promise<PdfJsLib>
+    )
       .then((lib) => {
         lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
         return lib;

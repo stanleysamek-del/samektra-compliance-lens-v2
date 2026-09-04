@@ -3,6 +3,7 @@ import { analyzeImage, analyzeImageTwoStage, type TwoStageResult } from "@/lib/a
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
 import { loadChecklistFocus } from "@/lib/checklists/focus";
+import { assertAiBudget } from "@/lib/ai/budget";
 
 /**
  * Analysis queue — the "analyze + persist" body that the upload route used
@@ -99,6 +100,15 @@ export function friendlyAnalysisError(raw: string): string {
   return trimmed.length > 160 ? `${trimmed.slice(0, 157)}…` : trimmed || "Analysis failed.";
 }
 
+/**
+ * Trimmed log shape for Supabase / PostgREST errors — the raw object echoes
+ * request details and row values, which don't belong in Vercel logs.
+ */
+function errShape(err: unknown): { code?: string; message?: string } {
+  const e = err as { code?: string; message?: string } | null;
+  return { code: e?.code, message: e?.message?.slice(0, 200) };
+}
+
 function mimeFromPath(path: string): string {
   const ext = path.toLowerCase().split(".").pop();
   if (ext === "png") return "image/png";
@@ -181,7 +191,7 @@ export async function runAnalysisForPhoto(
         ({ error }) => {
           if (error) console.warn("[analysis] ai_calls error row", error.message);
         },
-        (err) => console.warn("[analysis] ai_calls error row threw", err),
+        (err) => console.warn("[analysis] ai_calls error row threw", errShape(err)),
       );
     const updErr = await updatePhotoTolerant(supabase, photoId, {
       analysis_status: "failed",
@@ -190,6 +200,24 @@ export async function runAnalysisForPhoto(
     if (updErr) console.warn("[analysis] mark failed", updErr);
     return { ok: false, error: friendly, retryable };
   };
+
+  // ---- Daily AI spend cap (lib/ai/budget.ts) ----
+  // Checked before any bytes are pulled or money is spent. A photo over
+  // budget is marked failed with a plain-English reason and is NOT
+  // retryable — the worker would otherwise burn its attempts against a
+  // cap that won't lift until tomorrow.
+  const budget = await assertAiBudget(supabase, {
+    userId: createdBy,
+    orgId: inspection.organization_id as string | null,
+  });
+  if (!budget.ok) {
+    const updErr = await updatePhotoTolerant(supabase, photoId, {
+      analysis_status: "failed",
+      analysis_error: budget.error,
+    });
+    if (updErr) console.warn("[analysis] mark failed (budget)", updErr);
+    return { ok: false, error: budget.error, retryable: false };
+  }
 
   // ---- Org learned rules (Chip's memory) — same lookup the upload route ran ----
   let orgRules: string[] = [];
@@ -256,7 +284,10 @@ export async function runAnalysisForPhoto(
     aiCostUsd = result.usage.costUsd + detectCostUsd;
     aiDurationMs = result.durationMs;
   } catch (err) {
-    console.error("[analysis] analyze", photoId, err);
+    console.error("[analysis] analyze", photoId, {
+      code: (err as { code?: string })?.code,
+      message: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+    });
     return fail(err instanceof Error ? err.message : "AI analysis failed");
   }
 
@@ -279,7 +310,7 @@ export async function runAnalysisForPhoto(
       ({ error }) => {
         if (error) console.warn("[analysis] ai_calls success row", error.message);
       },
-      (err) => console.warn("[analysis] ai_calls success row threw", err),
+      (err) => console.warn("[analysis] ai_calls success row threw", errShape(err)),
     );
 
   // Bump times_applied on every rule that contributed to this analysis.

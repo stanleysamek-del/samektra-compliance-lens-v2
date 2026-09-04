@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { runWorker } from "@/lib/jobs/analysis";
+import { checkCronAuth } from "@/lib/cron-auth";
 
 /**
  * Analysis-queue worker (migration 0024).
@@ -13,10 +14,11 @@ import { runWorker } from "@/lib/jobs/analysis";
  * never waits for the cron; the cron (vercel.json, every minute) is the
  * guarantee that nothing is left behind when a function dies.
  *
- * Auth: same contract as /api/cron/overdue — when CRON_SECRET is set, a
- * `Bearer ${CRON_SECRET}` header is required; unset (local dev) the
- * route runs open. Vercel crons are GETs; POST is accepted for manual
- * triggers.
+ * Auth: same contract as /api/cron/overdue (lib/cron-auth.ts) — when
+ * CRON_SECRET is set, a `Bearer ${CRON_SECRET}` header is required
+ * (constant-time compare); unset in dev the route runs open; unset in
+ * production it refuses with 500. Vercel crons are GETs; POST is accepted
+ * for manual triggers.
  */
 
 export const runtime = "nodejs";
@@ -24,12 +26,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 async function handle(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const auth = checkCronAuth(request);
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
 
   const service = createServiceClient();

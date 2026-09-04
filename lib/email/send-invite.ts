@@ -54,9 +54,11 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{
   const link = `${SITE_URL}/team/invite/${input.token}`;
 
   if (!apiKey || !fromEmail) {
+    // Never log the full link — the token IS the credential. The admin can
+    // copy the link from the pending-invites list instead.
     console.warn(
       `[invite-email] RESEND_API_KEY / RESEND_FROM_EMAIL not set — skipping send. ` +
-        `Invite link for ${input.toEmail}: ${link}`,
+        `Recipient: ${input.toEmail}, token: ${input.token.slice(0, 6)}…`,
     );
     return { ok: true, skipped: true };
   }
@@ -129,6 +131,8 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{
         html,
         text,
       }),
+      // Don't let a hung provider pin a server action open indefinitely.
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
       const body = await res.text();
@@ -139,6 +143,10 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{
     }
     return { ok: true };
   } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      console.error("[invite-email] Resend timed out after 10s");
+      return { ok: false, error: "Email provider timed out" };
+    }
     console.error("[invite-email] send failed:", err);
     return {
       ok: false,

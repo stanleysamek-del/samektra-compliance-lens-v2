@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { checkCronAuth } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,21 +15,19 @@ export const dynamic = "force-dynamic";
  * Functions do NOT count. We hit BOTH /rest/v1/ and /auth/v1/health so we
  * exercise the database path (the one that actually matters for pausing).
  *
- * Authentication: when triggered by a Vercel cron, the request includes
- * `Authorization: Bearer ${CRON_SECRET}` (Vercel populates CRON_SECRET
- * automatically on deploy). We accept any GET when CRON_SECRET isn't set
- * so local dev / manual hits work, but in prod we require the header.
+ * Authentication (lib/cron-auth.ts): when triggered by a Vercel cron, the
+ * request includes `Authorization: Bearer ${CRON_SECRET}` (Vercel
+ * populates CRON_SECRET automatically on deploy). We accept any GET when
+ * CRON_SECRET isn't set in local dev so manual hits work; in production
+ * an unset secret is a misconfiguration and the route answers 500.
  */
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
+  const auth = checkCronAuth(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status },
+    );
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
