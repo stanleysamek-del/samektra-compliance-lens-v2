@@ -1,17 +1,13 @@
+import { persistAnalysis } from "@/lib/jobs/persist-analysis";
+import { requireInspectionWrite } from "@/lib/inspection-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeImage, type Tier } from "@/lib/ai/client";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import type { ContextAnswer } from "@/lib/prompts/compliance";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
-import {
-  snapshotRatings,
-  reapplyRatings,
-} from "@/lib/findings/preserve-ratings";
-import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
-import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
 import { loadChecklistFocus } from "@/lib/checklists/focus";
-import { assertAiBudget } from "@/lib/ai/budget";
+import { assertAiBudget, settleAiBudget } from "@/lib/ai/budget";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -60,12 +56,15 @@ export async function POST(
   // inspector drew, and treats them as visual hints.
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path, photo_location, annotations, created_by")
+    .select("id, inspection_id, storage_path, photo_location, annotations, created_by, analyzed_at")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
     return NextResponse.json({ ok: false, error: "Photo not found" }, { status: 404 });
   }
+
+  const access = await requireInspectionWrite(supabase, photo.inspection_id);
+  if (!access.ok) return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
 
   // Existing bboxes (Medium / High) to render alongside annotations.
   const { data: existingFindings } = await supabase
@@ -113,8 +112,9 @@ export async function POST(
 
   // Daily AI spend cap — metered against the photo's owner + the org.
   const budget = await assertAiBudget(supabase, {
-    userId: (photo.created_by as string | null) ?? user.id,
+    userId: user.id,
     orgId: inspection.organization_id as string | null,
+    tier: tier,
   });
   if (!budget.ok) {
     return NextResponse.json({ ok: false, error: budget.error }, { status: 429 });
@@ -167,11 +167,13 @@ export async function POST(
   let aiInputTokens = 0;
   let aiOutputTokens = 0;
   let aiCostUsd = 0;
+  let aiCostComplete = false;
   let aiDurationMs = 0;
 
   try {
     const checklistFocus = await loadChecklistFocus(supabase, photo.inspection_id);
     const result = await analyzeImage(base64, mimeType, tier, answers, [], [], checklistFocus);
+    aiCostComplete = result.costComplete === true;
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
@@ -199,126 +201,14 @@ export async function POST(
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 
-  // ---- Replace AI-generated findings only; preserve user-authored / edited rows ----
-  // A finding is "user-touched" when edited = true. That covers BOTH:
-  //   - custom findings inserted via addCustomFinding (edited: true, ai_confidence: null)
-  //   - AI findings the inspector subsequently edited via the FindingCard
-  // We delete only findings where edited IS NOT true (i.e. raw AI output that the
-  // user hasn't touched). Re-analysis then inserts the fresh AI batch alongside.
-  // First count what we're keeping so we can surface it in the response.
-  const { count: preservedCount } = await supabase
-    .from("findings")
-    .select("id", { count: "exact", head: true })
-    .eq("photo_id", photo.id)
-    .eq("edited", true);
+  if (aiCostComplete) await settleAiBudget(budget.reservationId, aiCostUsd);
 
-  // Snapshot thumbs ratings before delete so we can re-apply them to the
-  // new rows by matching title — otherwise re-analyze would silently wipe
-  // every thumbs-up / thumbs-down the inspector had set.
-  const ratingSnapshot = await snapshotRatings(supabase, photo.id);
-
-  // Auto-resolve punch-list items the fresh AI pass no longer flags.
-  // Must run BEFORE the delete so we can read the OPEN set.
-  const autoResolvedCount = await autoResolveClearedPunchListItems(
-    supabase,
-    photo.id,
-    analysis.notVisible.map((n) => ({ item: n.item })),
-  );
-
-  await supabase
-    .from("findings")
-    .delete()
-    .eq("photo_id", photo.id)
-    .or("edited.is.null,edited.eq.false");
-  await supabase.from("what_to_look_for").delete().eq("photo_id", photo.id);
-  // Wipe only the still-open not_visible rows so we preserve the audit
-  // trail of just-auto-resolved + previously-resolved/skipped items.
-  await supabase
-    .from("not_visible")
-    .delete()
-    .eq("photo_id", photo.id)
-    .eq("resolved", false)
-    .eq("skipped", false);
-
-  if (analysis.violations.length > 0) {
-    const { data: insertedFindings } = await supabase
-      .from("findings")
-      .insert(
-        analysis.violations.map((v) => ({
-          inspection_id: photo.inspection_id,
-          photo_id: photo.id,
-          title: v.title,
-          category: v.category,
-          code: v.code,
-          severity: v.severity,
-          description: v.description,
-          location: v.location,
-          remediation: v.remediation,
-          references: v.references,
-          bbox_x1: v.coordinates.x1,
-          bbox_y1: v.coordinates.y1,
-          bbox_x2: v.coordinates.x2,
-          bbox_y2: v.coordinates.y2,
-          ai_confidence: v.confidence,
-        })),
-      )
-      .select("id, title, description, code");
-
-    // Checklist AI pre-fill — same hook as the upload route. Only touches
-    // unanswered or unconfirmed-AI questions; never a human answer.
-    if (insertedFindings && insertedFindings.length > 0) {
-      try {
-        await prefillChecklistFromFindings(
-          supabase,
-          photo.inspection_id,
-          insertedFindings,
-          photo.id,
-        );
-      } catch (err) {
-        console.warn("[reanalyze] checklist prefill", err);
-      }
-    }
-  }
-  if (analysis.whatToLookFor.length > 0) {
-    await supabase.from("what_to_look_for").insert(
-      analysis.whatToLookFor.map((w) => ({
-        photo_id: photo.id,
-        inspection_id: photo.inspection_id,
-        item: w.item,
-        details: w.details,
-      })),
-    );
-  }
-  if (analysis.notVisible.length > 0) {
-    await supabase.from("not_visible").insert(
-      analysis.notVisible.map((n) => ({
-        photo_id: photo.id,
-        inspection_id: photo.inspection_id,
-        item: n.item,
-        reason: n.reason,
-      })),
-    );
-  }
-
-  // Restore inspector thumbs ratings onto matching new findings by title.
-  const restoredRatings = await reapplyRatings(
-    supabase,
-    photo.id,
-    ratingSnapshot,
-  );
-
-  // Update raw_analysis on the photo, including any inspector-provided
-  // context answers so the UI can surface what was clarified.
-  const enrichedAnalysis = answers.length > 0
-    ? { ...analysis, contextAnswers: answers }
-    : analysis;
-  await supabase
-    .from("photos")
-    .update({
-      raw_analysis: enrichedAnalysis,
-      analyzed_at: new Date().toISOString(),
-    })
-    .eq("id", photo.id);
+  const persisted = await persistAnalysis(supabase, photo.id, photo.inspection_id,
+    answers.length > 0 ? { ...analysis, contextAnswers: answers } : analysis, true, photo.analyzed_at ?? null);
+  if (!persisted.ok) return NextResponse.json({ ok: false, error: persisted.error }, { status: persisted.status });
+  const preservedCount = persisted.saved.preservedCount;
+  const restoredRatings = 0; // Rated findings retain their IDs and feedback.
+  const autoResolvedCount = 0; // Only an inspector can verify missing evidence.
 
   // Log the call
   await supabase.from("ai_calls").insert({
@@ -338,7 +228,7 @@ export async function POST(
     tier,
     model: aiModel,
     cost: aiCostUsd,
-    findingsCount: analysis.violations.length,
+    findingsCount: persisted.saved.findingsCount,
     contextUsed: answers.length,
     preservedUserFindings: preservedCount ?? 0,
     ratingsRestored: restoredRatings,

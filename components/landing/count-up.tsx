@@ -18,11 +18,14 @@ type Props = {
 export function CountUp({ to, duration = 1300, suffix = "", decimals = 0 }: Props) {
   const ref = useRef<HTMLSpanElement>(null);
   const [value, setValue] = useState(0);
-  const triggeredRef = useRef(false);
+
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+
+    let frame = 0;
+    let triggered = false;
 
     // Reduced motion → just show the final value immediately.
     if (
@@ -30,17 +33,16 @@ export function CountUp({ to, duration = 1300, suffix = "", decimals = 0 }: Prop
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      setValue(to);
-      return;
+      frame = requestAnimationFrame(() => setValue(to));
+      return () => cancelAnimationFrame(frame);
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
-          if (e.isIntersecting && !triggeredRef.current) {
-            triggeredRef.current = true;
+          if (e.isIntersecting && !triggered) {
+            triggered = true;
             const start = performance.now();
-            let frame = 0;
             const tick = (now: number) => {
               const t = Math.min(1, (now - start) / duration);
               const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
@@ -53,14 +55,14 @@ export function CountUp({ to, duration = 1300, suffix = "", decimals = 0 }: Prop
             };
             frame = requestAnimationFrame(tick);
             observer.disconnect();
-            return () => cancelAnimationFrame(frame);
+            return;
           }
         }
       },
       { threshold: 0.3 },
     );
     observer.observe(node);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, [to, duration]);
 
   return (

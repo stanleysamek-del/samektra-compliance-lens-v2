@@ -1,10 +1,10 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // Called by navigator.sendBeacon() from SessionGuard when the user signed in
 // without "remember me" and is closing the tab. Clears the Supabase session
 // cookie server-side. Returns 204 (sendBeacon ignores the response body).
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const supabase = await createClient();
     await supabase.auth.signOut();

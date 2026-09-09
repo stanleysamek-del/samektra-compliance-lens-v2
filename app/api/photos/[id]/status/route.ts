@@ -1,3 +1,4 @@
+import { requireInspectionWrite } from "@/lib/inspection-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -148,6 +149,9 @@ export async function POST(_request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: false, error: "Inspection is finalized" }, { status: 409 });
   }
   const inspectionId = photo.inspection_id as string;
+
+  const access = await requireInspectionWrite(supabase, inspectionId);
+  if (!access.ok) return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
 
   const service = createServiceClient();
   if (!service) {

@@ -42,3 +42,9 @@ next-env.d.ts
 
 # stray sandbox cleanup artifacts
 *.clean
+
+# Copied from the installed pdfjs-dist version by prebuild/predev
+/public/pdf.worker.min.mjs
+
+/test-results/
+/playwright-report/

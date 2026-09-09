@@ -34,6 +34,8 @@ type PhotoMeta = {
   location: string | null;
 };
 
+async function readClock() { return Date.now(); }
+
 export default async function AdminStatsPage() {
   const { user, profile } = await requireAdmin();
   const supabase = await createClient();
@@ -122,7 +124,7 @@ export default async function AdminStatsPage() {
   }
 
   // ---- Aggregations ----
-  const now = Date.now();
+  const now = await readClock();
   const day = 24 * 60 * 60 * 1000;
 
   const totals = sumWindow(calls, 0);

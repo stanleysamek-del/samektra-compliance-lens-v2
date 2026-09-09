@@ -1,9 +1,10 @@
+import { escalationReason } from "@/lib/ai/routing";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { analyzeImage, analyzeImageTwoStage, type TwoStageResult } from "@/lib/ai/client";
+import { analyzeImage } from "@/lib/ai/client";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
-import { prefillChecklistFromFindings } from "@/lib/checklists/engine";
+import { persistAnalysis } from "@/lib/jobs/persist-analysis";
 import { loadChecklistFocus } from "@/lib/checklists/focus";
-import { assertAiBudget } from "@/lib/ai/budget";
+import { assertAiBudget, settleAiBudget } from "@/lib/ai/budget";
 
 /**
  * Analysis queue — the "analyze + persist" body that the upload route used
@@ -145,7 +146,7 @@ export async function runAnalysisForPhoto(
   // ---- Load photo + inspection ----
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path, created_by")
+    .select("id, inspection_id, storage_path, created_by, analyzed_at")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
@@ -166,6 +167,14 @@ export async function runAnalysisForPhoto(
     .maybeSingle();
   if (!inspection) {
     return { ok: false, error: "Inspection not found", retryable: false };
+  }
+
+  if (inspection.status !== "in_progress") return { ok: false, error: "Inspection is finalized", retryable: false };
+  if (photo.analyzed_at) {
+    const { count, error } = await supabase.from("findings").select("id", { count: "exact", head: true }).eq("photo_id", photoId);
+    if (error) return { ok: false, error: "Could not check saved findings", retryable: true };
+    await updatePhotoTolerant(supabase, photoId, { analysis_status: "done", analysis_error: null });
+    return { ok: true, findingsCount: count ?? 0 };
   }
 
   // Records an ai_calls error row + marks the photo failed, then returns.
@@ -248,7 +257,6 @@ export async function runAnalysisForPhoto(
   // Open checklist questions ride along so Chip knows what this walk is
   // verifying (see formatChecklistFocus). Empty when no template.
   const checklistFocus = await loadChecklistFocus(supabase, inspectionId);
-  const useTwoStage = process.env.AI_TWO_STAGE === "1";
 
   // ---- Run the AI ----
   let analysis: ComplianceAnalysis;
@@ -259,30 +267,37 @@ export async function runAnalysisForPhoto(
   let aiCostUsd = 0;
   let aiDurationMs = 0;
   try {
-    const result = useTwoStage
-      ? await analyzeImageTwoStage(base64, mimeType, "default", [], orgRules, checklistFocus)
-      : await analyzeImage(base64, mimeType, "default", [], [], orgRules, checklistFocus);
-
-    // Two-stage adds a detect call whose cost is reported in result.detection.
-    let detectInputTokens = 0;
-    let detectOutputTokens = 0;
-    let detectCostUsd = 0;
-    const detection: TwoStageResult["detection"] = useTwoStage
-      ? ((result as TwoStageResult).detection ?? null)
-      : null;
-    if (detection) {
-      detectInputTokens = detection.usage.inputTokens;
-      detectOutputTokens = detection.usage.outputTokens;
-      detectCostUsd = detection.usage.costUsd;
+    const aiStart = Date.now();
+    let result = await analyzeImage(base64, mimeType, "default", [], [], orgRules, checklistFocus, 70_000);
+    const firstUsage = { ...result.usage };
+    const reason = escalationReason(result.analysis);
+    if (result.costComplete) await settleAiBudget(budget.reservationId, firstUsage.costUsd);
+    // Escalation is bounded by the remaining wall clock, plan, and another atomic reservation.
+    if (reason && budget.plan !== "pro" && Date.now() - aiStart < 40_000 && process.env.AI_AUTO_ESCALATE !== "0") {
+      const advanced = await assertAiBudget(supabase, { userId: createdBy, orgId: inspection.organization_id, tier: "deep" });
+      if (advanced.ok) {
+        try {
+          const deep = await analyzeImage(base64, mimeType, "deep", [], [], orgRules, checklistFocus,
+            Math.max(1000, 70_000 - (Date.now() - aiStart)));
+          if (deep.costComplete) await settleAiBudget(advanced.reservationId, deep.usage.costUsd);
+          result = { ...deep, usage: {
+            inputTokens: firstUsage.inputTokens + deep.usage.inputTokens,
+            outputTokens: firstUsage.outputTokens + deep.usage.outputTokens,
+            costUsd: firstUsage.costUsd + deep.usage.costUsd,
+          }, analysis: { ...deep.analysis, routing: { escalated: true, reason } } };
+        } catch {
+          result.analysis = { ...result.analysis, routing: { escalated: false, reason: "Advanced review was unavailable. Review these draft findings manually." } };
+        }
+      }
     }
-
+    const detectInputTokens = 0, detectOutputTokens = 0, detectCostUsd = 0;
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
     aiInputTokens = result.usage.inputTokens + detectInputTokens;
     aiOutputTokens = result.usage.outputTokens + detectOutputTokens;
     aiCostUsd = result.usage.costUsd + detectCostUsd;
-    aiDurationMs = result.durationMs;
+    aiDurationMs = Date.now() - aiStart;
   } catch (err) {
     console.error("[analysis] analyze", photoId, {
       code: (err as { code?: string })?.code,
@@ -290,6 +305,8 @@ export async function runAnalysisForPhoto(
     });
     return fail(err instanceof Error ? err.message : "AI analysis failed");
   }
+
+
 
   // ---- Persist ----
   await supabase
@@ -326,83 +343,9 @@ export async function runAnalysisForPhoto(
       );
   }
 
-  if (analysis.violations.length > 0) {
-    const { data: insertedFindings, error: findErr } = await supabase
-      .from("findings")
-      .insert(
-        analysis.violations.map((v) => ({
-          inspection_id: inspectionId,
-          photo_id: photoId,
-          created_by: createdBy,
-          title: v.title,
-          category: v.category,
-          code: v.code,
-          severity: v.severity,
-          description: v.description,
-          location: v.location,
-          remediation: v.remediation,
-          references: v.references,
-          bbox_x1: v.coordinates.x1,
-          bbox_y1: v.coordinates.y1,
-          bbox_x2: v.coordinates.x2,
-          bbox_y2: v.coordinates.y2,
-          ai_confidence: v.confidence,
-        })),
-      )
-      .select("id, title, description, code");
-    if (findErr) {
-      console.error("[analysis] findings insert", findErr.message);
-      return fail(`Could not save findings: ${findErr.message}`, true);
-    }
-
-    // Checklist AI pre-fill: file each finding under the best-matching
-    // open question (mark "no", link photo + finding). Best-effort —
-    // no-op when the inspection has no checklist.
-    if (insertedFindings && insertedFindings.length > 0) {
-      try {
-        await prefillChecklistFromFindings(supabase, inspectionId, insertedFindings, photoId);
-      } catch (err) {
-        console.warn("[analysis] checklist prefill", err);
-      }
-    }
-  }
-  if (analysis.whatToLookFor.length > 0) {
-    const { error } = await supabase.from("what_to_look_for").insert(
-      analysis.whatToLookFor.map((w) => ({
-        photo_id: photoId,
-        inspection_id: inspectionId,
-        item: w.item,
-        details: w.details,
-      })),
-    );
-    if (error) console.warn("[analysis] what_to_look_for insert", error.message);
-  }
-  if (analysis.notVisible.length > 0) {
-    const { error } = await supabase.from("not_visible").insert(
-      analysis.notVisible.map((n) => ({
-        photo_id: photoId,
-        inspection_id: inspectionId,
-        item: n.item,
-        reason: n.reason,
-      })),
-    );
-    if (error) console.warn("[analysis] not_visible insert", error.message);
-  }
-
-  const updErr = await updatePhotoTolerant(supabase, photoId, {
-    raw_analysis: analysis,
-    width: analysis.image.width,
-    height: analysis.image.height,
-    analyzed_at: new Date().toISOString(),
-    analysis_status: "done",
-    analysis_error: null,
-  });
-  if (updErr) {
-    console.error("[analysis] photo update", updErr);
-    return fail(`Could not save analysis: ${updErr}`, true);
-  }
-
-  return { ok: true, findingsCount: analysis.violations.length };
+  const persisted = await persistAnalysis(supabase, photoId, inspectionId, analysis);
+  if (!persisted.ok) return fail(persisted.error, persisted.status === 503);
+  return { ok: true, findingsCount: persisted.saved.findingsCount };
 }
 
 // ---- Worker -------------------------------------------------------------

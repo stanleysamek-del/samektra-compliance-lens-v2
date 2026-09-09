@@ -38,6 +38,9 @@ const NAV: NavItem[] = [
   { href: "/facilities", label: "Facilities", icon: <FacilitiesIcon /> },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
   { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
+  { href: "/schedules", label: "Schedules", icon: <HistoryIcon /> },
+  { href: "/assets", label: "Equipment", icon: <FacilitiesIcon /> },
+  { href: "/usage", label: "AI plan", icon: <ProfileIcon /> },
   { href: "/templates", label: "Templates", icon: <TemplatesIcon /> },
   { href: "/team", label: "Team", icon: <TeamIcon /> },
   { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
@@ -169,6 +172,12 @@ export function AppShell({ user, children }: Props) {
           </div>
         </div>
       </header>
+      <details className="border-b px-4 py-3 lg:hidden">
+        <summary className="cursor-pointer text-sm font-medium">Equipment, schedules &amp; more</summary>
+        <nav aria-label="Workspace tools" className="mt-3 flex flex-wrap gap-2">
+          {NAV.filter(item=>!MOBILE_NAV.some(m=>m.href===item.href)).map(item=><Link key={item.href} href={item.href} className="cl-btn-outline">{item.label}</Link>)}
+        </nav>
+      </details>
 
       <div className="mx-auto flex max-w-screen-2xl">
         {/* ===== Sidebar (desktop only) ===== */}

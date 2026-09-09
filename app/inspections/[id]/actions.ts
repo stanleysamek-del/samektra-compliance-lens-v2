@@ -71,16 +71,14 @@ export async function finalizeInspection(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
-    .from("inspections")
-    .update({ status })
-    .eq("id", inspectionId);
-
+  const { error } = await supabase.rpc("set_inspection_status_checked", {
+    _inspection_id: inspectionId, _status: status,
+  });
   if (error) {
-    console.error("[finalizeInspection]", error);
-    redirect(
-      `/inspections/${inspectionId}?error=${encodeURIComponent(error.message)}`,
-    );
+    const message = /set_inspection_status_checked|schema cache/i.test(error.message)
+      ? "Inspection safety update is not installed yet. Contact your administrator."
+      : friendlyError(error);
+    redirect(`/inspections/${inspectionId}?error=${encodeURIComponent(message)}`);
   }
 
   revalidatePath(`/inspections/${inspectionId}`);

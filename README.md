@@ -45,3 +45,8 @@ pnpm dev
 ```
 
 Then open `http://localhost:3000`.
+
+
+## September 8 equipment and paid-AI release
+
+See [the release handoff](docs/RELEASE-2026-09-08.md) for barcode/report import usage, migrations 0028?0032, paid plan activation, validation results, and remaining platform work. These changes require staged database verification before production deployment.

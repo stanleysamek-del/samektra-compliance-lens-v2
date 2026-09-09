@@ -1,3 +1,4 @@
+import { requireInspectionWrite } from "@/lib/inspection-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -53,6 +54,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const useAi = formData.get("analysis_mode") === "ai";
+
   const inspectionId = String(formData.get("inspection_id") ?? "");
   if (!inspectionId) {
     return NextResponse.json({ ok: false, error: "Missing inspection_id" }, { status: 400 });
@@ -69,6 +72,9 @@ export async function POST(request: NextRequest) {
   if (inspection.status === "completed") {
     return NextResponse.json({ ok: false, error: "Inspection is finalized" }, { status: 409 });
   }
+
+  const access = await requireInspectionWrite(supabase, inspectionId);
+  if (!access.ok) return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
 
   const file = formData.get("image");
   if (!(file instanceof File)) {
@@ -248,6 +254,15 @@ export async function POST(request: NextRequest) {
     );
   }
   const photoId = photo.id as string;
+
+  if (!useAi) {
+    const { error: manualError } = await supabase.from("photos").update({
+      analysis_status: "done", analyzed_at: new Date().toISOString(),
+      raw_analysis: { mode: "manual", summary: { text: "Manual capture. AI has not assessed this photo; add and verify findings yourself." } },
+    }).eq("id", photoId);
+    if (manualError) return NextResponse.json({ ok: false, photoId, error: "Photo saved, but manual capture status could not be saved. Please reopen it." }, { status: 503 });
+    return NextResponse.json({ ok: true, photoId, manual: true, findingsCount: 0 });
+  }
 
   // ---- Enqueue (service role) ----
   const service = preMigration ? null : createServiceClient();

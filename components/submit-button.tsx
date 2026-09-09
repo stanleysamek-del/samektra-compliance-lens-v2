@@ -13,9 +13,11 @@ export function SubmitButton({
   pendingLabel,
   className = "cl-btn-accent",
   confirmMessage,
+  disabled = false,
 }: {
   children: ReactNode;
   pendingLabel?: string;
+  disabled?: boolean;
   className?: string;
   /** If set, the click asks for confirmation before the form submits. */
   confirmMessage?: string;
@@ -24,7 +26,7 @@ export function SubmitButton({
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       aria-busy={pending}
       className={className}
       onClick={(e) => {

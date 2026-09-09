@@ -238,16 +238,6 @@ export default async function TeamDashboardPage({
     openPunchListCount = count ?? 0;
   }
 
-  // --- Photo count (just the number — for one tile).
-  let photoCount = 0;
-  if (inspectionIds.length > 0) {
-    const { count } = await supabase
-      .from("photos")
-      .select("id", { count: "exact", head: true })
-      .in("inspection_id", inspectionIds);
-    photoCount = count ?? 0;
-  }
-
   // --- Top facilities by inspection count.
   const facilityCounts = new Map<string, number>();
   for (const i of insps) {

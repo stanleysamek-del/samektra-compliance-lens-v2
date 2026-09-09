@@ -7,27 +7,8 @@ import { showToast } from "@/components/toaster";
 import { resizeImageForUpload } from "@/lib/resize-image";
 import { createPlans, type NewPlanInput } from "@/app/actions/plans";
 
-/* =====================================================================
- * PlanUploader — PDF or image → plan page(s) in the `drawings` bucket.
- *
- * PDFs are rasterized IN THE BROWSER with pdf.js from cdnjs (one PNG per
- * page, ~2000px on the long edge, capped at 6 pages) so the server never
- * has to parse a PDF. Each page uploads with the browser Supabase client
- * to <facilityId>/<uuid>-p<page>.png, the source PDF to
- * <facilityId>/<uuid>-source.pdf, and one createPlans() call records the
- * rows. Images go through the shared resize helper (≤ 3000px) and upload
- * as a single plan.
- *
- * pdf.js is loaded on demand via a runtime `import()` that the bundler
- * is told to leave alone (webpackIgnore / turbopackIgnore), so it ships
- * nothing until someone actually drops a PDF — and it works under a CSP
- * without 'unsafe-eval' (the previous `new Function` trick did not).
- * ===================================================================== */
-
-const PDFJS_VERSION = "4.10.38";
-const PDFJS_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.mjs`;
-const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
-
+// PDF pages are rendered locally using the installed, self-hosted pdf.js worker.
+// Uploads remain facility-scoped through Supabase Storage policies.
 const MAX_PAGES = 6;
 const PAGE_LONG_EDGE = 2000;
 const IMAGE_LONG_EDGE = 3000;
@@ -42,51 +23,10 @@ type Item = {
   progress: number; // 0..1
 };
 
-/* pdf.js surface we use — typed minimally so the CDN module stays untyped. */
-type PdfJsViewport = { width: number; height: number };
-type PdfJsPage = {
-  getViewport(opts: { scale: number }): PdfJsViewport;
-  render(opts: {
-    canvasContext: CanvasRenderingContext2D;
-    viewport: PdfJsViewport;
-  }): { promise: Promise<void> };
-  cleanup?: () => void;
-};
-type PdfJsDocument = {
-  numPages: number;
-  getPage(n: number): Promise<PdfJsPage>;
-  destroy?: () => Promise<void>;
-};
-type PdfJsLib = {
-  GlobalWorkerOptions: { workerSrc: string };
-  getDocument(src: { data: ArrayBuffer }): { promise: Promise<PdfJsDocument> };
-};
-
-let pdfjsPromise: Promise<PdfJsLib> | null = null;
-function loadPdfJs(): Promise<PdfJsLib> {
-  if (!pdfjsPromise) {
-    // Runtime dynamic import the bundler leaves alone. Subresource
-    // Integrity can't be applied to a dynamic import() (no <script> tag
-    // to carry the hash), so the URL is version-pinned and the origin is
-    // allow-listed in the CSP. Vendoring pdfjs-dist is the follow-up that
-    // would remove the CDN dependency entirely.
-    pdfjsPromise = (
-      import(
-        /* webpackIgnore: true */
-        /* turbopackIgnore: true */
-        PDFJS_URL
-      ) as Promise<PdfJsLib>
-    )
-      .then((lib) => {
-        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-        return lib;
-      })
-      .catch((err) => {
-        pdfjsPromise = null;
-        throw err;
-      });
-  }
-  return pdfjsPromise;
+async function loadPdfJs() {
+ const lib=await import("pdfjs-dist");
+ lib.GlobalWorkerOptions.workerSrc="/pdf.worker.min.mjs";
+ return lib;
 }
 
 function baseName(name: string) {
@@ -128,7 +68,9 @@ export function PlanUploader({ facilityId }: { facilityId: string }) {
       patch(item.id, { status: "rendering", detail: "Loading PDF engine…", progress: 0.05 });
       const pdfjs = await loadPdfJs();
       const data = await file.arrayBuffer();
-      const doc = await pdfjs.getDocument({ data: data.slice(0) }).promise;
+      const task = pdfjs.getDocument({ data: data.slice(0) });
+      const doc = await task.promise;
+      try {
       const pageCount = Math.min(doc.numPages, MAX_PAGES);
       if (doc.numPages > MAX_PAGES) {
         showToast({
@@ -162,7 +104,7 @@ export function PlanUploader({ facilityId }: { facilityId: string }) {
         if (!ctx) throw new Error("Canvas unavailable");
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
         const png = await canvasToPng(canvas);
         page.cleanup?.();
 
@@ -188,7 +130,7 @@ export function PlanUploader({ facilityId }: { facilityId: string }) {
         canvas.width = 0;
         canvas.height = 0;
       }
-      await doc.destroy?.();
+      } finally { await task.destroy(); }
     } else {
       patch(item.id, { status: "rendering", detail: "Preparing image…", progress: 0.1 });
       const resized = await resizeImageForUpload(file, IMAGE_LONG_EDGE, 0.9);

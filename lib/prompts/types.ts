@@ -63,6 +63,8 @@ export type ClarifyingQuestion = {
 
 export type ComplianceAnalysis = {
   schemaVersion: "1.1";
+  routing?: { escalated: boolean; reason: string };
+  contextAnswers?: Array<{ question: string; answer: string }>;
   summary: {
     text: string;
     confidence: number;

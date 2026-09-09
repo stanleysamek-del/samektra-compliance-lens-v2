@@ -1,8 +1,9 @@
+import { requireInspectionWrite } from "@/lib/inspection-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateContextQuestions } from "@/lib/ai/client";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
-import { assertAiBudget } from "@/lib/ai/budget";
+import { assertAiBudget, settleAiBudget } from "@/lib/ai/budget";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -45,6 +46,9 @@ export async function POST(
   if (photoErr || !photo) {
     return NextResponse.json({ ok: false, error: "Photo not found" }, { status: 404 });
   }
+
+  const access = await requireInspectionWrite(supabase, photo.inspection_id);
+  if (!access.ok) return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
 
   // Existing AI bboxes to render alongside annotations so the AI can see
   // both its prior calls and the inspector's markup.
@@ -96,8 +100,9 @@ export async function POST(
 
   // Daily AI spend cap — metered against the photo's owner + the org.
   const budget = await assertAiBudget(supabase, {
-    userId: (photo.created_by as string | null) ?? user.id,
+    userId: user.id,
     orgId: inspection.organization_id as string | null,
+    tier: "deep",
   });
   if (!budget.ok) {
     return NextResponse.json({ ok: false, error: budget.error }, { status: 429 });
@@ -144,6 +149,7 @@ export async function POST(
 
   try {
     const result = await generateContextQuestions(base64, mimeType);
+    if (result.costComplete) await settleAiBudget(budget.reservationId, result.usage.costUsd);
 
     // Log the call for cost dashboard.
     await supabase.from("ai_calls").insert({

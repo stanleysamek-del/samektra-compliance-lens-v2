@@ -16,13 +16,13 @@ import Link from "next/link";
 const TIERS = [
   {
     name: "Field",
-    tagline: "Try the AI on a real walk. Free means free.",
+    tagline: "Capture, inspect, and export without AI charges.",
     price: "$0",
     period: "forever",
     featured: false,
     includes: [
       "1 user · 1 facility",
-      "100 AI photo analyses / mo",
+      "Manual inspections + free guided demo",
       "Cited findings — code section included",
       "CAP, LSRA, ILSM + PDF exports",
       "No watermarks, ever",
@@ -40,13 +40,13 @@ const TIERS = [
     includes: [
       "Everything in Field",
       "Unlimited facilities",
-      "1,000 AI photo analyses / mo",
+      "Metered standard AI analysis credits",
       "Coach the AI + learned rules",
       "Your logo on reports",
       "Priority email support",
     ],
-    cta: "Go Pro",
-    href: "/signup",
+    cta: "Request Pro access",
+    href: "mailto:hello@compliancelens.app?subject=Compliance%20Lens%20Pro",
   },
   {
     name: "Facility",
@@ -60,7 +60,7 @@ const TIERS = [
       "Corrective-actions board + email nudges",
       "Team workspace + shared learned rules",
       "Signature sign-off on reports",
-      "Everything in Pro, org-wide",
+      "Standard + advanced AI, with shared usage limits",
     ],
     cta: "Start your building",
     href: "/signup",

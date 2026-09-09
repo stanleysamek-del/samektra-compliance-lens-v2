@@ -235,7 +235,7 @@ export function LandingHero() {
                   <span style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic", color: "#c89b3c", fontSize: 18, lineHeight: 1 }}>→</span>
                 </Link>
                 <a
-                  href="#workflow"
+                  href="/demo"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -250,7 +250,7 @@ export function LandingHero() {
                     textDecoration: "none",
                   }}
                 >
-                  See it work
+                  Try the free example
                   <span style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic", color: "#b8902f", fontSize: 18, lineHeight: 1 }}>↓</span>
                 </a>
               </div>

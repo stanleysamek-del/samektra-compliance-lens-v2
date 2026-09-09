@@ -1,15 +1,12 @@
+import { persistAnalysis } from "@/lib/jobs/persist-analysis";
+import { requireInspectionWrite } from "@/lib/inspection-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeImage } from "@/lib/ai/client";
-import { assertAiBudget } from "@/lib/ai/budget";
+import { assertAiBudget, settleAiBudget } from "@/lib/ai/budget";
 import { loadChecklistFocus } from "@/lib/checklists/focus";
 import { burnAnnotationsOnImage } from "@/lib/ai/burn-annotations";
 import { formatCoachThread, type CoachTurn } from "@/lib/prompts/coach";
-import {
-  snapshotRatings,
-  reapplyRatings,
-} from "@/lib/findings/preserve-ratings";
-import { autoResolveClearedPunchListItems } from "@/lib/findings/auto-resolve-punch-list";
 import type { ComplianceAnalysis } from "@/lib/prompts/types";
 
 export const runtime = "nodejs";
@@ -104,12 +101,15 @@ export async function POST(
   // ---- Load photo + parent inspection ----
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
-    .select("id, inspection_id, storage_path, photo_location, annotations, created_by")
+    .select("id, inspection_id, storage_path, photo_location, annotations, created_by, analyzed_at")
     .eq("id", photoId)
     .maybeSingle();
   if (photoErr || !photo) {
     return NextResponse.json({ ok: false, error: "Photo not found" }, { status: 404 });
   }
+  const access = await requireInspectionWrite(supabase, photo.inspection_id);
+  if (!access.ok) return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
+
 
   const { data: inspection } = await supabase
     .from("inspections")
@@ -131,7 +131,7 @@ export async function POST(
 
   // Daily AI spend cap — metered against the photo's owner + the org.
   const budget = await assertAiBudget(supabase, {
-    userId: (photo.created_by as string | null) ?? user.id,
+    userId: user.id,
     orgId: inspection.organization_id as string | null,
   });
   if (!budget.ok) {
@@ -287,6 +287,7 @@ export async function POST(
   let aiInputTokens = 0;
   let aiOutputTokens = 0;
   let aiCostUsd = 0;
+  let aiCostComplete = false;
   let aiDurationMs = 0;
 
   // Fetch org house rules so Chip applies team-taught knowledge on every
@@ -325,6 +326,7 @@ export async function POST(
       orgRules,
       checklistFocus,
     );
+    aiCostComplete = result.costComplete === true;
     analysis = result.analysis;
     aiProvider = result.provider;
     aiModel = result.model;
@@ -372,6 +374,8 @@ export async function POST(
     );
   }
 
+  if (aiCostComplete) await settleAiBudget(budget.reservationId, aiCostUsd);
+
   // ---- Log the successful AI call (so we can link the turn to it) ----
   const { data: callRow } = await supabase
     .from("ai_calls")
@@ -389,99 +393,12 @@ export async function POST(
     .select("id")
     .maybeSingle();
 
-  // ---- Replace AI-generated findings only; preserve user-authored / edited ----
-  const { count: preservedCount } = await supabase
-    .from("findings")
-    .select("id", { count: "exact", head: true })
-    .eq("photo_id", photo.id)
-    .eq("edited", true);
-
-  // Snapshot the thumbs ratings BEFORE we delete so we can re-apply them
-  // to the freshly-inserted rows below — otherwise the inspector's feedback
-  // would silently vanish on every re-analysis.
-  const ratingSnapshot = await snapshotRatings(supabase, photo.id);
-
-  // Auto-resolve any punch-list items the fresh AI pass no longer flags
-  // (Chip can now see what it couldn't before). Do this BEFORE deleting
-  // the not_visible rows — the function reads the OPEN set + checks
-  // which titles are present in the new analysis.notVisible array.
-  const autoResolvedCount = await autoResolveClearedPunchListItems(
-    supabase,
-    photo.id,
-    analysis.notVisible.map((n) => ({ item: n.item })),
-  );
-
-  await supabase
-    .from("findings")
-    .delete()
-    .eq("photo_id", photo.id)
-    .or("edited.is.null,edited.eq.false");
-  await supabase.from("what_to_look_for").delete().eq("photo_id", photo.id);
-  // Only delete the NOT-already-resolved/skipped/just-auto-resolved rows.
-  // Otherwise we'd wipe the audit trail we just created.
-  await supabase
-    .from("not_visible")
-    .delete()
-    .eq("photo_id", photo.id)
-    .eq("resolved", false)
-    .eq("skipped", false);
-
-  if (analysis.violations.length > 0) {
-    await supabase.from("findings").insert(
-      analysis.violations.map((v) => ({
-        inspection_id: photo.inspection_id,
-        photo_id: photo.id,
-        title: v.title,
-        category: v.category,
-        code: v.code,
-        severity: v.severity,
-        description: v.description,
-        location: v.location,
-        remediation: v.remediation,
-        references: v.references,
-        bbox_x1: v.coordinates.x1,
-        bbox_y1: v.coordinates.y1,
-        bbox_x2: v.coordinates.x2,
-        bbox_y2: v.coordinates.y2,
-        ai_confidence: v.confidence,
-      })),
-    );
-  }
-  if (analysis.whatToLookFor.length > 0) {
-    await supabase.from("what_to_look_for").insert(
-      analysis.whatToLookFor.map((w) => ({
-        photo_id: photo.id,
-        inspection_id: photo.inspection_id,
-        item: w.item,
-        details: w.details,
-      })),
-    );
-  }
-  if (analysis.notVisible.length > 0) {
-    await supabase.from("not_visible").insert(
-      analysis.notVisible.map((n) => ({
-        photo_id: photo.id,
-        inspection_id: photo.inspection_id,
-        item: n.item,
-        reason: n.reason,
-      })),
-    );
-  }
-
-  // Restore inspector thumbs ratings onto matching new findings by title.
-  const restoredRatings = await reapplyRatings(
-    supabase,
-    photo.id,
-    ratingSnapshot,
-  );
-
-  await supabase
-    .from("photos")
-    .update({
-      raw_analysis: analysis,
-      analyzed_at: new Date().toISOString(),
-    })
-    .eq("id", photo.id);
+  const persisted = await persistAnalysis(supabase, photo.id, photo.inspection_id,
+    analysis, true, photo.analyzed_at ?? null);
+  if (!persisted.ok) return NextResponse.json({ ok: false, error: persisted.error }, { status: persisted.status });
+  const preservedCount = persisted.saved.preservedCount;
+  const restoredRatings = 0; // Rated findings retain their IDs and feedback.
+  const autoResolvedCount = 0; // Only an inspector can verify missing evidence.
 
   // ---- Insert the AI turn — text comes from analysis.summary.text ----
   const aiText =
@@ -489,7 +406,7 @@ export async function POST(
     `Re-analyzed with your hint. Updated findings (${analysis.violations.length}).`;
 
   const aiMeta = {
-    findingsCount: analysis.violations.length,
+    findingsCount: persisted.saved.findingsCount,
     findingsPreserved: preservedCount ?? 0,
     ratingsRestored: restoredRatings,
     autoResolvedPunchList: autoResolvedCount,
@@ -536,7 +453,7 @@ export async function POST(
     photoId: photo.id,
     inspectorTurnIndex,
     aiTurnIndex,
-    findingsCount: analysis.violations.length,
+    findingsCount: persisted.saved.findingsCount,
     preservedCount: preservedCount ?? 0,
     costUsd: aiCostUsd,
     durationMs: aiDurationMs,
@@ -548,7 +465,7 @@ export async function POST(
     inspectorTurn: inspectorTurnRow,
     aiTurn: aiTurnRow ?? null,
     aiTurnInsertError: aiTurnErr?.message ?? null,
-    findingsCount: analysis.violations.length,
+    findingsCount: persisted.saved.findingsCount,
     preservedUserFindings: preservedCount ?? 0,
     model: aiModel,
     costUsd: aiCostUsd,

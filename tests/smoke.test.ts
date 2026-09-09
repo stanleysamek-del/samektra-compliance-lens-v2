@@ -62,7 +62,8 @@ describe("autoResolveClearedPunchListItems", () => {
         select: () => ({
           eq: () => ({
             eq: () => ({
-              eq: () => Promise.resolve({ data: null, error: { message: "boom" } }),
+              eq: () =>
+                Promise.resolve({ data: null, error: { message: "boom" } }),
             }),
           }),
         }),
@@ -70,7 +71,9 @@ describe("autoResolveClearedPunchListItems", () => {
     };
     // Cast through unknown so we don't have to mock the full SupabaseClient type.
     const result = await autoResolveClearedPunchListItems(
-      fakeSupabase as unknown as Parameters<typeof autoResolveClearedPunchListItems>[0],
+      fakeSupabase as unknown as Parameters<
+        typeof autoResolveClearedPunchListItems
+      >[0],
       "photo-id",
       [{ item: "anything" }],
     );

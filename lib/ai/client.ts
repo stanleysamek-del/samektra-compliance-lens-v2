@@ -10,8 +10,8 @@
  *                 Google:    Gemini 2.5 Pro (~$0.008-0.025/photo).
  *
  * Provider order is controlled by the AI_PROVIDER env var:
- *   AI_PROVIDER=anthropic   → Anthropic, then Google, then OpenAI (default)
- *   AI_PROVIDER=google      → Google,   then Anthropic, then OpenAI
+ *   AI_PROVIDER=anthropic   → Anthropic, then Google, then OpenAI
+ *   AI_PROVIDER=google      → Google,   then Anthropic, then OpenAI (default)
  *   AI_PROVIDER=openai      → OpenAI,   then Anthropic, then Google
  *
  * If the chosen provider fails (5xx, timeout, malformed JSON), we fall
@@ -79,6 +79,7 @@ export type AnalyzeResult = {
   durationMs: number;
   usage: Usage;
   tier: Tier;
+  costComplete?: boolean;
 };
 
 export class AnalyzeError extends Error {
@@ -100,8 +101,10 @@ export async function analyzeImage(
   focusCategories: DetectCategory[] = [],
   orgRules: string[] = [],
   checklistQuestions: string[] = [],
+  budgetMs = REQUEST_TIMEOUT_MS,
 ): Promise<AnalyzeResult> {
   const start = Date.now();
+  const remainingMs = () => Math.max(1, Math.min(REQUEST_TIMEOUT_MS, budgetMs) - (Date.now() - start));
   // Order: schema/instructions → focus hint → org house rules →
   // inspector context. Inspector context comes LAST because it's
   // authoritative for this specific photo and should be the freshest
@@ -118,11 +121,12 @@ export async function analyzeImage(
   const anthropicModel = tier === "deep" ? SONNET_MODEL : HAIKU_MODEL;
   const googleModel = tier === "deep" ? GEMINI_PRO_MODEL : GEMINI_FLASH_MODEL;
 
-  // Build the provider try-order from AI_PROVIDER env (default Anthropic).
+  // Build the provider try-order from AI_PROVIDER env (default Google).
   const providers = providerChainFromEnv();
 
   const errors: Array<{ provider: Provider; err: unknown }> = [];
   for (const provider of providers) {
+    if (remainingMs() < 1000) break;
     try {
       if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
         // One retry on the same provider for transient failures — a
@@ -136,7 +140,7 @@ export async function analyzeImage(
         let result: Awaited<ReturnType<typeof callAnthropic>> | null = null;
         while (result === null) {
           try {
-            result = await callAnthropic(imageBase64, mimeType, anthropicModel, userPrompt);
+            result = await callAnthropic(imageBase64, mimeType, anthropicModel, userPrompt, remainingMs());
           } catch (err) {
             attempt += 1;
             if (attempt >= 2 || !isRetryableModelError(err)) throw err;
@@ -152,6 +156,7 @@ export async function analyzeImage(
               `[ai] anthropic transient failure (${status ?? "parse"}), retrying once in ${waitMs}ms:`,
               (err as Error)?.message?.slice(0, 160),
             );
+            if (remainingMs() < waitMs + 1000) throw err;
             await new Promise((r) => setTimeout(r, waitMs));
           }
         }
@@ -162,6 +167,7 @@ export async function analyzeImage(
           model: anthropicModel,
           durationMs: Date.now() - start,
           usage,
+          costComplete: errors.length === 0 && attempt === 0,
           tier,
         };
       }
@@ -171,6 +177,7 @@ export async function analyzeImage(
           mimeType,
           googleModel,
           userPrompt,
+          remainingMs(),
         );
         return {
           analysis,
@@ -178,6 +185,7 @@ export async function analyzeImage(
           model: googleModel,
           durationMs: Date.now() - start,
           usage,
+          costComplete: errors.length === 0,
           tier,
         };
       }
@@ -189,6 +197,7 @@ export async function analyzeImage(
           imageBase64,
           mimeType,
           userPrompt,
+          remainingMs(),
         );
         return {
           analysis,
@@ -196,6 +205,7 @@ export async function analyzeImage(
           model: OPENAI_MODEL,
           durationMs: Date.now() - start,
           usage,
+          costComplete: errors.length === 0,
           tier,
         };
       }
@@ -238,8 +248,9 @@ function providerChainFromEnv(): Provider[] {
   if (v === "openai") {
     return ["openai", "anthropic", "google"];
   }
-  // Default: Anthropic first, then Google, then OpenAI.
-  return ["anthropic", "google", "openai"];
+  if (v === "anthropic") return ["anthropic", "google", "openai"];
+  // Lowest-priced configured standard vision provider first.
+  return ["google", "anthropic", "openai"];
 }
 
 /* --------------------------------------------------------------------- */
@@ -249,9 +260,10 @@ async function callAnthropic(
   mimeType: string,
   model: string,
   userPrompt: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     // PROMPT CACHING — both the giant SYSTEM_PROMPT and the image are
     // marked cacheable. Cache has a ~5-min TTL on Anthropic. The first
@@ -374,10 +386,11 @@ async function callOpenAI(
   imageBase64: string,
   mimeType: string,
   userPrompt: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.OpenAI_API_KEY ?? "";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -445,6 +458,7 @@ async function callGemini(
   mimeType: string,
   model: string,
   userPrompt: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? "";
   if (!apiKey) {
@@ -452,7 +466,7 @@ async function callGemini(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       model,
@@ -507,6 +521,7 @@ async function callGemini(
       usageMetadata?: {
         promptTokenCount?: number;
         candidatesTokenCount?: number;
+        thoughtsTokenCount?: number;
         totalTokenCount?: number;
       };
     };
@@ -517,7 +532,7 @@ async function callGemini(
       .join("\n");
 
     const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
-    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const outputTokens = (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0);
     const costUsd = computeCost(model, inputTokens, outputTokens);
 
     return {
@@ -689,6 +704,7 @@ export type QuestionsResult = {
   model: string;
   durationMs: number;
   usage: Usage;
+  costComplete?: boolean;
 };
 
 export async function generateContextQuestions(
@@ -705,12 +721,13 @@ export async function generateContextQuestions(
   const errors: Array<{ provider: Provider; err: unknown }> = [];
 
   for (const provider of providers) {
+    if (Date.now()-start > REQUEST_TIMEOUT_MS-1000) break;
     try {
       if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-        return await callAnthropicQuestions(imageBase64, mimeType, start);
+        return {...await callAnthropicQuestions(imageBase64, mimeType, start),costComplete:errors.length===0};
       }
       if (provider === "google" && process.env.GOOGLE_API_KEY) {
-        return await callGeminiQuestions(imageBase64, mimeType, start);
+        return {...await callGeminiQuestions(imageBase64, mimeType, start),costComplete:errors.length===0};
       }
       // OpenAI question-generation isn't implemented (we'd need a separate
       // JSON-mode prompt path). Skip it and continue the chain.
@@ -748,7 +765,7 @@ async function callAnthropicQuestions(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), Math.max(1, REQUEST_TIMEOUT_MS-(Date.now()-start)));
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -822,7 +839,7 @@ async function callGeminiQuestions(
   if (!apiKey) throw new AnalyzeError("GOOGLE_API_KEY missing", "google");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), Math.max(1, REQUEST_TIMEOUT_MS-(Date.now()-start)));
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       model,
@@ -871,6 +888,7 @@ async function callGeminiQuestions(
       usageMetadata?: {
         promptTokenCount?: number;
         candidatesTokenCount?: number;
+        thoughtsTokenCount?: number;
       };
     };
 
@@ -880,7 +898,7 @@ async function callGeminiQuestions(
       .join("\n");
 
     const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
-    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const outputTokens = (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0);
     const costUsd = computeCost(model, inputTokens, outputTokens);
 
     return {
@@ -1114,7 +1132,7 @@ async function callGeminiDetect(
 
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
     };
 
     const text = (data.candidates ?? [])
@@ -1122,7 +1140,7 @@ async function callGeminiDetect(
       .map((p) => p.text ?? "")
       .join("");
     const inputTokens = data.usageMetadata?.promptTokenCount ?? 0;
-    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 0;
+    const outputTokens = (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0);
     const costUsd = computeCost(model, inputTokens, outputTokens);
 
     return {

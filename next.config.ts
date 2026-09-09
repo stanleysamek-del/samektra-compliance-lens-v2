@@ -13,11 +13,6 @@ import type { NextConfig } from "next";
  *   'unsafe-inline' (style-src)   Tailwind v4 + the landing components'
  *                                 inline <style> blocks. Fonts come from
  *                                 next/font (self-hosted) — no googleapis.
- *   https://cdnjs.cloudflare.com  pdf.js (pdf.min.mjs + its worker) loaded
- *                                 on demand by components/plans/plan-uploader.
- *                                 Needed in script-src (module import),
- *                                 worker-src (the worker script) and
- *                                 connect-src (module fetch by the browser).
  *   https://*.supabase.co         Signed storage URLs for photos / plans /
  *                                 signatures (img-src) and the browser
  *                                 Supabase client — PostgREST, Auth, Storage
@@ -28,12 +23,12 @@ import type { NextConfig } from "next";
  */
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "img-src 'self' data: blob: https://*.supabase.co",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdnjs.cloudflare.com",
-  "worker-src 'self' blob: https://cdnjs.cloudflare.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "object-src 'none'",

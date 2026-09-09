@@ -19,6 +19,7 @@ import { SubmitButton } from "@/components/submit-button";
 
 type Props = {
   inspectionId: string;
+  analysis: { queued: number; analyzing: number; failed: number };
   checklist: {
     /** Total questions on the checklist. 0 = no checklist on this inspection. */
     total: number;
@@ -37,11 +38,17 @@ type Check = { ok: boolean; label: string; detail?: string };
 export function FinalizePreflight({
   inspectionId,
   checklist,
+  analysis,
   openPunchList,
   inspectorSigned,
   managerSigned,
 }: Props) {
-  const checks: Check[] = [];
+  const unfinished = analysis.queued + analysis.analyzing + analysis.failed;
+  const checks: Check[] = [{
+    ok: unfinished === 0,
+    label: unfinished ? `${unfinished} photo analyses need attention` : "All photo analyses complete",
+    detail: unfinished ? "Wait for queued photos; retry or remove failed photos before finalizing." : undefined,
+  }];
 
   if (checklist.total > 0) {
     checks.push({

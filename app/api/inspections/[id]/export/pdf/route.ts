@@ -1034,24 +1034,6 @@ export async function GET(
     });
 
     /* ============================ HELPERS ============================ */
-    function drawSectionHeader(pg: PDFPage, ySstart: number, label: string): number {
-      pg.drawText(safeText(label), {
-        x: MARGIN,
-        y: ySstart,
-        size: 11,
-        font: helvBold,
-        color: TEAL,
-      });
-      let y = ySstart - 5;
-      pg.drawLine({
-        start: { x: MARGIN, y },
-        end: { x: COL_RIGHT, y },
-        thickness: 0.4,
-        color: TEAL,
-      });
-      return y - 12;
-    }
-
     function drawQuestionRow(
       pg: PDFPage,
       ySstart: number,

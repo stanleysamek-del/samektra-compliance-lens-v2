@@ -52,6 +52,7 @@ type QueueItem = {
   previewUrl: string;
   /** Captured at enqueue time so a location typed later doesn't leak backwards. */
   photoLocation: string;
+  useAi: boolean;
   status: ItemStatus;
   error?: string;
   photoId?: string;
@@ -113,6 +114,7 @@ export function PhotoUploader({ inspectionId }: Props) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const [photoLocation, setPhotoLocation] = useState("");
+  const [useAi, setUseAi] = useState(false);
   // The queue lives in a ref (source of truth the async pump can read
   // without stale closures) and is mirrored into state for rendering.
   const queueRef = useRef<QueueItem[]>([]);
@@ -278,6 +280,7 @@ export function PhotoUploader({ inspectionId }: Props) {
 
         const formData = new FormData();
         formData.append("inspection_id", inspectionId);
+        formData.append("analysis_mode", item.useAi ? "ai" : "manual");
         formData.append("image", resized, resized.name);
         // Zoom copy alongside the 1024px analysis copy — capped at 2560px
         // on the long edge (~1 MB) rather than the raw camera file (which
@@ -307,6 +310,7 @@ export function PhotoUploader({ inspectionId }: Props) {
           photoId?: string;
           findingsCount?: number;
           queued?: boolean;
+          manual?: boolean;
           position?: number;
           error?: string;
         };
@@ -324,6 +328,12 @@ export function PhotoUploader({ inspectionId }: Props) {
           return;
         }
 
+        if (json.manual) {
+          patch(item.id, { status: "done", photoId: json.photoId, findingsCount: undefined, tookMs: Date.now() - startedAt });
+          showToast({ kind: "success", message: "Photo saved for manual review. No AI credits used." });
+          router.refresh();
+          return;
+        }
         if (json.queued) {
           const ahead = typeof json.position === "number" ? json.position : 0;
           patch(item.id, { status: "server_queued", photoId: json.photoId, position: ahead });
@@ -384,6 +394,7 @@ export function PhotoUploader({ inspectionId }: Props) {
           name: file.name,
           previewUrl: URL.createObjectURL(file),
           photoLocation,
+          useAi,
           status: "failed",
           error: `Unsupported file type (${file.type || "unknown"}). Use JPEG, PNG, or WebP.`,
         });
@@ -396,6 +407,7 @@ export function PhotoUploader({ inspectionId }: Props) {
           name: file.name,
           previewUrl: URL.createObjectURL(file),
           photoLocation,
+          useAi,
           status: "failed",
           error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB; max 40 MB).`,
         });
@@ -407,6 +419,7 @@ export function PhotoUploader({ inspectionId }: Props) {
         name: file.name,
         previewUrl: URL.createObjectURL(file),
         photoLocation,
+        useAi,
         status: "queued",
       });
     }
@@ -531,6 +544,13 @@ export function PhotoUploader({ inspectionId }: Props) {
         </p>
       </div>
 
+      <label className="mb-3 flex items-start gap-3 rounded-lg border border-[var(--border)] p-3 text-sm">
+        <input type="checkbox" checked={useAi} onChange={e => setUseAi(e.target.checked)} className="mt-1" />
+        <span><strong>Analyze with Chip</strong><br />
+          Paid plan required. Leave off to capture and review photos manually at no AI cost.
+          <Link href="/usage" className="ml-1 underline">View AI plan and usage</Link>
+        </span>
+      </label>
       <input
         type="text"
         value={photoLocation}
@@ -742,7 +762,7 @@ function QueueRow({
         ? `Queued (${item.position} ahead)`
         : "Queued (next up)",
     server_analyzing: "Chip is analyzing…",
-    done:
+    done: !item.useAi ? "Saved for manual review" :
       item.findingsCount === undefined
         ? "Analyzed"
         : `${item.findingsCount} finding${item.findingsCount === 1 ? "" : "s"}`,

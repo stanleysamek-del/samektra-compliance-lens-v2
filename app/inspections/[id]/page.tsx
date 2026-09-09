@@ -897,6 +897,7 @@ export default async function InspectionDetailPage({
               </div>
             ) : (
               <FinalizePreflight
+                analysis={analysisCounts}
                 inspectionId={inspection.id}
                 checklist={{
                   total: checklistItems.length,

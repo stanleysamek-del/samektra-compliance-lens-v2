@@ -7,7 +7,7 @@ export type CurrentOrg = {
   id: string;
   name: string;
   slug: string;
-  role: "admin" | "member";
+  role: "admin" | "member" | "viewer";
 };
 
 /**
@@ -46,7 +46,7 @@ export async function getCurrentOrg(): Promise<CurrentOrg | null> {
     id: org.id,
     name: org.name,
     slug: org.slug,
-    role: member.role as "admin" | "member",
+    role: member.role as "admin" | "member" | "viewer",
   };
 }
 
@@ -55,7 +55,7 @@ export async function getCurrentOrg(): Promise<CurrentOrg | null> {
  * AppShell org switcher dropdown.
  */
 export async function listMyOrganizations(): Promise<
-  Array<{ id: string; name: string; role: "admin" | "member" }>
+  Array<{ id: string; name: string; role: "admin" | "member" | "viewer" }>
 > {
   const supabase = await createClient();
   const {
@@ -75,10 +75,10 @@ export async function listMyOrganizations(): Promise<
       return {
         id: o.id,
         name: o.name,
-        role: row.role as "admin" | "member",
+        role: row.role as "admin" | "member" | "viewer",
       };
     })
-    .filter((r): r is { id: string; name: string; role: "admin" | "member" } =>
+    .filter((r): r is { id: string; name: string; role: "admin" | "member" | "viewer" } =>
       r !== null,
     );
 }
