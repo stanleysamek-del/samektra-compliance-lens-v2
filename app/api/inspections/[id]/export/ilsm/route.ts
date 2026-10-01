@@ -141,7 +141,6 @@ export async function GET(
       (p.photo_location as string | null) ?? null,
     ]),
   );
-  const photoIds = Array.from(photoLocById.keys());
 
   type FindingRow = {
     title: string;
@@ -151,11 +150,11 @@ export async function GET(
     photo_location: string | null;
   };
   let findings: FindingRow[] = [];
-  if (photoIds.length > 0) {
+  { // all findings on the inspection, including question-only ones without a photo
     const { data } = await supabase
       .from("findings")
       .select("title, severity, category, location, photo_id")
-      .in("photo_id", photoIds);
+      .eq("inspection_id", inspectionId);
     findings = (data ?? []).map((f) => ({
       title: (f.title as string) ?? "Untitled finding",
       severity: f.severity as "Low" | "Medium" | "High",

@@ -78,7 +78,7 @@ export async function finalizeInspection(formData: FormData) {
     const message = /set_inspection_status_checked|schema cache/i.test(error.message)
       ? "Inspection safety update is not installed yet. Contact your administrator."
       : friendlyError(error);
-    redirect(`/inspections/${inspectionId}?error=${encodeURIComponent(message)}`);
+    redirect(`/inspections/${inspectionId}?step=review&error=${encodeURIComponent(message)}`);
   }
 
   revalidatePath(`/inspections/${inspectionId}`);

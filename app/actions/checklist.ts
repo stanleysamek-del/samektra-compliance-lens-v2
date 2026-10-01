@@ -149,6 +149,124 @@ export async function saveChecklistNote(input: {
   return { ok: true };
 }
 
+/**
+ * Evidence for a question: link a photo (just taken with the question's
+ * camera button) to the checklist item. The photo must belong to the same
+ * inspection.
+ */
+export async function linkChecklistPhoto(input: {
+  itemId: string;
+  inspectionId: string;
+  photoId: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
+
+  const { data: photo } = await supabase
+    .from("photos")
+    .select("id")
+    .eq("id", input.photoId)
+    .eq("inspection_id", input.inspectionId)
+    .maybeSingle();
+  if (!photo) return { ok: false, error: "That photo isn't part of this inspection." };
+
+  const { error } = await supabase
+    .from("inspection_checklist_items")
+    .update({ photo_id: input.photoId })
+    .eq("id", input.itemId);
+  if (error) return { ok: false, error: error.message };
+
+  // An action already raised from this question gets the photo too, so it
+  // shows on the report and the action's evidence.
+  const { data: item } = await supabase
+    .from("inspection_checklist_items")
+    .select("finding_id")
+    .eq("id", input.itemId)
+    .maybeSingle();
+  if (item?.finding_id) {
+    await supabase
+      .from("findings")
+      .update({ photo_id: input.photoId })
+      .eq("id", item.finding_id)
+      .is("photo_id", null);
+  }
+
+  revalidateInspection(input.inspectionId);
+  return { ok: true };
+}
+
+/**
+ * "Create action" on a question: record the deficiency as a finding
+ * (photo optional — the question's photo when there is one), link it to
+ * the question, and return its id so the UI can open the assign/due-date
+ * strip right there. One action per question.
+ */
+export async function createChecklistFinding(input: {
+  itemId: string;
+  inspectionId: string;
+  title: string;
+  severity: "Low" | "Medium" | "High";
+  description?: string | null;
+}): Promise<ActionResult & { findingId?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
+
+  const title = input.title.trim();
+  if (!title) return { ok: false, error: "Describe the problem first." };
+  const severity = ["Low", "Medium", "High"].includes(input.severity) ? input.severity : "Medium";
+
+  const { data: item } = await supabase
+    .from("inspection_checklist_items")
+    .select("finding_id, photo_id, code_ref")
+    .eq("id", input.itemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Checklist question not found." };
+  if (item.finding_id) {
+    return { ok: false, error: "This question already has an action." };
+  }
+
+  const { data: finding, error } = await supabase
+    .from("findings")
+    .insert({
+      inspection_id: input.inspectionId,
+      photo_id: item.photo_id ?? null,
+      title: title.slice(0, 300),
+      severity,
+      category: "Other",
+      code: item.code_ref ?? null,
+      description: input.description?.trim() || null,
+      edited: true,
+      ai_confidence: null,
+    })
+    .select("id")
+    .single();
+  if (error || !finding) {
+    console.error("[createChecklistFinding]", error);
+    return { ok: false, error: "Couldn't create the action. Try again." };
+  }
+
+  const { error: linkErr } = await supabase
+    .from("inspection_checklist_items")
+    .update({ finding_id: finding.id })
+    .eq("id", input.itemId);
+  if (linkErr) {
+    // Don't leave an orphan the inspector can't find from the question.
+    await supabase.from("findings").delete().eq("id", finding.id);
+    return { ok: false, error: "Couldn't link the action to the question. Try again." };
+  }
+
+  revalidateInspection(input.inspectionId);
+  revalidatePath("/actions");
+  return { ok: true, findingId: finding.id as string };
+}
+
 /** Attach a template to an EXISTING inspection that has no checklist yet. */
 export async function attachChecklistToInspection(input: {
   inspectionId: string;

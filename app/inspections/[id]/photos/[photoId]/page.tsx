@@ -360,10 +360,10 @@ export default async function PhotoDetailPage({
           <PhotoBackLink />
           <div>
             <Link
-              href={`/inspections/${inspectionId}`}
+              href={`/inspections/${inspectionId}?step=photos`}
               className="text-xs font-medium text-[var(--fg-muted)] transition hover:text-[var(--fg)]"
             >
-              ← Inspection
+              ← Inspection photos
             </Link>
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">

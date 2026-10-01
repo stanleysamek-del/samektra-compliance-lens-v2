@@ -100,7 +100,6 @@ export async function GET(
       .order("created_at", { ascending: true });
 
     const photoList = photos ?? [];
-    const photoIds = photoList.map((p) => p.id as string);
     // Build photoIndexMap so we can show "Photo N" inline next to each finding.
     const photoIndexById = new Map<string, number>();
     photoList.forEach((p, i) => photoIndexById.set(p.id as string, i + 1));
@@ -109,13 +108,13 @@ export async function GET(
     // Inspection-wide finding numbers for the Plan-markup page (same rule
     // as the on-screen plan legend: creation order across all photos).
     let findingNumberById = new Map<string, number>();
-    if (photoIds.length > 0) {
+    { // all findings on the inspection, including question-only ones without a photo
       const { data: findings } = await supabase
         .from("findings")
         .select(
           "id, photo_id, title, severity, category, code, description, location, remediation, references, created_at, bbox_x1, bbox_y1, bbox_x2, bbox_y2, bbox_stroke_width, bbox_color, bbox_fill",
         )
-        .in("photo_id", photoIds)
+        .eq("inspection_id", inspectionId)
         .order("severity", { ascending: false })
         .order("created_at", { ascending: true });
       findingNumberById = numberFindings(
@@ -235,14 +234,14 @@ export async function GET(
       assigned_to: string | null;
     };
     let actionRows: ActionRow[] = [];
-    if (photoIds.length > 0) {
+    { // all findings on the inspection, including question-only ones without a photo
       try {
         const { data: actData, error: actErr } = await supabase
           .from("findings")
           .select(
             "id, title, severity, cap_status, cap_target_date, assigned_email, assigned_to",
           )
-          .in("photo_id", photoIds)
+          .eq("inspection_id", inspectionId)
           .order("cap_target_date", { ascending: true, nullsFirst: false });
         if (!actErr) {
           actionRows = ((actData ?? []) as ActionRow[]).filter(

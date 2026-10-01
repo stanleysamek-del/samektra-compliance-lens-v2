@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/card";
 import { showToast } from "@/components/toaster";
-import { resizeImageForUpload } from "@/lib/resize-image";
-import { extractPhotoIntegrity } from "@/lib/photo-integrity";
+import { uploadInspectionPhoto } from "@/lib/upload-inspection-photo";
 import { formatDuration } from "@/lib/format-duration";
 
 type Props = {
@@ -288,50 +287,15 @@ export function PhotoUploader({ inspectionId, aiAvailable = false }: Props) {
       patch(item.id, { status: "uploading", error: undefined, startedAt });
 
       try {
-        // Integrity capture FIRST — GPS + timestamp + SHA-256 come from the
-        // ORIGINAL bytes; the resize below re-encodes and strips EXIF.
-        const integrity = await extractPhotoIntegrity(item.file);
-
-        // Resize before upload to cut bandwidth + AI input-token cost.
-        // Falls back to original if the browser can't decode the file.
-        const resized = await resizeImageForUpload(item.file, 1024);
-
-        const formData = new FormData();
-        formData.append("inspection_id", inspectionId);
-        formData.append("analysis_mode", item.useAi ? "ai" : "manual");
-        formData.append("image", resized, resized.name);
-        // Zoom copy alongside the 1024px analysis copy — capped at 2560px
-        // on the long edge (~1 MB) rather than the raw camera file (which
-        // can be 10-25 MB on modern phones and would fill storage fast).
-        // 2560px is plenty to read a gauge needle or a label; the SHA-256
-        // above still fingerprints the untouched original. Best-effort on
-        // the server. Skipped when it would be the same bytes as the
-        // analysis copy (small photos skip resizing entirely).
-        const zoom = await resizeImageForUpload(item.file, 2560, 0.85);
-        if (zoom !== resized && zoom.size <= 10 * 1024 * 1024) {
-          formData.append("original", zoom, zoom.name);
-        }
-        if (item.photoLocation) formData.append("photo_location", item.photoLocation);
-        if (integrity.sha256) formData.append("original_sha256", integrity.sha256);
-        if (integrity.lat !== null) formData.append("exif_lat", String(integrity.lat));
-        if (integrity.lng !== null) formData.append("exif_lng", String(integrity.lng));
-        if (integrity.takenAt) formData.append("exif_taken_at", integrity.takenAt);
-
-        patch(item.id, { status: "saving" });
-
-        // Single attempt, on purpose — see the header comment. If the
-        // connection drops mid-request we cannot know whether the server
-        // already saved the photo, so we never re-POST automatically.
-        const res = await fetch("/api/photos/upload", { method: "POST", body: formData });
-        const json = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          photoId?: string;
-          findingsCount?: number;
-          queued?: boolean;
-          manual?: boolean;
-          position?: number;
-          error?: string;
-        };
+        // Same payload as the per-question camera button (lib/upload-inspection-photo).
+        const { httpOk, status, json } = await uploadInspectionPhoto({
+          file: item.file,
+          inspectionId,
+          useAi: item.useAi,
+          photoLocation: item.photoLocation,
+          onSaving: () => patch(item.id, { status: "saving" }),
+        });
+        const res = { ok: httpOk, status };
 
         if (!res.ok || !json.ok || !json.photoId) {
           patch(item.id, {

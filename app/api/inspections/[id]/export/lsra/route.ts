@@ -61,12 +61,6 @@ export async function GET(
       );
     }
 
-    const { data: photos } = await supabase
-      .from("photos")
-      .select("id, created_at")
-      .eq("inspection_id", inspectionId)
-      .order("created_at", { ascending: true });
-    const photoIds = (photos ?? []).map((p) => p.id as string);
 
     type LSRARow = {
       title: string;
@@ -83,11 +77,11 @@ export async function GET(
       category: string;
     }> = [];
 
-    if (photoIds.length > 0) {
+    { // all findings on the inspection, including question-only ones without a photo
       const { data: findings } = await supabase
         .from("findings")
         .select("title, severity, category")
-        .in("photo_id", photoIds);
+        .eq("inspection_id", inspectionId);
       rawFindings = (findings ?? []).map((f) => ({
         title: (f.title as string) ?? "Untitled finding",
         severity: f.severity as "Low" | "Medium" | "High",

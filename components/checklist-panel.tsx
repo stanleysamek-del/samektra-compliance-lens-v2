@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Card } from "@/components/card";
 import {
   confirmAiAnswer,
@@ -10,8 +9,12 @@ import {
 } from "@/app/actions/checklist";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
 import { scoreItems } from "@/lib/checklists/engine";
-import { lswLinksForCitation } from "@/lib/lsw-links";
 import { HelpTip } from "@/components/help-tip";
+import {
+  ChecklistItemRowView,
+  type ActionContext,
+  type LinkedFinding,
+} from "@/components/checklist-item-row";
 
 /**
  * The inspection checklist: sections of Yes/No/N.A. questions with live
@@ -24,19 +27,27 @@ type Props = {
   inspectionId: string;
   items: ChecklistItemRow[];
   readOnly: boolean;
+  /** Signed thumbnail URLs for photos linked to questions, by photo id. */
+  photoUrls?: Record<string, string>;
+  /** Actions (findings) linked to questions, by finding id. */
+  linkedFindings?: Record<string, LinkedFinding>;
+  actionContext?: ActionContext;
 };
 
-const ANSWER_LABELS: Array<{ value: "yes" | "no" | "na"; label: string }> = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "na", label: "N.A." },
-];
+const NO_ACTIONS: ActionContext = { members: [], currentUserId: "", readOnly: true };
 
 function pctLabel(pct: number | null): string {
   return pct === null ? "—" : `${pct}%`;
 }
 
-export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
+export function ChecklistPanel({
+  inspectionId,
+  items,
+  readOnly,
+  photoUrls = {},
+  linkedFindings = {},
+  actionContext = NO_ACTIONS,
+}: Props) {
   // Optimistic local copy — server actions revalidate, but the panel
   // should feel instant on a phone in a stairwell.
   const [local, setLocal] = useState<ChecklistItemRow[]>(items);
@@ -179,6 +190,31 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
     }
   }
 
+  /** Open the question's section, scroll it to the middle, focus it. */
+  function goToItem(itemId: string) {
+    const target = local.find((i) => i.id === itemId);
+    if (!target) return;
+    setToggled((prev) => new Map(prev).set(target.section_code, true));
+    // Wait for the section to render before scrolling.
+    window.setTimeout(() => {
+      const el = document.getElementById(`q-${itemId}`);
+      // Focus first: focusing after a smooth scroll starts cancels it.
+      el?.focus({ preventScroll: true });
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }
+
+  // Deep links from the Review step: ?step=audit#q-<id>.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.startsWith("#q-")) return;
+    const t = window.setTimeout(() => goToItem(hash.slice(3)), 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const firstUnanswered = local.find((i) => i.answer === null) ?? null;
+
   function toggleSection(code: string, currentlyOpen: boolean) {
     setToggled((prev) => {
       const next = new Map(prev);
@@ -289,15 +325,19 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
               {open ? (
                 <div className="flex flex-col gap-3 px-5 pb-4 sm:px-6">
                   {section.rows.map((item, idx) => (
-                    <ItemRow
+                    <ChecklistItemRowView
                       key={item.id}
                       item={item}
                       index={idx + 1}
                       inspectionId={inspectionId}
                       readOnly={readOnly}
+                      photoUrl={item.photo_id ? (photoUrls[item.photo_id] ?? null) : null}
+                      linkedFinding={item.finding_id ? (linkedFindings[item.finding_id] ?? null) : null}
+                      actionContext={actionContext}
                       onAnswer={answer}
                       onConfirm={confirm}
                       onSaveNote={(note) => saveNote(item, note)}
+                      onPatch={(patch) => patchLocal(item.id, patch)}
                     />
                   ))}
                 </div>
@@ -306,209 +346,22 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
           );
         })}
       </div>
-    </Card>
-  );
-}
 
-function ItemRow({
-  item,
-  index,
-  inspectionId,
-  readOnly,
-  onAnswer,
-  onConfirm,
-  onSaveNote,
-}: {
-  item: ChecklistItemRow;
-  index: number;
-  inspectionId: string;
-  readOnly: boolean;
-  onAnswer: (item: ChecklistItemRow, value: "yes" | "no" | "na") => void;
-  onConfirm: (item: ChecklistItemRow) => void;
-  onSaveNote: (note: string) => Promise<boolean>;
-}) {
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteDraft, setNoteDraft] = useState(item.note ?? "");
-  const [noteStatus, setNoteStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
-  const [, startTransition] = useTransition();
-
-  const aiPending = item.answered_by_ai && !item.ai_confirmed;
-
-  function saveNote() {
-    setEditingNote(false);
-    setNoteStatus("saving");
-    const draft = noteDraft;
-    startTransition(async () => {
-      const ok = await onSaveNote(draft);
-      if (ok) {
-        setNoteStatus("saved");
-      } else {
-        // Keep what they typed — reopen the editor so nothing is lost.
-        setNoteStatus("failed");
-        setNoteDraft(draft);
-        setEditingNote(true);
-      }
-    });
-  }
-
-  return (
-    <div
-      className={`rounded border px-3 py-2.5 ${
-        item.answer === "no"
-          ? "border-[var(--danger)] bg-[#fdecea]"
-          : "border-[var(--border)]"
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 text-sm text-[var(--fg)]">
-          <span className="mr-1.5 text-xs tabular-nums text-[var(--fg-subtle)]">
-            {item.section_code}.{index}
-          </span>
-          {item.question}
-          {item.code_ref ? (
-            (() => {
-              const lsw = lswLinksForCitation(item.code_ref)[0];
-              return lsw ? (
-                <a
-                  href={lsw.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-1.5 whitespace-nowrap text-[11px] text-[var(--accent)] underline decoration-dotted underline-offset-2"
-                  title="Read this section on LifeSafetyWiki"
-                >
-                  {item.code_ref} ↗
-                </a>
-              ) : (
-                <span className="ml-1.5 whitespace-nowrap text-[11px] text-[var(--fg-subtle)]">
-                  {item.code_ref}
-                </span>
-              );
-            })()
-          ) : null}
-        </p>
-        {/* Full-width three-way control on phones (big, glove-friendly
-            targets); compact on wider screens. */}
-        <div
-          role="group"
-          aria-label={`Answer for ${item.section_code}.${index}`}
-          className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:shrink-0"
+      {/* Floating "next unanswered" — always one tap to the next gap,
+          above the phone tab bar and the iPhone home indicator. */}
+      {!readOnly && firstUnanswered ? (
+        <button
+          type="button"
+          onClick={() => goToItem(firstUnanswered.id)}
+          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-20 inline-flex min-h-12 -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--ink)] bg-[var(--ink)] px-4 text-sm font-semibold text-[var(--paper)] shadow-lg lg:bottom-6 lg:left-[calc(50%+8rem)]"
         >
-          {ANSWER_LABELS.map(({ value, label }) => {
-            const active = item.answer === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                disabled={readOnly}
-                aria-pressed={active}
-                onClick={() => onAnswer(item, value)}
-                className={`min-h-11 rounded border px-3 text-sm font-semibold transition sm:min-w-[56px] ${
-                  active
-                    ? value === "yes"
-                      ? "border-[var(--success)] bg-[var(--success)] text-white"
-                      : value === "no"
-                        ? "border-[var(--danger)] bg-[var(--danger)] text-white"
-                        : "border-[var(--slate)] bg-[var(--slate)] text-white"
-                    : "border-[var(--rule-strong)] bg-[var(--paper-2)] text-[var(--ink)] hover:bg-[var(--paper-3)]"
-                } ${readOnly ? "cursor-default opacity-60" : ""}`}
-              >
-                {active && value === "yes" ? "✓ " : active && value === "no" ? "✕ " : ""}
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {aiPending ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded bg-[var(--accent)]/10 px-2.5 py-1.5">
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--accent)]">
-            ✦ AI flagged
-            <HelpTip title="AI flagged" side="bottom">
-              A photo you uploaded matched this question, so the AI answered
-              it. Nothing is final until you confirm — tap Confirm to agree,
-              or Yes / No / N.A. to overrule. The report marks unconfirmed
-              answers as AI-answered.
-            </HelpTip>
+          Next unanswered
+          <span className="rounded-full bg-[var(--paper)] px-2 py-0.5 text-xs tabular-nums text-[var(--ink)]">
+            {overall.unanswered}
           </span>
-          {!readOnly ? (
-            <button
-              type="button"
-              onClick={() => onConfirm(item)}
-              className="rounded border border-[var(--accent)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]"
-            >
-              Confirm
-            </button>
-          ) : null}
-          <span className="text-[11px] text-[var(--fg-muted)]">
-            or change the answer above
-          </span>
-        </div>
+          <span aria-hidden>↓</span>
+        </button>
       ) : null}
-
-      <div className="mt-1.5 flex flex-wrap items-center gap-3">
-        {item.photo_id ? (
-          <Link
-            href={`/inspections/${inspectionId}/photos/${item.photo_id}`}
-            className="text-[11px] font-medium text-[var(--accent)] hover:underline"
-          >
-            View linked photo →
-          </Link>
-        ) : null}
-        {!editingNote ? (
-          <>
-            {item.note ? (
-              <span className="whitespace-pre-wrap text-xs text-[var(--fg-muted)]">
-                {item.note}
-              </span>
-            ) : null}
-            {!readOnly ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setNoteDraft(item.note ?? "");
-                  setEditingNote(true);
-                }}
-                className="text-[11px] text-[var(--fg-subtle)] underline"
-              >
-                {item.note ? "Edit note" : "Add note"}
-              </button>
-            ) : null}
-            {noteStatus === "saving" ? (
-              <span className="text-[11px] text-[var(--fg-subtle)]">Saving…</span>
-            ) : noteStatus === "saved" ? (
-              <span className="text-[11px] text-[var(--success)]">Note saved</span>
-            ) : null}
-          </>
-        ) : (
-          <div className="flex w-full flex-col gap-1.5">
-            <textarea
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              rows={2}
-              className="cl-input text-sm"
-              placeholder="What you observed, room number, notes…"
-            />
-            {noteStatus === "failed" ? (
-              <span className="text-[11px] text-red-700">
-                Not saved yet — tap Save note to retry.
-              </span>
-            ) : null}
-            <div className="flex gap-2">
-              <button type="button" onClick={saveNote} className="cl-btn-accent px-3 py-1 text-xs">
-                Save note
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingNote(false)}
-                className="cl-btn-outline px-3 py-1 text-xs"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    </Card>
   );
 }

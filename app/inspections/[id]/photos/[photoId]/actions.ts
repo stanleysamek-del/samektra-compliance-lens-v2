@@ -311,7 +311,7 @@ export async function deletePhoto(
   }
 
   revalidatePath(`/inspections/${inspectionId}`);
-  redirect(`/inspections/${inspectionId}`);
+  redirect(`/inspections/${inspectionId}?step=photos`);
 }
 
 /**

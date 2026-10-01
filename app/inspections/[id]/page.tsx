@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { BarcodeScanner } from "@/components/assets/barcode-scanner";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
@@ -7,40 +6,54 @@ import { Card } from "@/components/card";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { formatDuration } from "@/lib/format-duration";
-import {
-  PhotoCardFindings,
-  type CompactFinding,
-} from "@/components/photo-card-findings";
+import type { CompactFinding } from "@/components/photo-card-findings";
 import { SectionsManager, type SectionRow } from "@/components/sections-manager";
 import { ChecklistPanel } from "@/components/checklist-panel";
+import type { LinkedFinding } from "@/components/checklist-item-row";
+import type { OrgMember, ActionFields } from "@/components/action-strip";
+import type { ActionStatus, ActionPriority } from "@/app/actions/workflow";
 import { AttachChecklistCard, type TemplateOption } from "@/components/attach-checklist-card";
 import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
-import { PhotoMoveMenu } from "@/components/photo-move-menu";
-import {
-  NotVisibleChecklist,
-  type NotVisibleItem,
-} from "@/components/not-visible-checklist";
-import { PhotoCardNotVisible } from "@/components/photo-card-not-visible";
+import type { NotVisibleItem } from "@/components/not-visible-checklist";
 import { InspectionSummary } from "@/components/inspection-summary";
-import { SignaturePad } from "@/components/signature-pad";
 import { HelpTip } from "@/components/help-tip";
-import { SubmitButton } from "@/components/submit-button";
-import { FinalizePreflight } from "@/components/finalize-preflight";
 import { ExportButtons } from "@/components/export-buttons";
 import { InspectionPlansSection } from "@/components/plans/inspection-plans-section";
 import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
-import { finalizeInspection } from "./actions";
+import {
+  InspectionSteps,
+  StepFooter,
+  isInspectionStep,
+  type InspectionStep,
+} from "@/components/inspection-steps";
+import { PhotoGrid } from "./photo-grid";
+import { ReviewStep, type ReviewFinding, type ReviewQuestion } from "./review-step";
 
-import { SeverityBadge } from "@/components/severity-badge";
-import { EmptyState } from "@/components/ui/empty-state";
+/**
+ * The inspection workspace, one step at a time (?step=):
+ *
+ *   info    details, edit, summary
+ *   audit   the checklist — answer + evidence (photo, note, action) per question
+ *   photos  photo walk: uploader, plans, sections, photo grid
+ *   review  what still needs a human, sign-off, finalize / reopen
+ *   report  downloads
+ *
+ * Each step loads only what it renders (signed photo URLs are the
+ * expensive part, so only Photos — and Audit's question thumbnails —
+ * create them).
+ */
+
 type SearchParams = {
   /** Set by finalizeInspection / reopenInspection when the update fails. */
   error?: string;
   /** Set by createInspection when the chosen template didn't attach. */
   checklist?: string;
+  step?: string;
 };
+
+const SIGNED_URL_TTL = 60 * 60;
 
 export default async function InspectionDetailPage({
   params,
@@ -96,330 +109,10 @@ export default async function InspectionDetailPage({
       console.warn(`[inspection ${id}] not found or not visible to user ${user.id}`);
       return <Diag user={userShell} stage={stage} notFound />;
     }
-
-    stage = "photos";
-    // analysis_status / analysis_error arrive with migration 0024. Before
-    // it's applied the select errors on the unknown columns — re-select
-    // without them and treat every photo as 'done' (they were analyzed
-    // inline at upload).
-    const PHOTO_COLS =
-      "id, storage_path, photo_location, analyzed_at, created_at, section_id, sort_order";
-    let { data: photos, error: photosErr } = await supabase
-      .from("photos")
-      .select(`${PHOTO_COLS}, analysis_status, analysis_error`)
-      .eq("inspection_id", id)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false });
-    if (photosErr && /analysis_status|analysis_error/.test(photosErr.message ?? "")) {
-      // Same row shape minus the two 0024 columns — widen so the
-      // destructure type-checks against the first select.
-      ({ data: photos, error: photosErr } = (await supabase
-        .from("photos")
-        .select(PHOTO_COLS)
-        .eq("inspection_id", id)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false })) as unknown as {
-        data: typeof photos;
-        error: typeof photosErr;
-      });
-    }
-    if (photosErr) console.error("[inspection] photos query", photosErr.message);
-    type PhotoAnalysisState = "queued" | "analyzing" | "done" | "failed";
-    const photosList = (photos ?? []).map((p) => ({
-      ...p,
-      analysis_status: (String(
-        (p as { analysis_status?: string | null }).analysis_status ?? "done",
-      ) as PhotoAnalysisState),
-      analysis_error:
-        ((p as { analysis_error?: string | null }).analysis_error as string | null | undefined) ?? null,
-    }));
-    const analysisCounts = {
-      queued: photosList.filter((p) => p.analysis_status === "queued").length,
-      analyzing: photosList.filter((p) => p.analysis_status === "analyzing").length,
-      failed: photosList.filter((p) => p.analysis_status === "failed").length,
-    };
-    // Hoisted so sections / not-visible / findings stages can all reference
-    // it without re-declaring (which would also be a temporal-dead-zone error).
-    const photoIds = photosList.map((p) => p.id);
-
-    stage = "checklist";
-    // Checklist items (migration 0022). Errors — including the table not
-    // existing pre-migration — degrade to "no checklist" rather than
-    // failing the whole page.
-    let checklistItems: ChecklistItemRow[] = [];
-    try {
-      const { data: clData } = await supabase
-        .from("inspection_checklist_items")
-        .select(
-          "id, inspection_id, template_ref, template_name, section_code, section_title, sort, question, code_ref, match_terms, answer, note, answered_by, answered_by_ai, ai_confirmed, photo_id, finding_id, answered_at",
-        )
-        .eq("inspection_id", id)
-        .order("sort", { ascending: true });
-      checklistItems = (clData as ChecklistItemRow[]) ?? [];
-    } catch (err) {
-      console.error("[inspection] checklist load", err);
-    }
-
-    stage = "sections";
-    const { data: sectionsData } = await supabase
-      .from("inspection_sections")
-      .select("id, name, sort_order")
-      .eq("inspection_id", id)
-      .order("sort_order", { ascending: true });
-    const sectionsList = sectionsData ?? [];
-
-    // Count photos per section so the manager UI can display "· N photos".
-    const photoCountBySection = new Map<string, number>();
-    for (const p of photosList) {
-      if (p.section_id) {
-        photoCountBySection.set(
-          p.section_id,
-          (photoCountBySection.get(p.section_id) ?? 0) + 1,
-        );
-      }
-    }
-    const sectionsWithCounts: SectionRow[] = sectionsList.map((s) => ({
-      id: s.id,
-      name: s.name,
-      sort_order: s.sort_order,
-      photoCount: photoCountBySection.get(s.id) ?? 0,
-    }));
-    const sectionOptions = sectionsList.map((s) => ({ id: s.id, name: s.name }));
-
-    // Aggregate "not visible" items across every photo in the inspection
-    // for the re-photograph punch-list. Joined with photo metadata so each
-    // row can render its source photo location + section context inline.
-    stage = "not-visible";
-    const photoMetaById = new Map<
-      string,
-      { photo_location: string | null; section_id: string | null }
-    >();
-    for (const p of photosList) {
-      photoMetaById.set(p.id, {
-        photo_location: p.photo_location ?? null,
-        section_id: p.section_id ?? null,
-      });
-    }
-    const sectionNameById = new Map<string, string>(
-      sectionsList.map((s) => [s.id, s.name]),
-    );
-
-    let notVisibleItems: NotVisibleItem[] = [];
-    if (photoIds.length > 0) {
-      // Try the full select first (includes Phase 2 skip columns).
-      // If migration 0012 or 0013 hasn't been run yet, the columns
-      // won't exist and PostgREST returns an error — we catch it and
-      // retry with just the legacy columns so at least the items
-      // render with Resolve/Skip disabled rather than silently
-      // disappearing. The error message is logged so it shows up in
-      // Vercel function logs.
-      type NvRow = {
-        id: string;
-        item: string;
-        reason: string | null;
-        resolved: boolean | null;
-        resolved_note?: string | null;
-        resolved_at?: string | null;
-        skipped?: boolean | null;
-        skipped_reason?: string | null;
-        skipped_at?: string | null;
-        photo_id: string;
-      };
-
-      let nvRows: NvRow[] | null = null;
-      const fullSelect = await supabase
-        .from("not_visible")
-        .select(
-          "id, item, reason, resolved, resolved_note, resolved_at, skipped, skipped_reason, skipped_at, photo_id, created_at",
-        )
-        .in("photo_id", photoIds)
-        .order("resolved", { ascending: true })
-        .order("created_at", { ascending: true });
-
-      if (fullSelect.error) {
-        console.warn(
-          "[inspection] not_visible full select failed — falling back to legacy. " +
-            "Most likely cause: migration 0012 and/or 0013 hasn't been run yet. Error:",
-          fullSelect.error.message,
-        );
-        const legacy = await supabase
-          .from("not_visible")
-          .select("id, item, reason, resolved, photo_id, created_at")
-          .in("photo_id", photoIds)
-          .order("created_at", { ascending: true });
-        if (legacy.error) {
-          console.error(
-            "[inspection] not_visible legacy select ALSO failed:",
-            legacy.error.message,
-          );
-        } else {
-          nvRows = legacy.data as NvRow[] | null;
-        }
-      } else {
-        nvRows = fullSelect.data as NvRow[] | null;
-      }
-
-      console.log(
-        `[inspection ${id}] not_visible rows: ${nvRows?.length ?? 0}`,
-      );
-
-      notVisibleItems = (nvRows ?? []).map((r) => {
-        const meta = photoMetaById.get(r.photo_id) ?? {
-          photo_location: null,
-          section_id: null,
-        };
-        return {
-          id: r.id,
-          item: r.item ?? "",
-          reason: r.reason ?? null,
-          resolved: Boolean(r.resolved),
-          resolved_note: r.resolved_note ?? null,
-          resolved_at: r.resolved_at ?? null,
-          skipped: Boolean(r.skipped),
-          skipped_reason: r.skipped_reason ?? null,
-          skipped_at: r.skipped_at ?? null,
-          photo_id: r.photo_id,
-          photo_location: meta.photo_location,
-          section_name: meta.section_id
-            ? sectionNameById.get(meta.section_id) ?? null
-            : null,
-        };
-      });
-    }
-    // Open = not yet resolved AND not skipped. This is what drives the
-    // header "needs re-photograph" pill.
-    const unresolvedNotVisibleCount = notVisibleItems.filter(
-      (n) => !n.resolved && !n.skipped,
-    ).length;
-
-    // Group items by their source photo so each photo card can render its
-    // own collapsible dropdown of items inline.
-    const notVisibleByPhoto = new Map<string, NotVisibleItem[]>();
-    for (const it of notVisibleItems) {
-      const arr = notVisibleByPhoto.get(it.photo_id) ?? [];
-      arr.push(it);
-      notVisibleByPhoto.set(it.photo_id, arr);
-    }
-
-    stage = "findings-counts";
-    // photoIds was hoisted to the photos stage above.
-    let findingsByPhoto: Record<
-      string,
-      { total: number; high: number; items: CompactFinding[] }
-    > = {};
-    // Roll-up counters for the summary card. Same loop as the per-photo
-    // breakdown, just kept at inspection-scope so we don't iterate twice.
-    let totalFindings = 0;
-    let highFindings = 0;
-    let mediumFindings = 0;
-    let lowFindings = 0;
-    let thumbsUp = 0;
-    let thumbsDown = 0;
-
-    // Per-photo AI analysis duration. We pick the LATEST successful
-    // ai_call per photo so re-analyses (Coach, deep re-run) overwrite
-    // the original upload's number. The map is consumed by photo cards
-    // to render a small "Analyzed in X.Xs" badge.
-    const aiDurationByPhoto = new Map<string, number>();
-    let totalAiDurationMs = 0;
-
-    if (photoIds.length > 0) {
-      // Fetch findings + ai_calls in parallel — they're both keyed on
-      // photoIds and independent of each other.
-      const [findingsResult, aiCallsResult] = await Promise.all([
-        supabase
-          .from("findings")
-          .select("id, photo_id, title, severity, user_rating, created_at")
-          .in("photo_id", photoIds)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("ai_calls")
-          .select("photo_id, duration_ms, created_at, status")
-          .in("photo_id", photoIds)
-          .eq("status", "success")
-          .order("created_at", { ascending: false }),
-      ]);
-
-      // Build the per-photo latest-duration map. Because ai_calls is
-      // sorted desc by created_at, the FIRST hit per photo_id is the
-      // most recent successful call.
-      for (const call of aiCallsResult.data ?? []) {
-        const pid = call.photo_id as string | null;
-        if (!pid) continue;
-        const dur = Number(call.duration_ms ?? 0);
-        if (!aiDurationByPhoto.has(pid)) {
-          aiDurationByPhoto.set(pid, dur);
-          totalAiDurationMs += dur;
-        }
-      }
-
-      try {
-        const findings = findingsResult.data;
-        findingsByPhoto = (findings ?? []).reduce<typeof findingsByPhoto>(
-          (acc, f) => {
-            const pid = f.photo_id as string | null;
-            totalFindings += 1;
-            if (f.severity === "High") highFindings += 1;
-            else if (f.severity === "Medium") mediumFindings += 1;
-            else if (f.severity === "Low") lowFindings += 1;
-            if (f.user_rating === 1) thumbsUp += 1;
-            else if (f.user_rating === -1) thumbsDown += 1;
-
-            if (!pid) return acc;
-            const bucket = (acc[pid] ??= { total: 0, high: 0, items: [] });
-            bucket.total += 1;
-            if (f.severity === "High") bucket.high += 1;
-            bucket.items.push({
-              id: f.id as string,
-              title: (f.title as string) ?? "Untitled finding",
-              severity: f.severity as "Low" | "Medium" | "High",
-            });
-            return acc;
-          },
-          {},
-        );
-      } catch (err) {
-        console.error("[inspection] findings query", err);
-      }
-    }
-
-    // Same lifecycle counts the punch-list pill uses, exposed for the
-    // summary card too.
-    const resolvedNotVisibleCount = notVisibleItems.filter(
-      (n) => n.resolved,
-    ).length;
-    const skippedNotVisibleCount = notVisibleItems.filter(
-      (n) => n.skipped && !n.resolved,
-    ).length;
-
-    stage = "signed-urls";
-    const photoUrls: Record<string, string> = {};
-    const barcodePhotoUrls: Record<string, string> = {};
-    const { data: originalRows } = await supabase.from("photos")
-      .select("id, original_storage_path").eq("inspection_id", id);
-    const originals = new Map((originalRows ?? []).map(p => [p.id, p.original_storage_path]));
-    for (const p of photosList) {
-      try {
-        const { data, error } = await supabase.storage
-          .from("photos")
-          .createSignedUrl(p.storage_path, 60 * 60);
-        if (error) throw error;
-        if (data?.signedUrl) photoUrls[p.id] = data.signedUrl;
-        const originalPath = originals.get(p.id);
-        if (originalPath) {
-          const { data: original } = await supabase.storage.from("photos").createSignedUrl(originalPath, 60 * 60);
-          if (original?.signedUrl) barcodePhotoUrls[p.id] = original.signedUrl;
-        }
-      } catch (err) {
-        console.error("[inspection] signed url for", p.id, err);
-      }
-    }
-
     const isCompleted = inspection.status === "completed";
 
-    // Facility link (migration 0025). Separate defensive select so the page
-    // keeps rendering before the migration exists — the main inspection
-    // select above deliberately doesn't include facility_id.
+    // Facility + workspace (migration 0025). Separate defensive select so
+    // the page keeps rendering before the migration exists.
     let facilityId: string | null = null;
     let inspectionOrgId: string | null = null;
     try {
@@ -435,96 +128,433 @@ export default async function InspectionDetailPage({
       facilityId = null;
     }
 
-    // Default "Analyze with Chip" to on only when this workspace has an
-    // active AI plan; the upload route still enforces the budget server-side.
+    // Viewers see everything but change nothing (RLS denies the writes;
+    // hiding the controls keeps them from failing on tap).
+    let isViewer = false;
+    if (inspectionOrgId) {
+      const { data: membership } = await supabase
+        .from("organization_members")
+        .select("role")
+        .eq("organization_id", inspectionOrgId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isViewer = membership?.role === "viewer";
+    }
+    const readOnly = isCompleted || isViewer;
+
+    stage = "photos";
+    // analysis_status / analysis_error arrive with migration 0024. Before
+    // it's applied the select errors on the unknown columns — re-select
+    // without them and treat every photo as 'done'.
+    const PHOTO_COLS =
+      "id, storage_path, photo_location, analyzed_at, created_at, section_id, sort_order";
+    let { data: photos, error: photosErr } = await supabase
+      .from("photos")
+      .select(`${PHOTO_COLS}, analysis_status, analysis_error`)
+      .eq("inspection_id", id)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
+    if (photosErr && /analysis_status|analysis_error/.test(photosErr.message ?? "")) {
+      ({ data: photos, error: photosErr } = (await supabase
+        .from("photos")
+        .select(PHOTO_COLS)
+        .eq("inspection_id", id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false })) as unknown as {
+        data: typeof photos;
+        error: typeof photosErr;
+      });
+    }
+    if (photosErr) console.error("[inspection] photos query", photosErr.message);
+    type PhotoAnalysisState = "queued" | "analyzing" | "done" | "failed";
+    const photosList = (photos ?? []).map((p) => ({
+      ...p,
+      analysis_status: String(
+        (p as { analysis_status?: string | null }).analysis_status ?? "done",
+      ) as PhotoAnalysisState,
+      analysis_error:
+        ((p as { analysis_error?: string | null }).analysis_error as string | null | undefined) ?? null,
+    }));
+    const analysisCounts = {
+      queued: photosList.filter((p) => p.analysis_status === "queued").length,
+      analyzing: photosList.filter((p) => p.analysis_status === "analyzing").length,
+      failed: photosList.filter((p) => p.analysis_status === "failed").length,
+    };
+    const photoIds = photosList.map((p) => p.id);
+    const storagePathById = new Map(photosList.map((p) => [p.id, p.storage_path as string]));
+
+    stage = "checklist";
+    // Checklist items (migration 0022). Errors degrade to "no checklist".
+    let checklistItems: ChecklistItemRow[] = [];
+    try {
+      const { data: clData } = await supabase
+        .from("inspection_checklist_items")
+        .select(
+          "id, inspection_id, template_ref, template_name, section_code, section_title, sort, question, code_ref, match_terms, answer, note, answered_by, answered_by_ai, ai_confirmed, photo_id, finding_id, answered_at",
+        )
+        .eq("inspection_id", id)
+        .order("sort", { ascending: true });
+      checklistItems = (clData as ChecklistItemRow[]) ?? [];
+    } catch (err) {
+      console.error("[inspection] checklist load", err);
+    }
+    const checklistScore = scoreItems(checklistItems);
+    const answeredCount = checklistItems.length - checklistScore.unanswered;
+
+    // "A1.3"-style labels, numbered within each section like the panel.
+    const labelByItem = new Map<string, string>();
+    {
+      const seen = new Map<string, number>();
+      for (const it of checklistItems) {
+        const n = (seen.get(it.section_code) ?? 0) + 1;
+        seen.set(it.section_code, n);
+        labelByItem.set(it.id, `${it.section_code}.${n}`);
+      }
+    }
+
+    // Which step. Default: the checklist while working; photos for a
+    // photo-only walk; the report once finalized.
+    const step: InspectionStep = isInspectionStep(sp?.step)
+      ? sp.step
+      : isCompleted
+        ? "report"
+        : checklistItems.length > 0
+          ? "audit"
+          : "photos";
+
+    stage = "sections";
+    const { data: sectionsData } = await supabase
+      .from("inspection_sections")
+      .select("id, name, sort_order")
+      .eq("inspection_id", id)
+      .order("sort_order", { ascending: true });
+    const sectionsList = sectionsData ?? [];
+    const sectionNameById = new Map<string, string>(sectionsList.map((s) => [s.id, s.name]));
+
+    stage = "not-visible";
+    // Re-photograph punch list. Needed on Photos (per-photo cards) and
+    // Review (the list + the tab's issue count).
+    const photoMetaById = new Map(
+      photosList.map((p) => [p.id, { photo_location: p.photo_location ?? null, section_id: p.section_id ?? null }]),
+    );
+    let notVisibleItems: NotVisibleItem[] = [];
+    if (photoIds.length > 0) {
+      type NvRow = {
+        id: string;
+        item: string;
+        reason: string | null;
+        resolved: boolean | null;
+        resolved_note?: string | null;
+        resolved_at?: string | null;
+        skipped?: boolean | null;
+        skipped_reason?: string | null;
+        skipped_at?: string | null;
+        photo_id: string;
+      };
+      let nvRows: NvRow[] | null = null;
+      const fullSelect = await supabase
+        .from("not_visible")
+        .select(
+          "id, item, reason, resolved, resolved_note, resolved_at, skipped, skipped_reason, skipped_at, photo_id, created_at",
+        )
+        .in("photo_id", photoIds)
+        .order("resolved", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (fullSelect.error) {
+        // Pre-0012/0013: legacy columns only (Resolve/Skip disabled).
+        console.warn("[inspection] not_visible full select failed:", fullSelect.error.message);
+        const legacy = await supabase
+          .from("not_visible")
+          .select("id, item, reason, resolved, photo_id, created_at")
+          .in("photo_id", photoIds)
+          .order("created_at", { ascending: true });
+        if (legacy.error) console.error("[inspection] not_visible legacy select failed:", legacy.error.message);
+        else nvRows = legacy.data as NvRow[] | null;
+      } else {
+        nvRows = fullSelect.data as NvRow[] | null;
+      }
+      notVisibleItems = (nvRows ?? []).map((r) => {
+        const meta = photoMetaById.get(r.photo_id) ?? { photo_location: null, section_id: null };
+        return {
+          id: r.id,
+          item: r.item ?? "",
+          reason: r.reason ?? null,
+          resolved: Boolean(r.resolved),
+          resolved_note: r.resolved_note ?? null,
+          resolved_at: r.resolved_at ?? null,
+          skipped: Boolean(r.skipped),
+          skipped_reason: r.skipped_reason ?? null,
+          skipped_at: r.skipped_at ?? null,
+          photo_id: r.photo_id,
+          photo_location: meta.photo_location,
+          section_name: meta.section_id ? (sectionNameById.get(meta.section_id) ?? null) : null,
+        };
+      });
+    }
+    const unresolvedNotVisibleCount = notVisibleItems.filter((n) => !n.resolved && !n.skipped).length;
+
+    stage = "findings";
+    // Every finding on the inspection — by inspection_id so findings raised
+    // from a question without a photo count too. Action columns drive the
+    // Audit step's action strips and Review's "without an owner" list.
+    type FindingRow = {
+      id: string;
+      photo_id: string | null;
+      title: string | null;
+      severity: "Low" | "Medium" | "High";
+      user_rating: number | null;
+      cap_status: ActionStatus | null;
+      priority: ActionPriority | null;
+      cap_target_date: string | null;
+      assigned_to: string | null;
+      assigned_email: string | null;
+      action_closed_at: string | null;
+      closure_note: string | null;
+      closure_photo_id: string | null;
+    };
+    const { data: findingsData, error: findingsErr } = await supabase
+      .from("findings")
+      .select(
+        "id, photo_id, title, severity, user_rating, cap_status, priority, cap_target_date, assigned_to, assigned_email, action_closed_at, closure_note, closure_photo_id, created_at",
+      )
+      .eq("inspection_id", id)
+      .order("created_at", { ascending: true });
+    if (findingsErr) console.error("[inspection] findings query", findingsErr.message);
+    const findingRows = (findingsData ?? []) as FindingRow[];
+
+    const findingsByPhoto: Record<string, { total: number; high: number; items: CompactFinding[] }> = {};
+    const counts = { total: 0, high: 0, medium: 0, low: 0, up: 0, down: 0 };
+    for (const f of findingRows) {
+      counts.total += 1;
+      if (f.severity === "High") counts.high += 1;
+      else if (f.severity === "Medium") counts.medium += 1;
+      else counts.low += 1;
+      if (f.user_rating === 1) counts.up += 1;
+      else if (f.user_rating === -1) counts.down += 1;
+      if (!f.photo_id) continue;
+      const bucket = (findingsByPhoto[f.photo_id] ??= { total: 0, high: 0, items: [] });
+      bucket.total += 1;
+      if (f.severity === "High") bucket.high += 1;
+      bucket.items.push({ id: f.id, title: f.title ?? "Untitled finding", severity: f.severity });
+    }
+
+    // Question ↔ finding links (one action per question).
+    const itemByFinding = new Map<string, ChecklistItemRow>();
+    for (const it of checklistItems) if (it.finding_id) itemByFinding.set(it.finding_id, it);
+
+    const isOpenAction = (f: FindingRow) =>
+      f.cap_status === null || f.cap_status === "open" || f.cap_status === "in_progress";
+    const ownerless: ReviewFinding[] = findingRows
+      .filter((f) => isOpenAction(f) && !f.assigned_to && !f.assigned_email)
+      .map((f) => {
+        const item = itemByFinding.get(f.id);
+        return {
+          id: f.id,
+          title: f.title ?? "Untitled finding",
+          severity: f.severity,
+          href: item
+            ? `/inspections/${id}?step=audit#q-${item.id}`
+            : f.photo_id
+              ? `/inspections/${id}/photos/${f.photo_id}#finding-${f.id}`
+              : `/inspections/${id}?step=audit`,
+        };
+      });
+
+    const unanswered: ReviewQuestion[] = checklistItems
+      .filter((i) => i.answer === null)
+      .map((i) => ({ id: i.id, label: labelByItem.get(i.id) ?? "", question: i.question }));
+    const aiToConfirm: ReviewQuestion[] = checklistItems
+      .filter((i) => i.answered_by_ai && !i.ai_confirmed)
+      .map((i) => ({ id: i.id, label: labelByItem.get(i.id) ?? "", question: i.question }));
+    const reviewIssues =
+      unanswered.length + aiToConfirm.length + ownerless.length + unresolvedNotVisibleCount;
+
+    // ---- Step-specific loads -------------------------------------------
+
+    // Audit: linked findings with action fields, the member directory for
+    // assignment, and thumbnails for photos linked to questions.
+    const linkedFindings: Record<string, LinkedFinding> = {};
+    let members: OrgMember[] = [];
+    const questionPhotoUrls: Record<string, string> = {};
+    let templateOptions: TemplateOption[] = [];
+    if (step === "audit") {
+      for (const f of findingRows) {
+        if (!itemByFinding.has(f.id)) continue;
+        const action: ActionFields = {
+          cap_status: f.cap_status,
+          priority: f.priority,
+          cap_target_date: f.cap_target_date,
+          assigned_to: f.assigned_to,
+          assigned_email: f.assigned_email,
+          action_closed_at: f.action_closed_at,
+          closure_note: f.closure_note,
+          closure_photo_id: f.closure_photo_id,
+        };
+        linkedFindings[f.id] = {
+          id: f.id,
+          title: f.title ?? "Untitled finding",
+          severity: f.severity,
+          action,
+        };
+      }
+      if (inspectionOrgId) {
+        const { data: directory } = await supabase.rpc("org_member_directory", {
+          _org_id: inspectionOrgId,
+        });
+        members = (directory ?? []) as OrgMember[];
+      }
+      const linkedPhotoIds = Array.from(
+        new Set(checklistItems.map((i) => i.photo_id).filter((p): p is string => Boolean(p))),
+      );
+      const paths = linkedPhotoIds
+        .map((pid) => [pid, storagePathById.get(pid)] as const)
+        .filter((x): x is readonly [string, string] => Boolean(x[1]));
+      if (paths.length > 0) {
+        const { data: signed } = await supabase.storage
+          .from("photos")
+          .createSignedUrls(paths.map(([, p]) => p), SIGNED_URL_TTL);
+        (signed ?? []).forEach((s, i) => {
+          if (s.signedUrl) questionPhotoUrls[paths[i][0]] = s.signedUrl;
+        });
+      }
+      if (checklistItems.length === 0 && !readOnly) {
+        const { data: customTemplates } = await supabase
+          .from("checklist_templates")
+          .select("id, name")
+          .order("name");
+        templateOptions = [
+          ...BUILTIN_TEMPLATES.map((t) => ({
+            id: t.id,
+            name: `${t.name} (${t.occupancy})`,
+            group: "standard" as const,
+          })),
+          ...(customTemplates ?? []).map((t) => ({
+            id: t.id as string,
+            name: t.name as string,
+            group: "custom" as const,
+          })),
+        ];
+      }
+    }
+
+    // Photos: signed URLs (batched), barcode originals, AI timings, and
+    // whether AI analysis starts switched on.
+    const photoUrls: Record<string, string> = {};
+    const barcodePhotoUrls: Record<string, string> = {};
+    const aiDurationByPhoto: Record<string, number> = {};
+    let totalAiDurationMs = 0;
     let aiAvailable = false;
-    if (!isCompleted) {
+    if (step === "photos" && photosList.length > 0) {
+      stage = "signed-urls";
+      const { data: signed } = await supabase.storage
+        .from("photos")
+        .createSignedUrls(photosList.map((p) => p.storage_path as string), SIGNED_URL_TTL);
+      (signed ?? []).forEach((s, i) => {
+        if (s.signedUrl) photoUrls[photosList[i].id] = s.signedUrl;
+      });
+      const { data: originalRows } = await supabase
+        .from("photos")
+        .select("id, original_storage_path")
+        .eq("inspection_id", id);
+      const originals = (originalRows ?? []).filter(
+        (r): r is { id: string; original_storage_path: string } => Boolean(r.original_storage_path),
+      );
+      if (originals.length > 0) {
+        const { data: signedOriginals } = await supabase.storage
+          .from("photos")
+          .createSignedUrls(originals.map((o) => o.original_storage_path), SIGNED_URL_TTL);
+        (signedOriginals ?? []).forEach((s, i) => {
+          if (s.signedUrl) barcodePhotoUrls[originals[i].id] = s.signedUrl;
+        });
+      }
+      // Latest successful analysis per photo (re-analyses overwrite).
+      const { data: aiCalls } = await supabase
+        .from("ai_calls")
+        .select("photo_id, duration_ms, created_at, status")
+        .in("photo_id", photoIds)
+        .eq("status", "success")
+        .order("created_at", { ascending: false });
+      for (const call of aiCalls ?? []) {
+        const pid = call.photo_id as string | null;
+        if (!pid || pid in aiDurationByPhoto) continue;
+        const dur = Number(call.duration_ms ?? 0);
+        aiDurationByPhoto[pid] = dur;
+        totalAiDurationMs += dur;
+      }
+    }
+    if (step === "photos" && !readOnly) {
       try {
-        const { data: allowance, error: allowanceErr } = await supabase.rpc(
-          "ai_allowance_summary",
-          { _org_id: inspectionOrgId },
-        );
+        const { data: allowance, error: allowanceErr } = await supabase.rpc("ai_allowance_summary", {
+          _org_id: inspectionOrgId,
+        });
         aiAvailable = !allowanceErr && Boolean((allowance as { active?: boolean } | null)?.active);
       } catch {
         aiAvailable = false;
       }
     }
 
-    // Finalize pre-flight inputs — what's still open before locking.
-    const checklistScore = scoreItems(checklistItems);
-
-    // Template options for the "Add a checklist" card — only needed when
-    // an in-progress inspection has no checklist yet.
-    let templateOptions: TemplateOption[] = [];
-    if (checklistItems.length === 0 && !isCompleted) {
-      const { data: customTemplates } = await supabase
-        .from("checklist_templates")
-        .select("id, name")
-        .order("name");
-      templateOptions = [
-        ...BUILTIN_TEMPLATES.map((t) => ({
-          id: t.id,
-          name: `${t.name} (${t.occupancy})`,
-          group: "standard" as const,
-        })),
-        ...(customTemplates ?? []).map((t) => ({
-          id: t.id as string,
-          name: t.name as string,
-          group: "custom" as const,
-        })),
-      ];
-    }
-    const unconfirmedAiCount = checklistItems.filter(
-      (i) => i.answered_by_ai && !i.ai_confirmed,
-    ).length;
-
-    // Signed display URLs for existing signatures (the columns store
-    // storage PATHS in the private `signatures` bucket).
+    // Review: signed display URLs for existing signatures (private bucket).
     let inspectorSigUrl: string | null = null;
     let managerSigUrl: string | null = null;
-    const sigPaths = [
-      ["inspector", (inspection as { inspector_signature_url?: string | null }).inspector_signature_url],
-      ["manager", (inspection as { manager_signature_url?: string | null }).manager_signature_url],
-    ] as const;
-    for (const [role, path] of sigPaths) {
-      if (!path) continue;
-      try {
-        const { data } = await supabase.storage
-          .from("signatures")
-          .createSignedUrl(path, 60 * 60);
+    if (step === "review") {
+      const sigPaths = [
+        ["inspector", (inspection as { inspector_signature_url?: string | null }).inspector_signature_url],
+        ["manager", (inspection as { manager_signature_url?: string | null }).manager_signature_url],
+      ] as const;
+      for (const [role, path] of sigPaths) {
+        if (!path) continue;
+        const { data } = await supabase.storage.from("signatures").createSignedUrl(path, SIGNED_URL_TTL);
         if (data?.signedUrl) {
           if (role === "inspector") inspectorSigUrl = data.signedUrl;
           else managerSigUrl = data.signedUrl;
         }
-      } catch (err) {
-        console.error("[inspection] signature url for", role, err);
       }
     }
+
+    const photoCountBySection = new Map<string, number>();
+    for (const p of photosList) {
+      if (p.section_id) photoCountBySection.set(p.section_id, (photoCountBySection.get(p.section_id) ?? 0) + 1);
+    }
+    const sectionsWithCounts: SectionRow[] = sectionsList.map((s) => ({
+      id: s.id,
+      name: s.name,
+      sort_order: s.sort_order,
+      photoCount: photoCountBySection.get(s.id) ?? 0,
+    }));
+    const notVisibleByPhoto: Record<string, NotVisibleItem[]> = {};
+    for (const it of notVisibleItems) (notVisibleByPhoto[it.photo_id] ??= []).push(it);
 
     stage = "render";
     return (
       <AppShell user={userShell}>
         <div className="flex flex-col gap-5">
-          {/* Finalize / reopen failure — the actions redirect here with
-              ?error= ; without this banner a failed finalize was invisible. */}
+          <InspectionSteps
+            inspectionId={inspection.id}
+            current={step}
+            title={inspection.facility_name}
+            subtitle={inspection.location}
+            status={inspection.status}
+            answered={answeredCount}
+            totalQuestions={checklistItems.length}
+            scorePct={checklistScore.pct}
+            photoCount={photosList.length}
+            reviewIssues={reviewIssues}
+          />
+
+          {/* Finalize / reopen failure — the actions redirect here with ?error=. */}
           {errorMessage ? (
             <div
               role="alert"
-              className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-              style={{
-                borderColor: "rgba(168,54,43,0.4)",
-                background: "rgba(168,54,43,0.08)",
-                color: "#b42318",
-              }}
+              className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"
+              style={{ borderColor: "#b42318", background: "#fdecea", color: "#b42318" }}
             >
               <span>
                 <strong className="font-semibold">That didn&apos;t save.</strong>{" "}
-                {/* The action passes a friendlyError() reason; cap length so a
-                    hand-crafted ?error= can't fill the page. */}
+                {/* friendlyError() text; capped so a crafted ?error= can't fill the page. */}
                 {errorMessage.slice(0, 240)}
               </span>
               <Link
-                href={`/inspections/${inspection.id}`}
+                href={`/inspections/${inspection.id}?step=${step}`}
                 className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
               >
                 Dismiss
@@ -532,471 +562,177 @@ export default async function InspectionDetailPage({
             </div>
           ) : null}
 
-          {/* Header */}
-          <Card variant={isCompleted ? "tinted-teal" : "tinted-orange"}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  href="/inspections/history"
-                  className="text-xs font-medium text-[var(--fg-muted)] transition hover:text-[var(--fg)]"
-                >
-                  ← History
-                </Link>
-                <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-[var(--fg)] sm:text-2xl">
-                  {inspection.facility_name}
-                </h1>
-                {inspection.location ? (
-                  <p className="mt-0.5 text-sm text-[var(--fg-muted)]">{inspection.location}</p>
-                ) : null}
-              </div>
-              <StatusPill status={inspection.status} />
-            </div>
-
-            <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <Field label="Inspector" value={inspection.inspector_name} />
-              <Field
-                label="Date"
-                value={inspection.date_of_inspection ? formatDate(inspection.date_of_inspection) : null}
-              />
-              <Field label="Manager" value={inspection.manager_assigned} />
-              <Field label="Address" value={inspection.facility_address} />
-            </dl>
-
-            {unresolvedNotVisibleCount > 0 ? (
-              <div
-                className="mt-3 inline-flex items-center gap-1.5 self-start rounded-full border px-2.5 py-1 text-[11px] font-medium"
-                style={{
-                  borderColor: "rgba(184,118,42,0.4)",
-                  background: "rgba(184,118,42,0.08)",
-                  color: "#8a5300",
-                }}
-              >
-                <a href="#punch-list" className="no-underline" style={{ color: "inherit" }}>
-                  ⚠ {unresolvedNotVisibleCount} item
-                  {unresolvedNotVisibleCount === 1 ? "" : "s"} need
-                  {unresolvedNotVisibleCount === 1 ? "s" : ""} re-photograph
-                </a>
-                <HelpTip title="Needs re-photograph" side="bottom">
-                  Things the AI couldn&apos;t confirm from your angle — a gauge
-                  turned away, a label out of frame. Not findings; follow-ups.
-                  Re-shoot on your next walk and mark Resolved, or Skip with a
-                  reason.
-                </HelpTip>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link href={`/inspections/${inspection.id}/edit`} className="cl-btn-outline">
-                Edit details
-              </Link>
-            </div>
-          </Card>
-
-          {/* Checklist — the scored question set from the template chosen at
-              creation. AI-flagged answers carry a confirm badge. */}
-          {checklistItems.length > 0 ? (
-            <ChecklistPanel
-              inspectionId={inspection.id}
-              items={checklistItems}
-              readOnly={isCompleted}
-            />
-          ) : !isCompleted ? (
+          {step === "info" ? (
             <>
-              {checklistFailed ? (
-                <p
-                  role="alert"
-                  className="rounded border px-3 py-2 text-sm"
-                  style={{
-                    borderColor: "rgba(168,54,43,0.4)",
-                    background: "rgba(168,54,43,0.08)",
-                    color: "#b42318",
-                  }}
-                >
-                  The inspection was created, but its checklist didn&apos;t
-                  load. Pick the inspection type again below.
-                </p>
-              ) : null}
-              <AttachChecklistCard inspectionId={inspection.id} templates={templateOptions} />
-            </>
-          ) : null}
-
-          {/* Uploader sits DIRECTLY under the header so "Take photo" is on
-              the first screen of a phone. The stat grid that used to live
-              here moved below the photos. The one-liner introduces Chip by
-              name — the rest of the page refers to it without explanation. */}
-          {!isCompleted ? (
-            <>
-              <p className="-mb-2 px-1 text-xs text-[var(--fg-muted)]">
-                <strong className="font-semibold text-[var(--fg)]">Chip</strong>{" "}
-                — the AI — reads each photo and drafts findings with code
-                citations. You confirm, correct, or add your own.
-              </p>
-              <PhotoUploader inspectionId={inspection.id} aiAvailable={aiAvailable} />
-            </>
-          ) : null}
-
-          {/* "2 photos analyzing · 1 queued" — polls while anything is
-              pending and refreshes the page as each photo finishes. */}
-          <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
-
-          {/* Life-safety plan markup (migration 0025): the facility's plans
-              with this inspection's numbered finding pins — move / relabel /
-              delete inline. Self-contained server component; degrades to a
-              "set a facility" nudge when the inspection has none. */}
-          <InspectionPlansSection
-            inspectionId={inspection.id}
-            facilityId={facilityId}
-            readOnly={isCompleted}
-          />
-
-          {/* Photo-organization manager — sits above the photo grid so it's
-              easy to add sections before/while shooting. Empty state nudges
-              the inspector to organize as photos come in. */}
-          <SectionsManager
-            inspectionId={inspection.id}
-            sections={sectionsWithCounts}
-            readOnly={isCompleted}
-          />
-
-          <section className="flex flex-col gap-4">
-            <h2 className="px-1 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-              Photos {photosList.length ? `· ${photosList.length}` : ""}
-            </h2>
-            {photosList.length === 0 ? (
               <Card>
-                <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
-                  No photos yet
-                </p>
-                <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
-                  Add a photo above — Chip reads it and drafts the findings.
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h2 className="text-base font-semibold text-[var(--ink)]">Inspection details</h2>
+                  {!readOnly ? (
+                    <Link href={`/inspections/${inspection.id}/edit`} className="cl-btn-outline cl-btn-sm">
+                      Edit details
+                    </Link>
+                  ) : null}
+                </div>
+                <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <Field label="Facility" value={inspection.facility_name} />
+                  <Field label="Location" value={inspection.location} />
+                  <Field label="Inspector" value={inspection.inspector_name} />
+                  <Field
+                    label="Date"
+                    value={inspection.date_of_inspection ? formatDate(inspection.date_of_inspection) : null}
+                  />
+                  <Field label="Manager" value={inspection.manager_assigned} />
+                  <Field label="Address" value={inspection.facility_address} />
+                  <Field label="Inspection type" value={checklistItems[0]?.template_name ?? "Photos only"} />
+                </dl>
+              </Card>
+              <InspectionSummary
+                photoCount={photosList.length}
+                findings={{ total: counts.total, high: counts.high, medium: counts.medium, low: counts.low }}
+                punchList={{
+                  open: unresolvedNotVisibleCount,
+                  resolved: notVisibleItems.filter((n) => n.resolved).length,
+                  skipped: notVisibleItems.filter((n) => n.skipped && !n.resolved).length,
+                }}
+                ratings={{ thumbsUp: counts.up, thumbsDown: counts.down }}
+                status={inspection.status}
+                createdAt={inspection.created_at}
+                updatedAt={inspection.updated_at}
+                finalizedAt={
+                  isCompleted ? (inspection.inspector_signed_at ?? inspection.updated_at) : null
+                }
+              />
+            </>
+          ) : null}
+
+          {step === "audit" ? (
+            checklistItems.length > 0 ? (
+              <>
+                <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
+                <ChecklistPanel
+                  inspectionId={inspection.id}
+                  items={checklistItems}
+                  readOnly={readOnly}
+                  photoUrls={questionPhotoUrls}
+                  linkedFindings={linkedFindings}
+                  actionContext={{ members, currentUserId: user.id, readOnly: isViewer }}
+                />
+              </>
+            ) : !readOnly ? (
+              <>
+                {checklistFailed ? (
+                  <p
+                    role="alert"
+                    className="rounded border px-3 py-2 text-sm"
+                    style={{ borderColor: "#b42318", background: "#fdecea", color: "#b42318" }}
+                  >
+                    The inspection was created, but its checklist didn&apos;t load. Pick the
+                    inspection type again below.
+                  </p>
+                ) : null}
+                <AttachChecklistCard inspectionId={inspection.id} templates={templateOptions} />
+              </>
+            ) : (
+              <Card>
+                <p className="text-sm text-[var(--fg-muted)]">
+                  This inspection was a photo walk without a checklist.
                 </p>
               </Card>
-            ) : (
-              <>
-                {/* Group photos by section. Unassigned first (always shown if
-                    there are any orphans). Then each section in sort_order.
-                    Empty sections render a small placeholder so users see
-                    that the section exists and can drop photos into it. */}
-                {(() => {
-                  const grouped: Array<{
-                    key: string;
-                    label: string | null;
-                    photos: typeof photosList;
-                  }> = [];
-
-                  const unassigned = photosList.filter((p) => !p.section_id);
-                  if (unassigned.length > 0 || sectionsList.length === 0) {
-                    grouped.push({
-                      key: "unassigned",
-                      label: sectionsList.length > 0 ? "Unassigned" : null,
-                      photos: unassigned,
-                    });
-                  }
-
-                  for (const s of sectionsList) {
-                    grouped.push({
-                      key: s.id,
-                      label: s.name,
-                      photos: photosList.filter((p) => p.section_id === s.id),
-                    });
-                  }
-
-                  return grouped.map((g) => (
-                    <div key={g.key} className="flex flex-col gap-2.5">
-                      {g.label ? (
-                        <h3 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-                          {g.label}
-                          <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
-                            · {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
-                          </span>
-                        </h3>
-                      ) : null}
-                      {g.photos.length === 0 ? (
-                        <EmptyState compact title="No photos in this section yet">
-                          Use the &ldquo;Move to&rdquo; menu on any photo card
-                          below to add it here.
-                        </EmptyState>
-                      ) : (
-                        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          {g.photos.map((p) => {
-                            const counts =
-                              findingsByPhoto[p.id] ?? { total: 0, high: 0, items: [] };
-                            const url = photoUrls[p.id];
-                            return (
-                              <li key={p.id}>
-                                <Card padded={false} className="overflow-hidden">
-                                  <Link
-                                    href={`/inspections/${inspection.id}/photos/${p.id}`}
-                                    className="block"
-                                  >
-                                    <div
-                                      className="relative aspect-video w-full"
-                                      style={{ background: "#0a0d12" }}
-                                    >
-                                      {url ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={url} alt="" className="h-full w-full object-cover" />
-                                      ) : (
-                                        // No signed URL came back (storage hiccup or a
-                                        // missing object). Say so — a permanent
-                                        // "loading…" is a lie. The card is a link, so a
-                                        // tap opens the photo page, which retries.
-                                        <div className="flex h-full flex-col items-center justify-center gap-1 px-3 text-center text-xs text-[var(--fg-subtle)]">
-                                          <span>Photo unavailable</span>
-                                          <span className="text-[10px]">tap to retry</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="px-4 pb-2 pt-3">
-                                      <div className="flex items-center justify-between gap-2">
-                                        {p.analysis_status !== "done" ? (
-                                          <span
-                                            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                            style={
-                                              p.analysis_status === "failed"
-                                                ? { background: "rgba(168,54,43,0.10)", color: "#b42318" }
-                                                : p.analysis_status === "analyzing"
-                                                  ? { background: "rgba(184,118,42,0.12)", color: "#8a5300" }
-                                                  : { background: "rgba(15,21,24,0.06)", color: "var(--fg-muted)" }
-                                            }
-                                            title={
-                                              p.analysis_status === "failed"
-                                                ? p.analysis_error ?? "Analysis failed — open the photo to retry."
-                                                : p.analysis_status === "analyzing"
-                                                  ? "Chip is reading this photo now."
-                                                  : "Waiting for Chip — analysis starts as soon as there is room in line."
-                                            }
-                                          >
-                                            {p.analysis_status === "analyzing" ? (
-                                              <span
-                                                aria-hidden
-                                                className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-                                                style={{ background: "#8a5300" }}
-                                              />
-                                            ) : null}
-                                            {p.analysis_status === "failed"
-                                              ? "Failed"
-                                              : p.analysis_status === "analyzing"
-                                                ? "Analyzing…"
-                                                : "Queued"}
-                                          </span>
-                                        ) : (
-                                          <span className="text-sm font-medium text-[var(--fg)]">
-                                            {counts.total} finding{counts.total === 1 ? "" : "s"}
-                                          </span>
-                                        )}
-                                        {counts.high > 0 ? (
-                                          <SeverityBadge severity="High" size="sm">
-                                            {counts.high} high
-                                          </SeverityBadge>
-                                        ) : null}
-                                      </div>
-                                      {p.photo_location ? (
-                                        <p className="mt-1 truncate text-xs text-[var(--fg-muted)]">
-                                          {p.photo_location}
-                                        </p>
-                                      ) : null}
-                                      {p.analysis_status === "failed" && p.analysis_error ? (
-                                        <p className="mt-1 text-[11px] leading-snug" style={{ color: "#b42318" }}>
-                                          {p.analysis_error}
-                                        </p>
-                                      ) : null}
-                                      {/* AI analysis time — small mono caption so the user can
-                                          see how long each examination took. Reads the latest
-                                          successful ai_calls.duration_ms for this photo. */}
-                                      {aiDurationByPhoto.get(p.id) ? (
-                                        <p
-                                          className="mt-1 text-[10px] uppercase tracking-[0.14em]"
-                                          style={{
-                                            fontFamily: "var(--font-jetbrains-mono)",
-                                            color: "var(--fg-subtle)",
-                                          }}
-                                          title="Time the AI spent analyzing this photo (most recent run)"
-                                        >
-                                          ⏱ {formatDuration(aiDurationByPhoto.get(p.id)!)}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  </Link>
-
-                                  {/* Move-to-section menu lives BETWEEN the
-                                      link and the findings list so the click
-                                      target on the card stays intact while
-                                      this control is independently
-                                      interactive. Hidden when finalized. */}
-                                  {!isCompleted ? (
-                                    <div className="flex justify-end px-4 pb-2">
-                                      <PhotoMoveMenu
-                                        photoId={p.id}
-                                        inspectionId={inspection.id}
-                                        currentSectionId={p.section_id ?? null}
-                                        sections={sectionOptions}
-                                      />
-                                    </div>
-                                  ) : null}
-
-                                  <PhotoCardFindings
-                                    inspectionId={inspection.id}
-                                    photoId={p.id}
-                                    findings={counts.items}
-                                    analysisStatus={p.analysis_status}
-                                  />
-
-                                  {url && <BarcodeScanner compact facilities={[]} sourceImageUrl={barcodePhotoUrls[p.id] || url} />}
-
-                                  {/* Per-photo "Not visible" dropdown —
-                                      collapsed by default, click to expand.
-                                      Items have Resolve / Skip / Reopen
-                                      controls inline. Hidden when the photo
-                                      had no not-visible items at all. */}
-                                  <PhotoCardNotVisible
-                                    inspectionId={inspection.id}
-                                    photoId={p.id}
-                                    items={notVisibleByPhoto.get(p.id) ?? []}
-                                    readOnly={isCompleted}
-                                  />
-                                </Card>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  ));
-                })()}
-              </>
-            )}
-          </section>
-
-          {/* Re-photograph punch-list — every "not visible" item Chip
-              flagged across all photos. Inspector resolves them as they
-              come back with better shots. Print button opens the browser
-              print dialog so the list can be taken to the site. The
-              #punch-list anchor is linked from each photo's per-photo
-              not-visible card. */}
-          <div id="punch-list" className="scroll-mt-20">
-            <NotVisibleChecklist
-              inspectionId={inspection.id}
-              items={notVisibleItems}
-              readOnly={isCompleted}
-            />
-          </div>
-
-          {/* Stat-grid summary — photos, findings by severity, punch-list
-              progress, feedback ratings, and a compact timeline strip.
-              Lives BELOW the photos so the uploader stays above the fold on
-              a phone; it's a rollup, not a call to action. */}
-          <InspectionSummary
-            photoCount={photosList.length}
-            findings={{
-              total: totalFindings,
-              high: highFindings,
-              medium: mediumFindings,
-              low: lowFindings,
-            }}
-            punchList={{
-              open: unresolvedNotVisibleCount,
-              resolved: resolvedNotVisibleCount,
-              skipped: skippedNotVisibleCount,
-            }}
-            ratings={{ thumbsUp, thumbsDown }}
-            status={inspection.status}
-            createdAt={inspection.created_at}
-            updatedAt={inspection.updated_at}
-            finalizedAt={
-              inspection.status === "completed"
-                ? inspection.inspector_signed_at ?? inspection.updated_at
-                : null
-            }
-          />
-
-          {/* Aggregate AI-time footnote — sum of the latest successful
-              analysis duration across every photo on this inspection.
-              Renders nothing if no photos have been analyzed yet. */}
-          {totalAiDurationMs > 0 ? (
-            <p
-              className="px-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
-              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-              title="Total time the AI spent analyzing photos on this inspection (most recent run per photo)"
-            >
-              ⏱ Total AI analysis time · {formatDuration(totalAiDurationMs)}
-              {aiDurationByPhoto.size > 0
-                ? ` · avg ${formatDuration(totalAiDurationMs / aiDurationByPhoto.size)} per photo`
-                : ""}
-            </p>
+            )
           ) : null}
 
-          <Card>
-            {/* Sign-off — inspector + manager. Available before AND after
-                finalize (a manager often signs after reviewing the locked
-                report). Signatures render on the PDF's sign-off page. */}
-            <div className="mb-4 grid grid-cols-1 gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-2">
-              <SignaturePad
-                inspectionId={inspection.id}
-                role="inspector"
-                label={`Inspector${inspection.inspector_name ? ` — ${inspection.inspector_name}` : ""}`}
-                signedUrl={inspectorSigUrl}
-                signedAt={inspection.inspector_signed_at}
-                userId={user.id}
-              />
-              <SignaturePad
-                inspectionId={inspection.id}
-                role="manager"
-                label={`Manager${inspection.manager_assigned ? ` — ${inspection.manager_assigned}` : ""}`}
-                signedUrl={managerSigUrl}
-                signedAt={inspection.manager_signed_at}
-                userId={user.id}
-              />
-            </div>
-            {isCompleted ? (
-              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="flex items-center gap-1.5 font-medium text-[var(--fg)]">
-                    Inspection finalized
-                    <HelpTip title="Finalized">
-                      The inspection is locked — no new photos, no edits — and
-                      the report and workbooks below are downloadable. Nothing
-                      is deleted; reopen any time to unlock editing.
-                    </HelpTip>
+          {step === "photos" ? (
+            <>
+              {!readOnly ? (
+                <>
+                  <p className="-mb-2 px-1 text-xs text-[var(--fg-muted)]">
+                    <strong className="font-semibold text-[var(--fg)]">Chip</strong> — the AI — reads
+                    each photo and drafts findings with code citations. You confirm, correct, or add
+                    your own. Photos for a single question are quicker from that question on Audit.
                   </p>
-                  <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                    Download the report below, or reopen to make changes.
-                  </p>
-                </div>
-                <form action={finalizeInspection}>
-                  <input type="hidden" name="inspection_id" value={inspection.id} />
-                  <input type="hidden" name="status" value="in_progress" />
-                  <SubmitButton className="cl-btn-outline" pendingLabel="Reopening…">
-                    Reopen
-                  </SubmitButton>
-                </form>
-              </div>
-            ) : (
-              <FinalizePreflight
-                analysis={analysisCounts}
+                  <PhotoUploader inspectionId={inspection.id} aiAvailable={aiAvailable} />
+                </>
+              ) : null}
+              <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
+              <InspectionPlansSection inspectionId={inspection.id} facilityId={facilityId} readOnly={readOnly} />
+              <SectionsManager inspectionId={inspection.id} sections={sectionsWithCounts} readOnly={readOnly} />
+              <PhotoGrid
                 inspectionId={inspection.id}
-                checklist={{
-                  total: checklistItems.length,
-                  unanswered: checklistScore.unanswered,
-                  unconfirmedAi: unconfirmedAiCount,
-                }}
-                openPunchList={unresolvedNotVisibleCount}
-                inspectorSigned={Boolean(inspection.inspector_signed_at)}
-                managerSigned={Boolean(inspection.manager_signed_at)}
+                photosList={photosList}
+                sectionsList={sectionsList}
+                sectionOptions={sectionsList.map((s) => ({ id: s.id, name: s.name }))}
+                findingsByPhoto={findingsByPhoto}
+                photoUrls={photoUrls}
+                barcodePhotoUrls={barcodePhotoUrls}
+                aiDurationByPhoto={aiDurationByPhoto}
+                notVisibleByPhoto={notVisibleByPhoto}
+                isCompleted={readOnly}
               />
-            )}
-          </Card>
+              {totalAiDurationMs > 0 ? (
+                <p
+                  className="px-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-subtle)]"
+                  style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+                  title="Total time the AI spent analyzing photos on this inspection (most recent run per photo)"
+                >
+                  ⏱ Total AI analysis time · {formatDuration(totalAiDurationMs)}
+                  {Object.keys(aiDurationByPhoto).length > 0
+                    ? ` · avg ${formatDuration(totalAiDurationMs / Object.keys(aiDurationByPhoto).length)} per photo`
+                    : ""}
+                </p>
+              ) : null}
+            </>
+          ) : null}
 
-          {/* Exports — always visible so the user learns what the tool
-              produces before finalizing; disabled until then. */}
-          <Card>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-              Reports &amp; workbooks
-            </h2>
-            <div className="mt-3">
-              <ExportButtons inspectionId={inspection.id} enabled={isCompleted} />
-            </div>
-          </Card>
+          {step === "review" ? (
+            <ReviewStep
+              inspectionId={inspection.id}
+              isCompleted={isCompleted}
+              readOnly={isViewer}
+              unanswered={unanswered}
+              aiToConfirm={aiToConfirm}
+              ownerless={ownerless}
+              notVisibleItems={notVisibleItems}
+              analysis={analysisCounts}
+              checklistTotal={checklistItems.length}
+              signatures={{
+                inspectorLabel: `Inspector${inspection.inspector_name ? ` — ${inspection.inspector_name}` : ""}`,
+                managerLabel: `Manager${inspection.manager_assigned ? ` — ${inspection.manager_assigned}` : ""}`,
+                inspectorUrl: inspectorSigUrl,
+                managerUrl: managerSigUrl,
+                inspectorSignedAt: inspection.inspector_signed_at,
+                managerSignedAt: inspection.manager_signed_at,
+              }}
+              userId={user.id}
+            />
+          ) : null}
+
+          {step === "report" ? (
+            <Card>
+              <h2 className="flex items-center gap-1.5 text-base font-semibold text-[var(--ink)]">
+                Reports &amp; workbooks
+                <HelpTip title="Reports">
+                  The PDF report, corrective action plan (CAP), LSRA and ILSM
+                  workbooks are built from the checklist, findings, actions,
+                  plan pins and signatures.
+                </HelpTip>
+              </h2>
+              {!isCompleted ? (
+                <p className="mt-1 text-sm text-[var(--fg-muted)]">
+                  Downloads unlock once the inspection is finalized.{" "}
+                  <Link href={`/inspections/${inspection.id}?step=review`} className="font-medium underline">
+                    Review and finalize →
+                  </Link>
+                </p>
+              ) : null}
+              <div className="mt-3">
+                <ExportButtons inspectionId={inspection.id} enabled={isCompleted} />
+              </div>
+            </Card>
+          ) : null}
+
+          <StepFooter inspectionId={inspection.id} current={step} />
+          {/* Room for the floating "Next unanswered" button on Audit. */}
+          {step === "audit" ? <div aria-hidden className="h-16" /> : null}
         </div>
       </AppShell>
     );
@@ -1006,12 +742,7 @@ export default async function InspectionDetailPage({
     if (isNextControlFlowError(err)) throw err;
     // Raw error goes to the server log only — never to the screen.
     console.error(`[inspection] render failed at stage=${stage}`, err);
-    return (
-      <Diag
-        user={{ fullName: "—", organization: null, email: null }}
-        stage={stage}
-      />
-    );
+    return <Diag user={{ fullName: "—", organization: null, email: null }} stage={stage} />;
   }
 }
 
@@ -1065,33 +796,11 @@ function Diag({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
-  const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#8a5300" },
-    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#2f6b2f" },
-    archived: { label: "Archived", bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
-  };
-  const m = map[status] ?? map.archived;
-  return (
-    <span
-      className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-      style={{ background: m.bg, color: m.fg }}
-    >
-      {m.label}
-    </span>
-  );
-}
-
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fg-subtle)]">
-        {label}
-      </dt>
+      <dt className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fg-subtle)]">{label}</dt>
       <dd className="mt-0.5 truncate text-sm text-[var(--fg)]">{value || "—"}</dd>
     </div>
   );
 }
-
-// formatDuration moved to lib/format-duration.ts so the photo detail
-// page and admin stats can share it.

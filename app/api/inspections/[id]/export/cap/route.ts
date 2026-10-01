@@ -54,12 +54,6 @@ export async function GET(
       );
     }
 
-    const { data: photos } = await supabase
-      .from("photos")
-      .select("id, created_at")
-      .eq("inspection_id", inspectionId)
-      .order("created_at", { ascending: true });
-    const photoIds = (photos ?? []).map((p) => p.id as string);
 
     type CAPRow = {
       letterCode: string;
@@ -80,13 +74,13 @@ export async function GET(
     };
 
     const rows: CAPRow[] = [];
-    if (photoIds.length > 0) {
+    { // all findings on the inspection, including question-only ones without a photo
       const { data: findings } = await supabase
         .from("findings")
         .select(
           "photo_id, title, severity, category, description, location, remediation, references, created_at, cap_status, cap_target_date, assigned_email, action_closed_at, closure_note, manager_corrective_action",
         )
-        .in("photo_id", photoIds)
+        .eq("inspection_id", inspectionId)
         .order("severity", { ascending: false })
         .order("created_at", { ascending: true });
 
