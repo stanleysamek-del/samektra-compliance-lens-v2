@@ -18,6 +18,7 @@ import { saveSignature, clearSignature } from "@/app/inspections/[id]/actions";
 import { showToast } from "@/components/toaster";
 import { formatDateTime } from "@/lib/format-date";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 export function SignaturePad({
   inspectionId,
   role,
@@ -129,14 +130,14 @@ export function SignaturePad({
     });
   }
 
-  function removeSignature() {
-    if (
-      !window.confirm(
-        `Remove the ${label.toLowerCase()} signature? The report will show it as unsigned until someone signs again.`,
-      )
-    ) {
-      return;
-    }
+  async function removeSignature() {
+    const ok = await confirmDialog({
+      title: `Remove the ${label.toLowerCase()} signature?`,
+      message: "The report will show it as unsigned until someone signs again.",
+      confirmLabel: "Remove signature",
+      tone: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const res = await clearSignature({ inspectionId, role });
       if (!res.ok) {

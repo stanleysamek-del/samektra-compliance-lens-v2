@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 
 /**
  * Submit button with a real pending state for server-action forms.
@@ -13,14 +14,25 @@ export function SubmitButton({
   pendingLabel,
   className = "cl-btn-accent",
   confirmMessage,
+  confirmTitle,
+  confirmLabel,
+  confirmTone = "default",
   disabled = false,
 }: {
   children: ReactNode;
   pendingLabel?: string;
   disabled?: boolean;
   className?: string;
-  /** If set, the click asks for confirmation before the form submits. */
+  /**
+   * If set, the click asks for confirmation (app dialog) before the form
+   * submits. Shown as the dialog body under `confirmTitle`, or as the
+   * title when no title is given.
+   */
   confirmMessage?: string;
+  confirmTitle?: string;
+  confirmLabel?: string;
+  /** "danger" for destructive actions — red confirm, focus on Cancel. */
+  confirmTone?: "default" | "danger";
 }) {
   const { pending } = useFormStatus();
   return (
@@ -29,10 +41,19 @@ export function SubmitButton({
       disabled={pending || disabled}
       aria-busy={pending}
       className={className}
-      onClick={(e) => {
-        if (confirmMessage && !pending && !window.confirm(confirmMessage)) {
-          e.preventDefault();
-        }
+      onClick={async (e) => {
+        if (!confirmMessage || pending) return;
+        e.preventDefault();
+        const button = e.currentTarget;
+        const ok = await confirmDialog({
+          title: confirmTitle ?? confirmMessage,
+          message: confirmTitle ? confirmMessage : undefined,
+          confirmLabel,
+          tone: confirmTone,
+        });
+        // requestSubmit(button) keeps the button's name/value and runs
+        // the form action exactly like the original click would have.
+        if (ok) button.form?.requestSubmit(button);
       }}
     >
       {pending ? (pendingLabel ?? "Working…") : children}

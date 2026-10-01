@@ -8,6 +8,7 @@ import { SessionGuard } from "@/components/session-guard";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { HelpDrawer } from "@/components/help-drawer";
 import { Toaster } from "@/components/toaster";
+import { ConfirmHost } from "@/components/ui/confirm-dialog";
 
 /* =====================================================================
  * AppShell
@@ -229,6 +230,8 @@ export function AppShell({ user, children }: Props) {
 
       {/* ===== App-wide toast stack (showToast() from any client component) ===== */}
       <Toaster />
+      {/* confirmDialog() renders here (replaces window.confirm). */}
+      <ConfirmHost />
     </div>
   );
 }

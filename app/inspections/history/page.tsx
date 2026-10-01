@@ -9,6 +9,7 @@ import { InspectionMoveMenu } from "@/components/inspection-move-menu";
 import { getCurrentOrg } from "@/lib/org/current";
 import { scopeToWorkspace } from "@/lib/org/scope";
 
+import { EmptyState } from "@/components/ui/empty-state";
 type Sort = "newest" | "oldest" | "name" | "facility-date";
 type StatusFilter = "all" | "in_progress" | "completed" | "archived";
 
@@ -423,10 +424,10 @@ export default async function HistoryPage({
                       </h3>
                     ) : null}
                     {g.rows.length === 0 ? (
-                      <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-[11px] text-[var(--fg-subtle)]">
-                        No inspections in this group yet. Use the &ldquo;Move
-                        to&rdquo; menu on any inspection below.
-                      </p>
+                      <EmptyState compact title="No inspections in this group yet">
+                        Use the &ldquo;Move to&rdquo; menu on any inspection
+                        below to file it here.
+                      </EmptyState>
                     ) : (
                       <ul className="flex flex-col gap-2">
                         {g.rows.map((row) => (

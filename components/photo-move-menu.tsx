@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { assignPhotoToSection } from "@/app/inspections/[id]/actions";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
+import { FolderIcon, CaretIcon, moveChipClass } from "@/components/move-menu-parts";
 
 type SectionOption = {
   id: string;
@@ -18,9 +20,8 @@ type Props = {
 /**
  * Tiny "Move to" dropdown rendered on each photo card. Shows the current
  * section (or "Unassigned") and lets the inspector move the photo to any
- * existing section, or detach it back to unassigned. Open/close is local
- * state; submission goes through the server action and triggers a
- * revalidation of the inspection page.
+ * existing section, or detach it back to unassigned. Submission goes
+ * through the server action and revalidates the inspection page.
  */
 export function PhotoMoveMenu({
   photoId,
@@ -28,14 +29,12 @@ export function PhotoMoveMenu({
   currentSectionId,
   sections,
 }: Props) {
-  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const currentName =
     sections.find((s) => s.id === currentSectionId)?.name ?? "Unassigned";
 
   function move(sectionId: string | null) {
-    setOpen(false);
     const fd = new FormData();
     fd.append("photo_id", photoId);
     fd.append("inspection_id", inspectionId);
@@ -51,101 +50,28 @@ export function PhotoMoveMenu({
   }
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        disabled={isPending}
-        // ≥40px tall on phones (thumb target); compact chip from sm up.
-        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)] sm:min-h-0 sm:px-2 sm:py-0.5 sm:text-[10px]"
-        title="Move this photo to a section"
-        aria-label={`Move photo to a section (currently ${currentName})`}
-      >
-        <FolderIcon /> {isPending ? "Moving…" : currentName}
-        <CaretIcon />
-      </button>
-
-      {open ? (
+    <Menu
+      label={`Move photo to a section (currently ${currentName})`}
+      title="Move this photo to a section"
+      disabled={isPending}
+      triggerClassName={moveChipClass}
+      trigger={
         <>
-          {/* Click-away catcher */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            className="absolute right-0 z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ul className="flex flex-col py-1 text-xs">
-              <li>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    move(null);
-                  }}
-                  className={[
-                    "w-full px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:py-1.5",
-                    currentSectionId === null
-                      ? "font-semibold text-[var(--primary)]"
-                      : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
-                  ].join(" ")}
-                >
-                  Unassigned
-                </button>
-              </li>
-              {sections.length > 0 ? (
-                <li
-                  aria-hidden
-                  className="mx-2 my-1 h-px bg-[var(--border)]"
-                />
-              ) : null}
-              {sections.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      move(s.id);
-                    }}
-                    className={[
-                      "w-full truncate px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:py-1.5",
-                      s.id === currentSectionId
-                        ? "font-semibold text-[var(--primary)]"
-                        : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
-                    ].join(" ")}
-                  >
-                    {s.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <FolderIcon /> <span className="max-w-[140px] truncate">{isPending ? "Moving…" : currentName}</span>
+          <CaretIcon />
         </>
-      ) : null}
-    </div>
-  );
-}
-
-function FolderIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-    </svg>
-  );
-}
-function CaretIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
+      }
+    >
+      <MenuLabel>Move to section</MenuLabel>
+      <MenuItem selected={currentSectionId === null} onSelect={() => move(null)}>
+        Unassigned
+      </MenuItem>
+      {sections.length > 0 ? <MenuSeparator /> : null}
+      {sections.map((s) => (
+        <MenuItem key={s.id} selected={s.id === currentSectionId} onSelect={() => move(s.id)}>
+          <span className="truncate">{s.name}</span>
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }

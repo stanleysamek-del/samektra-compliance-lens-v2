@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/card";
+import { Button } from "@/components/ui/button";
 import { attachChecklistToInspection } from "@/app/actions/checklist";
 
 export type TemplateOption = { id: string; name: string; group: "standard" | "custom" };
@@ -84,14 +85,15 @@ export function AttachChecklistCard({
             </optgroup>
           ) : null}
         </select>
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={attach}
-          disabled={!templateId || pending}
-          className="cl-btn-primary disabled:opacity-50"
+          disabled={!templateId}
+          loading={pending}
+          loadingLabel="Adding…"
         >
-          {pending ? "Adding…" : "Add checklist"}
-        </button>
+          Add checklist
+        </Button>
       </div>
       {error ? (
         <p role="alert" className="mt-2 text-sm text-[var(--danger)]">

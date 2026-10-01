@@ -18,6 +18,7 @@ import { showToast } from "@/components/toaster";
 import { PlaceOnPlanButton } from "@/components/plans/place-on-plan-button";
 
 import { SeverityBadge } from "@/components/severity-badge";
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /** Everything "Place on plan" needs; the photo page passes it. */
 export type FindingPlanContext = {
   facilityId: string | null;
@@ -164,8 +165,14 @@ export function FindingCard({
     });
   }
 
-  function remove() {
-    if (!confirm("Delete this finding? This cannot be undone.")) return;
+  async function remove() {
+    const ok = await confirmDialog({
+      title: "Delete this finding?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete finding",
+      tone: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const res = await deleteFinding(finding.id, finding.inspection_id);
       if (!res.ok) showToast({ kind: "error", message: res.error });

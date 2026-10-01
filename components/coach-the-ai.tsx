@@ -7,6 +7,7 @@ import { TeachChipButton } from "@/components/teach-chip-button";
 import { showToast } from "@/components/toaster";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 
+import { EmptyState } from "@/components/ui/empty-state";
 type Turn = {
   id: string;
   turn_index: number;
@@ -302,10 +303,10 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
           })}
         </ul>
       ) : !isLoading ? (
-        <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--fg-subtle)]">
-          No hints yet. Start by telling the AI what it&apos;s missing or
-          what to focus on in this photo.
-        </p>
+        <EmptyState compact title="No hints yet">
+          Tell the AI what it&apos;s missing or what to focus on in this
+          photo.
+        </EmptyState>
       ) : null}
 
       {/* Pending inspector turn (optimistic) + animated typing indicator */}

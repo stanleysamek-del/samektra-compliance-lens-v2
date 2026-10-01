@@ -10,6 +10,8 @@ import {
 } from "@/app/inspections/folders/actions";
 import { showToast } from "@/components/toaster";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 export type FolderRow = {
   id: string;
   name: string;
@@ -96,14 +98,14 @@ export function FoldersManager({ organizationId, folders }: Props) {
     });
   }
 
-  function remove(folderId: string, name: string) {
-    if (
-      !confirm(
-        `Delete group "${name}"? Inspections inside it move to Unfiled. Findings stay.`,
-      )
-    ) {
-      return;
-    }
+  async function remove(folderId: string, name: string) {
+    const ok = await confirmDialog({
+      title: `Delete group "${name}"?`,
+      message: "Inspections inside it move to Unfiled. Findings stay.",
+      confirmLabel: "Delete group",
+      tone: "danger",
+    });
+    if (!ok) return;
     const fd = new FormData();
     fd.append("folder_id", folderId);
     startTransition(async () => {
@@ -150,12 +152,11 @@ export function FoldersManager({ organizationId, folders }: Props) {
       </div>
 
       {folders.length === 0 && !adding ? (
-        <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-xs text-[var(--fg-subtle)]">
-          No groups yet. Create one to organize inspections by hospital,
-          location, type, or anything else your team uses — e.g.,
-          &ldquo;Memorial Hospital&rdquo;, &ldquo;Q4 Fire Audits&rdquo;,
-          &ldquo;Annual Sprinkler Surveys&rdquo;.
-        </p>
+        <EmptyState compact title="No groups yet">
+          Organize inspections by hospital, location, type, or anything else
+          your team uses — e.g., &ldquo;Memorial Hospital&rdquo;, &ldquo;Q4
+          Fire Audits&rdquo;. Use + Add group above.
+        </EmptyState>
       ) : null}
 
       {folders.length > 0 ? (

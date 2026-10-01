@@ -9,6 +9,8 @@ import {
 } from "@/app/inspections/[id]/actions";
 import { showToast } from "@/components/toaster";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 export type SectionRow = {
   id: string;
   name: string;
@@ -87,14 +89,14 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
     });
   }
 
-  function remove(sectionId: string, name: string) {
-    if (
-      !confirm(
-        `Delete section "${name}"? Photos in it will move to Unassigned. Findings stay.`,
-      )
-    ) {
-      return;
-    }
+  async function remove(sectionId: string, name: string) {
+    const ok = await confirmDialog({
+      title: `Delete section "${name}"?`,
+      message: "Photos in it move to Unassigned. Findings stay.",
+      confirmLabel: "Delete section",
+      tone: "danger",
+    });
+    if (!ok) return;
     const fd = new FormData();
     fd.append("section_id", sectionId);
     fd.append("inspection_id", inspectionId);
@@ -133,10 +135,11 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
       </div>
 
       {sections.length === 0 && !adding ? (
-        <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-xs text-[var(--fg-subtle)]">
-          No sections yet. Group photos by room, smoke compartment, or area —
-          e.g., &ldquo;Stair B&rdquo;, &ldquo;Main Corridor&rdquo;, &ldquo;Electrical Room 2&rdquo;.
-        </p>
+        <EmptyState compact title="No sections yet">
+          Group photos by room, smoke compartment, or area — e.g.,
+          &ldquo;Stair B&rdquo;, &ldquo;Main Corridor&rdquo;. Use + Add
+          section above.
+        </EmptyState>
       ) : null}
 
       {sections.length > 0 ? (

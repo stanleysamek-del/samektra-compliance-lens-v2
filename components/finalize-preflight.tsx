@@ -101,7 +101,7 @@ export function FinalizePreflight({
   const warnings = checks.filter((c) => !c.ok);
   const confirmMessage =
     warnings.length > 0
-      ? `Finalize anyway?\n\n${warnings.map((w) => `• ${w.label}`).join("\n")}\n\nNothing is deleted — you can reopen to fix these later.`
+      ? `${warnings.map((w) => `• ${w.label}`).join("\n")}\n\nNothing is deleted — you can reopen to fix these later.`
       : undefined;
 
   return (
@@ -127,7 +127,9 @@ export function FinalizePreflight({
           <SubmitButton
             className="cl-btn-primary"
             pendingLabel="Finalizing…"
+            confirmTitle={confirmMessage ? "Finalize with open items?" : undefined}
             confirmMessage={confirmMessage}
+            confirmLabel="Finalize anyway"
           >
             Finalize inspection
           </SubmitButton>

@@ -235,7 +235,10 @@ export default async function TeamMembersPage({
                         <SubmitButton
                           className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                           pendingLabel="Revoking…"
-                          confirmMessage={`Revoke the invite for ${inv.email}? The link they were sent will stop working.`}
+                          confirmTitle={`Revoke the invite for ${inv.email}?`}
+                          confirmMessage="The link they were sent will stop working."
+                          confirmLabel="Revoke invite"
+                          confirmTone="danger"
                         >
                           Revoke
                         </SubmitButton>
@@ -317,7 +320,10 @@ export default async function TeamMembersPage({
                             <SubmitButton
                               className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                               pendingLabel="Leaving…"
-                              confirmMessage={`Leave ${org.name}? You'll lose access to the team's inspections until someone invites you again.`}
+                              confirmTitle={`Leave ${org.name}?`}
+                              confirmMessage="You'll lose access to the team's inspections until someone invites you again."
+                              confirmLabel="Leave team"
+                              confirmTone="danger"
                             >
                               Leave team
                             </SubmitButton>
@@ -329,7 +335,10 @@ export default async function TeamMembersPage({
                           <SubmitButton
                             className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                             pendingLabel="Removing…"
-                            confirmMessage={`Remove ${displayName} from ${org.name}? They'll lose access to the team's inspections immediately.`}
+                            confirmTitle={`Remove ${displayName} from ${org.name}?`}
+                            confirmMessage="They'll lose access to the team's inspections immediately."
+                            confirmLabel="Remove member"
+                            confirmTone="danger"
                           >
                             Remove
                           </SubmitButton>
@@ -385,7 +394,9 @@ export default async function TeamMembersPage({
               <SubmitButton
                 className="cl-btn-outline shrink-0"
                 pendingLabel="Transferring…"
-                confirmMessage="Promote the selected member to admin and step yourself down to member? You can be re-promoted by any admin later."
+                confirmTitle="Hand over admin?"
+                confirmMessage="The selected member becomes admin and you step down to member. Any admin can promote you again later."
+                confirmLabel="Hand over admin"
               >
                 Transfer &amp; step down
               </SubmitButton>

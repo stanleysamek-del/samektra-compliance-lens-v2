@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/checklist";
 import type { TemplateSection } from "@/lib/checklists/builtin-templates";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /**
  * Custom checklist template editor — used for "create from scratch",
  * "duplicate a built-in", and "edit my template". Sections hold questions;
@@ -117,24 +118,34 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
     );
   }
 
-  function removeSection(sIdx: number) {
+  async function removeSection(sIdx: number) {
     const section = sections[sIdx];
     const filled = section.items.filter((i) => i.q.trim().length > 0).length;
     const label = section.title.trim() || section.code.trim() || "this section";
-    const ok = window.confirm(
-      filled > 0
-        ? `Remove ${label} and its ${filled} question${filled === 1 ? "" : "s"}? This can't be undone once you save.`
-        : `Remove ${label}?`,
-    );
+    const ok = await confirmDialog({
+      title: `Remove ${label}?`,
+      message:
+        filled > 0
+          ? `Its ${filled} question${filled === 1 ? "" : "s"} go too. This can't be undone once you save.`
+          : undefined,
+      confirmLabel: "Remove section",
+      tone: "danger",
+    });
     if (!ok) return;
     setSections((prev) => prev.filter((_, i) => i !== sIdx));
   }
 
-  function removeQuestion(sIdx: number, iIdx: number) {
+  async function removeQuestion(sIdx: number, iIdx: number) {
     const item = sections[sIdx].items[iIdx];
     if (item.q.trim().length > 0) {
       const preview = item.q.trim().length > 60 ? `${item.q.trim().slice(0, 57)}…` : item.q.trim();
-      if (!window.confirm(`Remove this question?\n\n“${preview}”`)) return;
+      const ok = await confirmDialog({
+        title: "Remove this question?",
+        message: `“${preview}”`,
+        confirmLabel: "Remove",
+        tone: "danger",
+      });
+      if (!ok) return;
     }
     patchSection(sIdx, {
       items: sections[sIdx].items.filter((_, j) => j !== iIdx),
@@ -170,10 +181,14 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
     });
   }
 
-  function cancel() {
+  async function cancel() {
     if (
       dirty &&
-      !window.confirm("Discard your unsaved changes to this template?")
+      !(await confirmDialog({
+        title: "Discard your unsaved changes?",
+        confirmLabel: "Discard changes",
+        tone: "danger",
+      }))
     ) {
       return;
     }
@@ -181,11 +196,15 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
     router.push("/templates");
   }
 
-  function remove() {
+  async function remove() {
     if (!templateId) return;
-    if (!window.confirm("Delete this template? Existing inspections keep their checklists.")) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "Delete this template?",
+      message: "Existing inspections keep their checklists.",
+      confirmLabel: "Delete template",
+      tone: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const res = await deleteChecklistTemplate(templateId);
       if (!res.ok) {

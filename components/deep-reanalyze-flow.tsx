@@ -6,6 +6,7 @@ import { fetchWithRetry } from "@/lib/retry";
 import { showToast } from "@/components/toaster";
 import { REANALYZE_CONFIRM } from "@/components/reanalyze-button";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 // Centralized retry config for this flow — all three call paths
 // (deep-questions, reanalyze, reanalyze-with-observation) hit the
 // AI which can blip with 502/504 under load.
@@ -108,7 +109,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
     questions: Question[];
     observation?: string;
   }) {
-    if (!window.confirm(REANALYZE_CONFIRM)) return;
+    if (!(await confirmDialog({ title: "Re-analyze this photo?", message: REANALYZE_CONFIRM, confirmLabel: "Re-analyze" }))) return;
 
     setStage({ kind: "analyzing" });
 

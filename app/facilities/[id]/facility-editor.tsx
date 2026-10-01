@@ -6,6 +6,7 @@ import { deleteFacility, updateFacility } from "@/app/actions/facilities";
 import { showToast } from "@/components/toaster";
 import { OCCUPANCY_OPTIONS } from "../new-facility-form";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /**
  * Facility header: name / address / occupancy with inline edit, and a
  * confirmed delete (plans + pins cascade; inspections keep their rows).
@@ -47,20 +48,25 @@ export function FacilityEditor({
     });
   }
 
-  function remove() {
+  async function remove() {
     const what = [
       planCount > 0 ? `${planCount} plan${planCount === 1 ? "" : "s"} and every pin on them` : null,
     ]
       .filter(Boolean)
       .join(", ");
     const msg =
-      `Delete "${facility.name}"?` +
-      (what ? ` This removes ${what}.` : "") +
+      (what ? `This removes ${what}.` : "") +
       (inspectionCount > 0
         ? ` The ${inspectionCount} inspection${inspectionCount === 1 ? "" : "s"} here keep their photos and findings.`
         : "") +
       " This cannot be undone.";
-    if (!window.confirm(msg)) return;
+    const ok = await confirmDialog({
+      title: `Delete "${facility.name}"?`,
+      message: msg.trim(),
+      confirmLabel: "Delete facility",
+      tone: "danger",
+    });
+    if (!ok) return;
     start(async () => {
       const res = await deleteFacility(facility.id);
       if (!res.ok) {

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { fetchWithRetry } from "@/lib/retry";
 import { showToast } from "@/components/toaster";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 type Props = {
   photoId: string;
   /** Default = Sonnet ('deep'). The button on the photo detail page is the
@@ -21,7 +22,7 @@ const TIER_LABELS: Record<"default" | "deep", { name: string }> = {
 
 /** One wording for every re-analysis confirmation on the photo page. */
 export const REANALYZE_CONFIRM =
-  "Re-run the AI analysis on this photo? The AI's findings will be replaced with fresh ones. Findings you wrote or edited are always kept.";
+  "The AI's findings will be replaced with fresh ones. Findings you wrote or edited are always kept.";
 
 export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
   const router = useRouter();
@@ -31,7 +32,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
 
   async function run() {
     if (busy) return;
-    if (!window.confirm(REANALYZE_CONFIRM)) return;
+    if (!(await confirmDialog({ title: "Re-analyze this photo?", message: REANALYZE_CONFIRM, confirmLabel: "Re-analyze" }))) return;
     setError(null);
     setBusy(true);
     try {

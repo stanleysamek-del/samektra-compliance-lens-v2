@@ -33,6 +33,7 @@ import { formatDate } from "@/lib/format-date";
 import { finalizeInspection } from "./actions";
 
 import { SeverityBadge } from "@/components/severity-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 type SearchParams = {
   /** Set by finalizeInspection / reopenInspection when the update fails. */
   error?: string;
@@ -701,11 +702,10 @@ export default async function InspectionDetailPage({
                         </h3>
                       ) : null}
                       {g.photos.length === 0 ? (
-                        <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-center text-[11px] text-[var(--fg-subtle)]">
-                          No photos in this section yet — use the &ldquo;Move
-                          to&rdquo; menu on any photo card below to add it
-                          here.
-                        </p>
+                        <EmptyState compact title="No photos in this section yet">
+                          Use the &ldquo;Move to&rdquo; menu on any photo card
+                          below to add it here.
+                        </EmptyState>
                       ) : (
                         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           {g.photos.map((p) => {

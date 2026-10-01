@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { deletePhoto } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { showToast } from "@/components/toaster";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /**
  * Delete-photo control. Confirms with the finding count (deleting a photo
  * cascades its findings), then calls the server action. On success the
@@ -22,12 +23,18 @@ export function DeletePhotoButton({
 }) {
   const [isPending, startTransition] = useTransition();
 
-  function onClick() {
+  async function onClick() {
     const what =
       findingsCount === 0
         ? "Delete this photo?"
         : `Delete this photo and its ${findingsCount} finding${findingsCount === 1 ? "" : "s"}?`;
-    if (!window.confirm(`${what} This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: what,
+      message: "This cannot be undone.",
+      confirmLabel: "Delete photo",
+      tone: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const res = (await deletePhoto(photoId, inspectionId)) as
         | { ok: boolean; error?: string }

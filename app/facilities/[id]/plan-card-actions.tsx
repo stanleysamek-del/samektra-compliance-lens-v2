@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { deletePlan, renamePlan } from "@/app/actions/plans";
 import { showToast } from "@/components/toaster";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /** Rename / delete controls for one plan card on the facility page. */
 export function PlanCardActions({ planId, name }: { planId: string; name: string }) {
   const router = useRouter();
@@ -28,13 +29,14 @@ export function PlanCardActions({ planId, name }: { planId: string; name: string
     });
   }
 
-  function remove() {
-    if (
-      !window.confirm(
-        `Delete "${name}"? Every pin placed on it (from any inspection) is removed too.`,
-      )
-    )
-      return;
+  async function remove() {
+    const ok = await confirmDialog({
+      title: `Delete "${name}"?`,
+      message: "Every pin placed on it (from any inspection) is removed too.",
+      confirmLabel: "Delete plan",
+      tone: "danger",
+    });
+    if (!ok) return;
     start(async () => {
       const res = await deletePlan(planId);
       if (!res.ok) {

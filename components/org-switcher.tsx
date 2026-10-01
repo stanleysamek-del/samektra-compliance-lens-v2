@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { switchCurrentOrg } from "@/app/team/actions";
-import { useOutsideClick } from "@/lib/use-outside-click";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { HelpTip } from "@/components/help-tip";
 
 type Role = "admin" | "member" | "viewer";
@@ -25,8 +25,8 @@ type Ctx = {
  */
 export function OrgSwitcher() {
   const [ctx, setCtx] = useState<Ctx | null>(null);
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,9 +42,6 @@ export function OrgSwitcher() {
       cancelled = true;
     };
   }, []);
-
-  // Close on outside click — touch-aware so iOS taps close the menu.
-  useOutsideClick(menuRef, open, () => setOpen(false));
 
   if (!ctx) return null;
 
@@ -86,84 +83,52 @@ export function OrgSwitcher() {
     );
   }
 
-  return (
-    <div className="relative inline-flex items-center gap-1" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex max-w-[120px] items-center gap-1.5 rounded-md border border-[var(--rule-strong)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:border-[var(--primary)] sm:max-w-[180px]"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Switch workspace"
-      >
-        {ctx.current ? <TeamGlyph /> : <PersonGlyph />}
-        <span className="truncate">{label}</span>
-        <CaretIcon />
-      </button>
-      <span className="hidden sm:inline-flex">{tip}</span>
+  function switchTo(orgId: string) {
+    if (!formRef.current || !inputRef.current) return;
+    inputRef.current.value = orgId;
+    formRef.current.requestSubmit();
+  }
 
-      {open ? (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-50 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-lg"
-        >
-          <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--fg-subtle)]">
-            Switch workspace
-          </div>
-          <ul className="flex flex-col pb-1">
-            {ctx.all.map((o) => {
-              const isCurrent = ctx.current?.id === o.id;
-              return (
-                <li key={o.id}>
-                  <form action={switchCurrentOrg}>
-                    <input type="hidden" name="organization_id" value={o.id} />
-                    <button
-                      type="submit"
-                      role="menuitem"
-                      className={[
-                        "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-black/[0.04]",
-                        isCurrent
-                          ? "font-semibold text-[var(--primary)]"
-                          : "text-[var(--fg)]",
-                      ].join(" ")}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <TeamGlyph />
-                        <span className="truncate">{o.name}</span>
-                      </span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wider text-[var(--fg-subtle)]">
-                        {o.role}
-                      </span>
-                    </button>
-                  </form>
-                </li>
-              );
-            })}
-            <li>
-              <form action={switchCurrentOrg}>
-                <input
-                  type="hidden"
-                  name="organization_id"
-                  value="personal"
-                />
-                <button
-                  type="submit"
-                  role="menuitem"
-                  className={[
-                    "flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-1.5 text-left text-xs transition hover:bg-black/[0.04]",
-                    !ctx.current
-                      ? "font-semibold text-[var(--primary)]"
-                      : "text-[var(--fg-muted)]",
-                  ].join(" ")}
-                >
-                  <PersonGlyph />
-                  Personal workspace
-                </button>
-              </form>
-            </li>
-          </ul>
-        </div>
-      ) : null}
+  return (
+    <div className="inline-flex items-center gap-1">
+      <Menu
+        label={`Workspace: ${label}. Switch workspace`}
+        title="Switch workspace"
+        width="w-64"
+        triggerClassName="inline-flex min-h-11 max-w-[120px] items-center gap-1.5 rounded border border-[var(--rule-strong)] bg-[var(--bg-elevated)] px-2.5 text-xs font-medium text-[var(--fg)] transition hover:border-[var(--primary)] sm:max-w-[180px]"
+        trigger={
+          <>
+            {ctx.current ? <TeamGlyph /> : <PersonGlyph />}
+            <span className="truncate">{label}</span>
+            <CaretIcon />
+          </>
+        }
+      >
+        <MenuLabel>Switch workspace</MenuLabel>
+        {ctx.all.map((o) => (
+          <MenuItem
+            key={o.id}
+            selected={ctx.current?.id === o.id}
+            onSelect={() => switchTo(o.id)}
+          >
+            <TeamGlyph />
+            <span className="truncate">{o.name}</span>
+            <span className="ml-auto shrink-0 text-xs uppercase tracking-wider text-[var(--fg-subtle)]">
+              {o.role}
+            </span>
+          </MenuItem>
+        ))}
+        <MenuSeparator />
+        <MenuItem selected={!ctx.current} onSelect={() => switchTo("personal")}>
+          <PersonGlyph />
+          Personal workspace
+        </MenuItem>
+      </Menu>
+      <span className="hidden sm:inline-flex">{tip}</span>
+      {/* Outside the menu so it survives the menu closing on select. */}
+      <form ref={formRef} action={switchCurrentOrg} hidden>
+        <input ref={inputRef} type="hidden" name="organization_id" defaultValue="" />
+      </form>
     </div>
   );
 }

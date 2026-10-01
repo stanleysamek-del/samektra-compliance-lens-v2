@@ -331,7 +331,9 @@ export default async function TeamRulesPage({
                         <SubmitButton
                           className="rounded px-2 py-1 text-[11px] font-medium text-[#b42318] transition hover:bg-[rgba(168,54,43,0.08)] disabled:opacity-50"
                           pendingLabel="Deleting…"
-                          confirmMessage="Delete this rule permanently? Archive keeps the history; delete does not."
+                          confirmTitle="Delete this rule permanently?"
+                          confirmMessage="Archive keeps the history; delete does not."
+                          confirmTone="danger"
                         >
                           Delete
                         </SubmitButton>

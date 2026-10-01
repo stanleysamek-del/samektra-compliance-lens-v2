@@ -6,6 +6,7 @@ import { deleteFinding } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { HelpTip } from "@/components/help-tip";
 
 import { SeverityBadge } from "@/components/severity-badge";
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 export type CompactFinding = {
   id: string;
   title: string;
@@ -51,7 +52,7 @@ function readAdvisoriesServer(): boolean {
  *
  *   - Edit  → jumps to /inspections/<id>/photos/<photoId>#finding-<fid>
  *             which scrolls to the matching FindingCard (which has full edit UI)
- *   - Delete → confirm() prompt + server action
+ *   - Delete → confirmDialog() + server action
  *
  * The "Show advisories" toggle (persisted in localStorage) lets the user
  * include or exclude Low-severity advisory entries from the report list.
@@ -287,12 +288,14 @@ function FindingRowMenu({
           <button
             type="button"
             onClick={async () => {
-              if (
-                !window.confirm("Delete this finding? This cannot be undone.")
-              ) {
-                return;
-              }
               setOpen(false);
+              const ok = await confirmDialog({
+                title: "Delete this finding?",
+                message: "This cannot be undone.",
+                confirmLabel: "Delete finding",
+                tone: "danger",
+              });
+              if (!ok) return;
               await deleteFinding(findingId, inspectionId);
             }}
             className="block w-full px-3 py-1.5 text-left text-xs text-[#b42318] transition hover:bg-[rgba(168,54,43,0.08)]"

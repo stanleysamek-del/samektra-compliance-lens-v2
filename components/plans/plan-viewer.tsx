@@ -12,6 +12,7 @@ import Link from "next/link";
 import { PIN_COLORS, type ViewerPin } from "@/components/plans/types";
 import { severityColor } from "@/lib/severity";
 
+import { confirmDialog } from "@/components/ui/confirm-dialog";
 /* =====================================================================
  * PlanViewer — pan/zoom surface for a life-safety plan with pins.
  *
@@ -406,7 +407,12 @@ export function PlanViewer({
 
   async function remove() {
     if (!selected || !onDelete) return;
-    if (!window.confirm("Remove this pin from the plan?")) return;
+    const ok = await confirmDialog({
+      title: "Remove this pin from the plan?",
+      confirmLabel: "Remove pin",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     const res = await onDelete(selected.id);
     setBusy(false);
