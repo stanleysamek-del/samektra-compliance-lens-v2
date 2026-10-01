@@ -178,6 +178,7 @@ export default async function FindingsDashboardPage({
       <div className="flex flex-col gap-5">
         <div className="flex flex-wrap items-end justify-between gap-3 px-1">
           <div>
+            <Link href="/dashboard" className="text-sm underline">Campus dashboard →</Link>
             <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg)]">
               Findings
             </h1>

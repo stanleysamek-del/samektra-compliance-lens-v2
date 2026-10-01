@@ -84,6 +84,7 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
     return Array.from(map.values());
   }, [local]);
 
+  const nextUnanswered = sections.find(section => section.rows.some(row => row.answer === null));
   const overall = scoreItems(local);
   const aiPending = local.filter((i) => i.answered_by_ai && !i.ai_confirmed).length;
   const templateName = local[0]?.template_name ?? "Checklist";
@@ -246,7 +247,7 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
           const unconfirmedAi = section.rows.filter(
             (r) => r.answered_by_ai && !r.ai_confirmed,
           ).length;
-          const open = toggled.get(section.code) ?? (flagged > 0 || unconfirmedAi > 0);
+          const open = toggled.get(section.code) ?? (flagged > 0 || unconfirmedAi > 0 || (!readOnly && section.code === nextUnanswered?.code));
           return (
             <div key={section.code} className="border-b border-[var(--border)] last:border-b-0">
               <button

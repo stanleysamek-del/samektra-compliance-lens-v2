@@ -62,7 +62,7 @@ export function InspectionSummary({
           sub={
             photoCount === 0
               ? "No photos yet"
-              : `${photoCount} ${photoCount === 1 ? "image" : "images"} analyzed`
+              : `${photoCount} ${photoCount === 1 ? "image" : "images"} saved`
           }
         />
 

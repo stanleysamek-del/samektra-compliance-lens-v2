@@ -32,11 +32,12 @@ const NAV: NavItem[] = [
   { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
   {
     href: "/inspections/new",
-    label: "Upload",
+    label: "Inspect",
     icon: <UploadIcon />,
     accent: true,
   },
   { href: "/facilities", label: "Facilities", icon: <FacilitiesIcon /> },
+  { href: "/dashboard", label: "Dashboard", icon: <FindingsIcon /> },
   { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
   { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
   { href: "/schedules", label: "Schedules", icon: <HistoryIcon /> },
@@ -61,7 +62,7 @@ const MOBILE_NAV: NavItem[] = [
   { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
   {
     href: "/inspections/new",
-    label: "Upload",
+    label: "Inspect",
     icon: <UploadIcon />,
     accent: true,
   },

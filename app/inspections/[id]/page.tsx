@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BarcodeScanner } from "@/components/assets/barcode-scanner";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
@@ -393,6 +394,10 @@ export default async function InspectionDetailPage({
 
     stage = "signed-urls";
     const photoUrls: Record<string, string> = {};
+    const barcodePhotoUrls: Record<string, string> = {};
+    const { data: originalRows } = await supabase.from("photos")
+      .select("id, original_storage_path").eq("inspection_id", id);
+    const originals = new Map((originalRows ?? []).map(p => [p.id, p.original_storage_path]));
     for (const p of photosList) {
       try {
         const { data, error } = await supabase.storage
@@ -400,6 +405,11 @@ export default async function InspectionDetailPage({
           .createSignedUrl(p.storage_path, 60 * 60);
         if (error) throw error;
         if (data?.signedUrl) photoUrls[p.id] = data.signedUrl;
+        const originalPath = originals.get(p.id);
+        if (originalPath) {
+          const { data: original } = await supabase.storage.from("photos").createSignedUrl(originalPath, 60 * 60);
+          if (original?.signedUrl) barcodePhotoUrls[p.id] = original.signedUrl;
+        }
       } catch (err) {
         console.error("[inspection] signed url for", p.id, err);
       }
@@ -582,25 +592,6 @@ export default async function InspectionDetailPage({
             </div>
           </Card>
 
-          {/* Uploader sits DIRECTLY under the header so "Take photo" is on
-              the first screen of a phone. The stat grid that used to live
-              here moved below the photos. The one-liner introduces Chip by
-              name — the rest of the page refers to it without explanation. */}
-          {!isCompleted ? (
-            <>
-              <p className="-mb-2 px-1 text-xs text-[var(--fg-muted)]">
-                <strong className="font-semibold text-[var(--fg)]">Chip</strong>{" "}
-                — the AI — reads each photo and drafts findings with code
-                citations. You confirm, correct, or add your own.
-              </p>
-              <PhotoUploader inspectionId={inspection.id} aiAvailable={aiAvailable} />
-            </>
-          ) : null}
-
-          {/* "2 photos analyzing · 1 queued" — polls while anything is
-              pending and refreshes the page as each photo finishes. */}
-          <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
-
           {/* Checklist — the scored question set from the template chosen at
               creation. AI-flagged answers carry a confirm badge. */}
           {checklistItems.length > 0 ? (
@@ -628,6 +619,25 @@ export default async function InspectionDetailPage({
               <AttachChecklistCard inspectionId={inspection.id} templates={templateOptions} />
             </>
           ) : null}
+
+          {/* Uploader sits DIRECTLY under the header so "Take photo" is on
+              the first screen of a phone. The stat grid that used to live
+              here moved below the photos. The one-liner introduces Chip by
+              name — the rest of the page refers to it without explanation. */}
+          {!isCompleted ? (
+            <>
+              <p className="-mb-2 px-1 text-xs text-[var(--fg-muted)]">
+                <strong className="font-semibold text-[var(--fg)]">Chip</strong>{" "}
+                — the AI — reads each photo and drafts findings with code
+                citations. You confirm, correct, or add your own.
+              </p>
+              <PhotoUploader inspectionId={inspection.id} aiAvailable={aiAvailable} />
+            </>
+          ) : null}
+
+          {/* "2 photos analyzing · 1 queued" — polls while anything is
+              pending and refreshes the page as each photo finishes. */}
+          <AnalysisProgress inspectionId={inspection.id} initial={analysisCounts} />
 
           {/* Life-safety plan markup (migration 0025): the facility's plans
               with this inspection's numbered finding pins — move / relabel /
@@ -829,7 +839,10 @@ export default async function InspectionDetailPage({
                                     inspectionId={inspection.id}
                                     photoId={p.id}
                                     findings={counts.items}
+                                    analysisStatus={p.analysis_status}
                                   />
+
+                                  {url && <BarcodeScanner compact facilities={[]} sourceImageUrl={barcodePhotoUrls[p.id] || url} />}
 
                                   {/* Per-photo "Not visible" dropdown —
                                       collapsed by default, click to expand.

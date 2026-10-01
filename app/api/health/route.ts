@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
  * GET /api/health
  *
  * Lightweight liveness check polled by the client-side status banner.
- * Pings Supabase's PostgREST root (no DB read, no auth) with a tight
- * timeout. Returns:
+ * Checks an RLS-protected table with an anonymous HEAD request and zero
+ * rows. The PostgREST root may be restricted to service-role keys even
+ * while the app is healthy. No inspection records are returned. Returns:
  *
  *   {
  *     ok: boolean,           // true when Supabase responded < timeout
@@ -34,15 +35,15 @@ export async function GET() {
 
   const started = Date.now();
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
-      method: "GET",
-      headers: { apikey: anonKey },
+    const res = await fetch(`${url}/rest/v1/inspections?select=id&limit=0`, {
+      method: "HEAD",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const latencyMs = Date.now() - started;
     const supabase =
-      res.status >= 500
+        !res.ok
         ? "down"
         : latencyMs > FAST_THRESHOLD_MS
           ? "slow"

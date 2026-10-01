@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BarcodeScanner } from "@/components/assets/barcode-scanner";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
@@ -446,6 +447,11 @@ export default async function PhotoDetailPage({
           </p>
         ) : null}
 
+        {photoUrl && <details className="rounded-xl border p-4">
+          <summary className="cursor-pointer font-semibold">Read a barcode or QR code in this photo</summary>
+          <div className="mt-3"><BarcodeScanner facilities={[]} sourceImageUrl={originalPhotoUrl || photoUrl} /></div>
+        </details>}
+
         {/* On the plan (migration 0025): pin THIS photo's location on the
             facility's life-safety plan, plus the pins its findings already
             have. Renders a one-line nudge when the inspection has no
@@ -511,7 +517,7 @@ export default async function PhotoDetailPage({
           {sortedFindings.length === 0 ? (
             <Card>
               <p className="text-center text-sm font-medium text-[var(--fg-muted)]">
-                No findings on this photo.
+                {photo.analyzed_at ? "No findings on this photo." : "No findings saved yet. Analysis has not completed."}
               </p>
               <p className="mt-1 text-center text-xs text-[var(--fg-subtle)]">
                 Review the &ldquo;What to look for&rdquo; list below before

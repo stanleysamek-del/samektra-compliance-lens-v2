@@ -167,12 +167,12 @@ export async function analyzeImage(
           model: anthropicModel,
           durationMs: Date.now() - start,
           usage,
-          costComplete: errors.length === 0 && attempt === 0,
+          costComplete: errors.length === 0 && attempt === 0 && result.usageComplete,
           tier,
         };
       }
       if (provider === "google" && process.env.GOOGLE_API_KEY) {
-        const { analysis, usage } = await callGemini(
+        const { analysis, usage, usageComplete } = await callGemini(
           imageBase64,
           mimeType,
           googleModel,
@@ -185,7 +185,7 @@ export async function analyzeImage(
           model: googleModel,
           durationMs: Date.now() - start,
           usage,
-          costComplete: errors.length === 0,
+          costComplete: errors.length === 0 && usageComplete,
           tier,
         };
       }
@@ -193,7 +193,7 @@ export async function analyzeImage(
         provider === "openai" &&
         (process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY)
       ) {
-        const { analysis, usage } = await callOpenAI(
+        const { analysis, usage, usageComplete } = await callOpenAI(
           imageBase64,
           mimeType,
           userPrompt,
@@ -205,7 +205,7 @@ export async function analyzeImage(
           model: OPENAI_MODEL,
           durationMs: Date.now() - start,
           usage,
-          costComplete: errors.length === 0,
+          costComplete: errors.length === 0 && usageComplete,
           tier,
         };
       }
@@ -261,7 +261,7 @@ async function callAnthropic(
   model: string,
   userPrompt: string,
   timeoutMs = REQUEST_TIMEOUT_MS,
-): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage; usageComplete: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -368,6 +368,7 @@ async function callAnthropic(
 
     return {
       analysis: parseAnalysis(text),
+      usageComplete: validTokenCount(data.usage?.input_tokens) && validTokenCount(data.usage?.output_tokens),
       // Report the sum of all input-side tokens so the ai_calls ledger
       // captures the full usage; cost is already adjusted via the
       // multipliers above.
@@ -387,7 +388,7 @@ async function callOpenAI(
   mimeType: string,
   userPrompt: string,
   timeoutMs = REQUEST_TIMEOUT_MS,
-): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage; usageComplete: boolean }> {
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.OpenAI_API_KEY ?? "";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -444,6 +445,7 @@ async function callOpenAI(
 
     return {
       analysis: parseAnalysis(text),
+      usageComplete: validTokenCount(data.usage?.prompt_tokens) && validTokenCount(data.usage?.completion_tokens),
       usage: { inputTokens, outputTokens, costUsd },
     };
   } finally {
@@ -459,7 +461,7 @@ async function callGemini(
   model: string,
   userPrompt: string,
   timeoutMs = REQUEST_TIMEOUT_MS,
-): Promise<{ analysis: ComplianceAnalysis; usage: Usage }> {
+): Promise<{ analysis: ComplianceAnalysis; usage: Usage; usageComplete: boolean }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? "";
   if (!apiKey) {
     throw new AnalyzeError("GOOGLE_API_KEY missing", "google");
@@ -498,7 +500,8 @@ async function callGemini(
           },
         ],
         generation_config: {
-          max_output_tokens: 2048,
+          // Allow the full findings schema on busy photos, including reasoning.
+          max_output_tokens: 8192,
           response_mime_type: "application/json",
           temperature: 0.2,
         },
@@ -537,6 +540,7 @@ async function callGemini(
 
     return {
       analysis: parseAnalysis(text),
+      usageComplete: validTokenCount(data.usageMetadata?.promptTokenCount) && validTokenCount(data.usageMetadata?.candidatesTokenCount),
       usage: { inputTokens, outputTokens, costUsd },
     };
   } finally {
@@ -545,6 +549,10 @@ async function callGemini(
 }
 
 /* --------------------------------------------------------------------- */
+
+function validTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
 
 function computeCost(model: string, inputTokens: number, outputTokens: number): number {
   const p = (PRICING as Record<string, { input: number; output: number }>)[model];
@@ -581,12 +589,22 @@ function parseAnalysis(raw: string): ComplianceAnalysis {
 }
 
 function validateAnalysis(input: unknown): ComplianceAnalysis {
-  if (!input || typeof input !== "object") {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new AnalyzeError("Analysis is not an object");
   }
   const o = input as Record<string, unknown>;
   const summary = (o.summary ?? {}) as Record<string, unknown>;
   const image = (o.image ?? {}) as Record<string, unknown>;
+  // A provider error object or incomplete schema is never a clean inspection.
+  if (typeof summary.text !== "string" || !summary.text.trim() ||
+      !Array.isArray(o.violations) || !Array.isArray(o.whatToLookFor) ||
+      !Array.isArray(o.notVisible) ||
+      !Number.isFinite(image.width) || Number(image.width) <= 0 ||
+      !Number.isFinite(image.height) || Number(image.height) <= 0 ||
+      !Number.isFinite(summary.confidence) ||
+      !["clear", "blurry", "dark", "overexposed", "occluded"].includes(String(summary.imageQuality))) {
+    throw new AnalyzeError("Analysis schema is incomplete or invalid");
+  }
 
   return {
     schemaVersion: "1.1",
@@ -640,6 +658,15 @@ function normalizeViolation(
 ): ComplianceAnalysis["violations"][number] {
   const r = (v ?? {}) as Record<string, unknown>;
   const c = (r.coordinates ?? {}) as Record<string, unknown>;
+  if (typeof r.title !== "string" || !r.title.trim() ||
+      typeof r.description !== "string" || !r.description.trim() ||
+      !["Low", "Medium", "High"].includes(String(r.severity)) ||
+      !["Fire", "Electrical", "Egress", "ADA", "Hazmat", "InfectionControl", "Structural", "Other"].includes(String(r.category)) ||
+      !Number.isFinite(r.confidence) ||
+      ![c.x1, c.y1, c.x2, c.y2].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1) ||
+      Number(c.x1) >= Number(c.x2) || Number(c.y1) >= Number(c.y2)) {
+    throw new AnalyzeError(`Analysis finding ${idx + 1} is invalid`);
+  }
   return {
     id: String(r.id ?? `v_${idx + 1}`),
     title: String(r.title ?? "Unnamed finding"),

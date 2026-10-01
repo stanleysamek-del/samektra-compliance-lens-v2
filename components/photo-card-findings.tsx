@@ -17,6 +17,7 @@ type Props = {
   inspectionId: string;
   photoId: string;
   findings: CompactFinding[];
+  analysisStatus?: string | null;
 };
 
 const ADVISORY_KEY = "cl-include-advisories";
@@ -58,7 +59,7 @@ function readAdvisoriesServer(): boolean {
  * include or exclude Low-severity advisory entries from the report list.
  * Setting is global per browser — applies to every photo card.
  */
-export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
+export function PhotoCardFindings({ inspectionId, photoId, findings, analysisStatus }: Props) {
   const includeAdvisories = useSyncExternalStore(
     subscribeAdvisories,
     readAdvisories,
@@ -79,7 +80,7 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
   if (findings.length === 0) {
     return (
       <p className="px-4 pb-3 text-xs text-[var(--fg-subtle)]">
-        No findings on this photo.
+        {analysisStatus === "done" ? "No findings on this photo." : "No findings saved yet. Analysis has not completed."}
       </p>
     );
   }

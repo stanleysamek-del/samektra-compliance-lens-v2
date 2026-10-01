@@ -22,7 +22,7 @@ createRoot(document.getElementById("root")!).render(
         canWrite
       />
     ) : (
-      <BarcodeScanner facilities={facilities} />
+      <BarcodeScanner facilities={facilities} compact={mode === "photo"} sourceImageUrl={mode === "photo" ? "/test-barcode.png" : undefined} />
     )}
   </main>,
 );

@@ -1,0 +1,12 @@
+.env*
+.git/
+.next/
+node_modules/
+.codex/
+.agents/
+test-results/
+playwright-report/
+coverage/
+tmp/
+vision-eval-out/
+vision-eval-gamebank-out/

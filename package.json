@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:photos": "node scripts/photo-acceptance.mjs",
     "prebuild": "node scripts/copy-pdf-worker.mjs",
     "predev": "node scripts/copy-pdf-worker.mjs",
     "test:browser": "node scripts/copy-pdf-worker.mjs && node e2e/equipment-browser.mjs"
