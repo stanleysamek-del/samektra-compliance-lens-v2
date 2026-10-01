@@ -129,12 +129,19 @@ export default async function ActionsBoardPage({
     }
   }
 
+  // Order in the database (earliest due first — that's where overdue
+  // lives; undated last) so the 500-row cap drops the least urgent rows,
+  // not an arbitrary slice. The JS sort below refines within the page.
+  const LIMIT = 500;
   let q = supabase
     .from("findings")
     .select(
       "id, inspection_id, photo_id, title, category, code, severity, cap_status, priority, cap_target_date, assigned_to, assigned_email, action_closed_at, created_at, inspections!inner(facility_name)",
+      { count: "exact" },
     )
-    .limit(500);
+    .order("cap_target_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(LIMIT);
 
   if (filters.status === "active") {
     q = q.in("cap_status", ["open", "in_progress", "done"]);
@@ -149,10 +156,11 @@ export default async function ActionsBoardPage({
       .in("cap_status", ["open", "in_progress"]);
   }
 
-  const { data, error } = await q;
+  const { data, error, count: totalCount } = await q;
   if (error) {
     console.error("[actions board] query failed:", error.message);
   }
+  const truncated = (totalCount ?? 0) > LIMIT;
 
   type Row = {
     id: string;
@@ -198,8 +206,7 @@ export default async function ActionsBoardPage({
     return a.created_at < b.created_at ? 1 : -1;
   });
 
-  // Summary tiles ignore the status filter's slicing so they always show
-  // the true workload shape of the current result set.
+  // Summary tiles describe the rows currently shown (after filters).
   const counts = {
     open: rows.filter((r) => r.cap_status === "open").length,
     inProgress: rows.filter((r) => r.cap_status === "in_progress").length,
@@ -318,11 +325,28 @@ export default async function ActionsBoardPage({
         {/* List */}
         <section className="flex flex-col gap-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-            {rows.length === 0
-              ? "Nothing matches the current filters"
-              : `${rows.length} ${rows.length === 1 ? "action" : "actions"}`}
+            {error
+              ? "Actions couldn't be loaded"
+              : rows.length === 0
+                ? "Nothing matches the current filters"
+                : truncated
+                  ? `Showing ${rows.length} of ${totalCount} actions — most urgent first`
+                  : `${rows.length} ${rows.length === 1 ? "action" : "actions"}`}
           </h2>
-          {rows.length === 0 ? (
+          {truncated ? (
+            <p className="px-1 text-xs text-[var(--fg-muted)]">
+              Narrow the filters to see the rest. Tile counts cover the rows
+              shown.
+            </p>
+          ) : null}
+          {error ? (
+            <Card>
+              <p role="alert" className="text-center text-sm text-[var(--danger)]">
+                Something went wrong loading actions. Refresh the page to try
+                again.
+              </p>
+            </Card>
+          ) : rows.length === 0 ? (
             <Card>
               <p className="text-center text-sm text-[var(--fg-muted)]">
                 Findings become actions when you assign them — open any

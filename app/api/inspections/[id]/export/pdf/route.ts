@@ -195,13 +195,14 @@ export async function GET(
       answer: "yes" | "no" | "na" | null;
       note: string | null;
       answered_by_ai: boolean;
+      ai_confirmed: boolean;
       template_name: string | null;
     }> = [];
     try {
       const { data: clData } = await supabase
         .from("inspection_checklist_items")
         .select(
-          "section_code, section_title, question, code_ref, answer, note, answered_by_ai, template_name",
+          "section_code, section_title, question, code_ref, answer, note, answered_by_ai, ai_confirmed, template_name",
         )
         .eq("inspection_id", inspectionId)
         .order("sort", { ascending: true });
@@ -213,17 +214,50 @@ export async function GET(
     const clNo = checklistItems.filter((i) => i.answer === "no").length;
     const hasChecklistScore = clYes + clNo > 0;
 
-    // Score: real checklist when answered; otherwise the historical
-    // deficiencies-vs-(photos×5) proxy so pre-checklist inspections keep
-    // rendering a number.
-    const totalChecks = hasChecklistScore
-      ? clYes + clNo
-      : Math.max(photoList.length * 5, 5);
+    // Score only exists when checklist questions were answered. Photo-only
+    // inspections have no question set, so the report says so instead of
+    // inventing a percentage.
+    const totalChecks = clYes + clNo;
     const flagged = hasChecklistScore ? clNo : totalFindings;
-    const passed = hasChecklistScore
-      ? clYes
-      : Math.max(0, totalChecks - totalFindings);
+    const passed = clYes;
     const scorePct = totalChecks > 0 ? (passed / totalChecks) * 100 : 0;
+
+    // Corrective actions: a finding becomes an action once someone owns it
+    // (assignee or due date) or it has moved past "open". Separate query so
+    // a pre-0019 schema degrades to "no actions" instead of breaking the PDF.
+    type ActionRow = {
+      id: string;
+      title: string;
+      severity: string;
+      cap_status: string | null;
+      cap_target_date: string | null;
+      assigned_email: string | null;
+      assigned_to: string | null;
+    };
+    let actionRows: ActionRow[] = [];
+    if (photoIds.length > 0) {
+      try {
+        const { data: actData, error: actErr } = await supabase
+          .from("findings")
+          .select(
+            "id, title, severity, cap_status, cap_target_date, assigned_email, assigned_to",
+          )
+          .in("photo_id", photoIds)
+          .order("cap_target_date", { ascending: true, nullsFirst: false });
+        if (!actErr) {
+          actionRows = ((actData ?? []) as ActionRow[]).filter(
+            (a) =>
+              Boolean(a.assigned_to || a.assigned_email || a.cap_target_date) ||
+              (a.cap_status !== null && a.cap_status !== "open"),
+          );
+        }
+      } catch {
+        // Leave actionRows empty.
+      }
+    }
+    const openActions = actionRows.filter(
+      (a) => a.cap_status === "open" || a.cap_status === "in_progress" || a.cap_status === null,
+    ).length;
 
     // ---- Build PDF ----
     const pdf = await PDFDocument.create();
@@ -316,7 +350,13 @@ export async function GET(
     );
 
     // Score / counts row, mimicking the customer's "Score 55/65 (84.62%) Flagged items 10"
-    const scoreLine = `Score ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)    Flagged items ${flagged}    Actions 0`;
+    const scoreLine = `${
+      hasChecklistScore
+        ? `Score ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`
+        : "Score n/a (photo-only inspection)"
+    }    Flagged items ${flagged}    Actions ${actionRows.length}${
+      actionRows.length > 0 ? ` (${openActions} open)` : ""
+    }`;
     cover.drawText(safeText(scoreLine), {
       x: MARGIN,
       y: PAGE_H - 138,
@@ -390,7 +430,11 @@ export async function GET(
     }
 
     page.drawText(
-      safeText(`Audit  -  ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`),
+      safeText(
+        hasChecklistScore
+          ? `Audit  -  ${passed}/${totalChecks} (${scorePct.toFixed(2)}%)`
+          : `Audit  -  ${totalFindings} finding${totalFindings === 1 ? "" : "s"}`,
+      ),
       { x: MARGIN, y: py, size: 16, font: helvBold, color: FG },
     );
     py -= 6;
@@ -660,7 +704,13 @@ export async function GET(
           });
           cy = drawWrapped(
             clPage,
-            `${row.question}${row.code_ref ? `  (${row.code_ref})` : ""}${row.answered_by_ai ? "  [AI-flagged]" : ""}`,
+            `${row.question}${row.code_ref ? `  (${row.code_ref})` : ""}${
+              row.answered_by_ai
+                ? row.ai_confirmed
+                  ? "  [AI-flagged, inspector confirmed]"
+                  : "  [AI-flagged, not confirmed]"
+                : ""
+            }`,
             MARGIN + 34,
             cy,
             PAGE_W - MARGIN * 2 - 34,
@@ -668,7 +718,7 @@ export async function GET(
             helv,
             row.answer === "no" ? FG : MUTED,
           );
-          if (row.answer === "no" && row.note) {
+          if (row.note) {
             ensure(24);
             cy = drawWrapped(
               clPage,
@@ -678,12 +728,83 @@ export async function GET(
               PAGE_W - MARGIN * 2 - 34,
               8.5,
               helv,
-              RED,
+              row.answer === "no" ? RED : MUTED,
             );
           }
           cy -= 4;
         }
         cy -= 8;
+      }
+    }
+
+    /* ======================= CORRECTIVE ACTIONS ======================= */
+    // Every finding someone owns: title, severity, owner, due date, status.
+    if (actionRows.length > 0) {
+      let acPage = pdf.addPage([PAGE_W, PAGE_H]);
+      let ay = PAGE_H - MARGIN - 10;
+      const ensureAc = (needed: number) => {
+        if (ay - needed < MARGIN) {
+          acPage = pdf.addPage([PAGE_W, PAGE_H]);
+          ay = PAGE_H - MARGIN - 10;
+        }
+      };
+      const STATUS_LABEL: Record<string, string> = {
+        open: "Open",
+        in_progress: "In progress",
+        done: "Done",
+        verified: "Verified",
+        wont_fix: "Won't fix",
+      };
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      acPage.drawText(safeText("Corrective actions"), {
+        x: MARGIN,
+        y: ay,
+        size: 14,
+        font: helvBold,
+        color: FG,
+      });
+      ay -= 18;
+      acPage.drawText(
+        safeText(`${actionRows.length} action${actionRows.length === 1 ? "" : "s"} · ${openActions} open`),
+        { x: MARGIN, y: ay, size: 10, font: helv, color: MUTED },
+      );
+      ay -= 22;
+
+      for (const a of actionRows) {
+        ensureAc(40);
+        const status = STATUS_LABEL[a.cap_status ?? "open"] ?? (a.cap_status ?? "Open");
+        const overdue =
+          a.cap_target_date !== null &&
+          a.cap_target_date < todayIso &&
+          (a.cap_status === "open" || a.cap_status === "in_progress" || a.cap_status === null);
+        acPage.drawText(safeText(status), {
+          x: MARGIN,
+          y: ay,
+          size: 9,
+          font: helvBold,
+          color: overdue ? RED : FG,
+        });
+        ay = drawWrapped(
+          acPage,
+          `${a.title ?? "Untitled finding"}  (${a.severity})`,
+          MARGIN + 70,
+          ay,
+          PAGE_W - MARGIN * 2 - 70,
+          9,
+          helv,
+          FG,
+        );
+        ensureAc(14);
+        acPage.drawText(
+          safeText(
+            `Owner: ${a.assigned_email ?? (a.assigned_to ? "Team member" : "Unassigned")}    Due: ${
+              a.cap_target_date ?? "Not set"
+            }${overdue ? "  (overdue)" : ""}`,
+          ),
+          { x: MARGIN + 70, y: ay - 1, size: 8.5, font: helv, color: overdue ? RED : MUTED },
+        );
+        ay -= 18;
       }
     }
 

@@ -81,11 +81,11 @@ export default async function FacilitiesPage() {
         {facErr ? (
           <Card>
             <p className="text-sm" style={{ color: "#a8362b" }}>
-              Facilities aren&apos;t available on this workspace yet.
+              Facilities couldn&apos;t be loaded.
             </p>
             <p className="mt-1 text-xs text-[var(--fg-subtle)]">
-              Database migration 0025 (facilities, plans, pins) has not been
-              applied. {facErr.message}
+              Refresh the page. If this keeps happening, contact your
+              administrator.
             </p>
           </Card>
         ) : list.length === 0 ? (

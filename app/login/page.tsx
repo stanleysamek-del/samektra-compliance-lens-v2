@@ -1,3 +1,4 @@
+import { safeNext } from "@/lib/safe-next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
@@ -17,7 +18,7 @@ export default async function LoginPage({
 
   const params = await searchParams;
   if (user) {
-    redirect(params.next ?? "/inspections");
+    redirect(safeNext(params.next));
   }
 
   // An invitee arriving from a /team/invite/<token> link is usually NOT an

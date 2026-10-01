@@ -101,8 +101,11 @@ export async function createInspection(formData: FormData) {
 
   if (error || !data) {
     console.error("[createInspection]", error);
+    // Log the database detail; show the inspector something they can act on.
     redirect(
-      `/inspections/new?error=${encodeURIComponent(error?.message ?? "Could not create inspection")}`,
+      `/inspections/new?error=${encodeURIComponent(
+        "Couldn't create the inspection. Check your connection and try again.",
+      )}`,
     );
   }
 
@@ -111,9 +114,11 @@ export async function createInspection(formData: FormData) {
   // the same groups the questions live in. Best-effort — a checklist
   // failure never loses the inspection that was just created.
   const templateId = clean(formData.get("template_id"));
+  let checklistFailed = false;
   if (templateId) {
     try {
       const template = await resolveTemplate(supabase, templateId);
+      if (!template) checklistFailed = true;
       if (template) {
         const { error: attachErr, sectionTitles } = await attachTemplate(
           supabase,
@@ -121,6 +126,7 @@ export async function createInspection(formData: FormData) {
           template,
         );
         if (attachErr) {
+          checklistFailed = true;
           console.error("[createInspection] checklist attach", attachErr);
         } else if (sectionTitles.length > 0) {
           const { error: sectionsErr } = await supabase
@@ -138,9 +144,12 @@ export async function createInspection(formData: FormData) {
         }
       }
     } catch (err) {
+      checklistFailed = true;
       console.error("[createInspection] checklist", err);
     }
   }
 
-  redirect(`/inspections/${data.id}`);
+  // The inspection exists either way; tell the inspector if the checklist
+  // didn't come with it so they can add it from the inspection page.
+  redirect(`/inspections/${data.id}${checklistFailed ? "?checklist=failed" : ""}`);
 }

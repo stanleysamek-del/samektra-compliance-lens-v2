@@ -1,3 +1,4 @@
+import { safeNext } from "@/lib/safe-next";
 import { redirect } from "next/navigation";
 import { getUserOrNullFast } from "@/lib/supabase/get-user-fast";
 import { signUp } from "./actions";
@@ -15,7 +16,7 @@ export default async function SignupPage({
 
   const params = await searchParams;
   if (user) {
-    redirect(params.next ?? "/inspections");
+    redirect(safeNext(params.next));
   }
 
   // Arriving from a team invite link: frame the page around joining.

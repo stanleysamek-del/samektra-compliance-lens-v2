@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
@@ -57,14 +58,12 @@ export default async function NewInspectionPage({
     >
       <div className="flex flex-col gap-5">
         <div>
-          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--fg-subtle)]">
-            Step 1 of 3
-          </span>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
             New inspection
           </h1>
           <p className="mt-1 text-sm text-[var(--fg-muted)]">
-            Set up the facility and inspector details, then start uploading photos.
+            Pick the facility and inspection type. You&apos;ll go straight to the
+            checklist and can add photos as you walk.
           </p>
         </div>
 
@@ -115,8 +114,8 @@ export default async function NewInspectionPage({
                 ) : null}
               </select>
               <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
-                Sets the scored checklist this walk follows — the AI answers
-                questions from your photos. Manage types under{" "}
+                Sets the scored checklist this walk follows. With AI analysis on,
+                Chip can pre-answer questions from your photos. Manage types under{" "}
                 <Link href="/templates" className="underline">
                   Templates
                 </Link>
@@ -226,9 +225,12 @@ export default async function NewInspectionPage({
             ) : null}
 
             <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-              <button type="submit" className="cl-btn-accent w-full sm:w-auto sm:flex-1">
-                Create & start uploading
-              </button>
+              <SubmitButton
+                pendingLabel="Creating…"
+                className="cl-btn-accent w-full sm:w-auto sm:flex-1"
+              >
+                Start inspection
+              </SubmitButton>
               <Link href="/inspections" className="cl-btn-outline w-full sm:w-auto">
                 Cancel
               </Link>

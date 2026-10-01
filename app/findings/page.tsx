@@ -88,6 +88,7 @@ export default async function FindingsDashboardPage({
     .from("findings")
     .select(
       "id, inspection_id, photo_id, title, category, code, severity, user_rating, created_at, inspections!inner(facility_name)",
+      { count: "exact" },
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -98,7 +99,10 @@ export default async function FindingsDashboardPage({
   else if (filters.rating === "down") q = q.eq("user_rating", -1);
   else if (filters.rating === "unrated") q = q.is("user_rating", null);
 
-  const { data: findings, error } = await q;
+  const { data: findings, error, count: matchedCount } = await q;
+  // Tiles and the 12-week chart are computed from the rows we fetched;
+  // say so when the cap cut older findings off.
+  const truncated = (matchedCount ?? 0) > 500;
   if (error) {
     console.error("[findings dashboard] query failed:", error.message);
   }
@@ -422,11 +426,28 @@ export default async function FindingsDashboardPage({
         {/* List */}
         <section className="flex flex-col gap-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
-            {rows.length === 0
-              ? "No findings match the current filters"
-              : `${rows.length} ${rows.length === 1 ? "finding" : "findings"}`}
+            {error
+              ? "Findings couldn't be loaded"
+              : rows.length === 0
+                ? "No findings match the current filters"
+                : truncated
+                  ? `Showing the newest ${rows.length} of ${matchedCount} findings`
+                  : `${rows.length} ${rows.length === 1 ? "finding" : "findings"}`}
           </h2>
-          {rows.length === 0 ? (
+          {truncated ? (
+            <p className="px-1 text-xs text-[var(--fg-muted)]">
+              Totals and the chart above cover these {rows.length} findings.
+              Use the filters to narrow the list.
+            </p>
+          ) : null}
+          {error ? (
+            <Card>
+              <p role="alert" className="text-center text-sm text-[var(--danger)]">
+                Something went wrong loading findings. Refresh the page to try
+                again.
+              </p>
+            </Card>
+          ) : rows.length === 0 ? (
             <Card>
               <p className="text-center text-sm text-[var(--fg-muted)]">
                 Try clearing a filter, or run an inspection to start collecting

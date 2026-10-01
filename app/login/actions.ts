@@ -1,5 +1,6 @@
 "use server";
 
+import { safeNext } from "@/lib/safe-next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +25,9 @@ const SIGN_IN_TIMEOUT_MS = 15_000;
 export async function signInWithPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "");
+  const rawNext = String(formData.get("next") ?? "");
+  // Empty when absent or unsafe, so the query-string round-trips below drop it.
+  const next = rawNext ? safeNext(rawNext, "") : "";
 
   const fail = (message: string): never => {
     redirect(

@@ -39,10 +39,16 @@ export async function startSchedule(form: FormData) {
     _schedule_id: form.get("id"),
     _expected_due: form.get("due"),
   });
-  if (error || !data)
-    redirect(
-      `/schedules?error=${encodeURIComponent(error?.message ?? "Could not start inspection")}`,
-    );
+  if (error || !data) {
+    if (error) console.error("[startSchedule]", error);
+    // P0001 = a deliberate `raise exception` in the RPC (e.g. "not due
+    // yet") — that text is written for users. Anything else is internal.
+    const message =
+      error?.code === "P0001" && error.message
+        ? error.message
+        : "Couldn't start the inspection. Refresh and try again.";
+    redirect(`/schedules?error=${encodeURIComponent(message)}`);
+  }
   revalidatePath("/schedules");
   redirect(`/inspections/${data}`);
 }

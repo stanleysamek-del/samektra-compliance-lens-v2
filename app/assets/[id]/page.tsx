@@ -60,7 +60,7 @@ export default async function AssetPage({
           {asset.label ?? asset.barcode ?? "Equipment"}
         </h1>
         <p>
-          {asset.location_text} ? Barcode: {asset.barcode ?? "Not set"}
+          {asset.location_text ? `${asset.location_text} · ` : ""}Barcode: {asset.barcode ?? "Not set"}
         </p>
         <p>
           Building: {facility?.name ?? "Unknown"}. {asset.manufacturer}{" "}
@@ -80,7 +80,7 @@ export default async function AssetPage({
         {(search.error || error) && (
           <p role="alert">
             {search.error ??
-              "Check history is not installed yet. Contact your administrator."}
+              "Check history couldn't be loaded. Refresh the page, or contact your administrator if this keeps happening."}
           </p>
         )}
         {canWrite === true && (
@@ -130,23 +130,12 @@ export default async function AssetPage({
         <ol className="space-y-3">
           {(checks ?? []).map((c) => (
             <li key={c.id} className="rounded border p-4">
-              <strong>{c.result.replaceAll("_", " ")}</strong> ?{" "}
+              <strong>{c.result.replaceAll("_", " ")}</strong> ·{" "}
               {new Date(c.created_at)
                 .toISOString()
                 .slice(0, 16)
                 .replace("T", " ")}{" "}
               UTC<p>{c.note}</p>
-              <p>
-                Building: {facility?.name ?? "Unknown"}. {asset.manufacturer}{" "}
-                {asset.model} {asset.serial && `Serial: ${asset.serial}`}
-              </p>
-              <AssetPlan
-                assetId={id}
-                facilityId={asset.facility_id}
-                label={asset.label ?? asset.barcode ?? "Equipment"}
-                initialPins={(pinRows ?? []).map(toPinRow)}
-                canWrite={canWrite === true}
-              />
               <p>Next due: {c.next_due ?? "Not specified"}</p>
             </li>
           ))}

@@ -12,6 +12,8 @@ import {
 } from "@/components/photo-card-findings";
 import { SectionsManager, type SectionRow } from "@/components/sections-manager";
 import { ChecklistPanel } from "@/components/checklist-panel";
+import { AttachChecklistCard, type TemplateOption } from "@/components/attach-checklist-card";
+import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
 import { PhotoMoveMenu } from "@/components/photo-move-menu";
 import {
@@ -33,6 +35,8 @@ import { finalizeInspection } from "./actions";
 type SearchParams = {
   /** Set by finalizeInspection / reopenInspection when the update fails. */
   error?: string;
+  /** Set by createInspection when the chosen template didn't attach. */
+  checklist?: string;
 };
 
 export default async function InspectionDetailPage({
@@ -47,6 +51,7 @@ export default async function InspectionDetailPage({
     const { id } = await params;
     const sp = await searchParams;
     const errorMessage = (sp?.error ?? "").trim();
+    const checklistFailed = sp?.checklist === "failed";
 
     stage = "supabase-client";
     const supabase = await createClient();
@@ -404,19 +409,59 @@ export default async function InspectionDetailPage({
     // keeps rendering before the migration exists — the main inspection
     // select above deliberately doesn't include facility_id.
     let facilityId: string | null = null;
+    let inspectionOrgId: string | null = null;
     try {
       const { data: fac } = await supabase
         .from("inspections")
-        .select("facility_id")
+        .select("facility_id, organization_id")
         .eq("id", id)
         .maybeSingle();
-      facilityId = ((fac as { facility_id?: string | null } | null)?.facility_id ?? null) as string | null;
+      const row = fac as { facility_id?: string | null; organization_id?: string | null } | null;
+      facilityId = row?.facility_id ?? null;
+      inspectionOrgId = row?.organization_id ?? null;
     } catch {
       facilityId = null;
     }
 
+    // Default "Analyze with Chip" to on only when this workspace has an
+    // active AI plan; the upload route still enforces the budget server-side.
+    let aiAvailable = false;
+    if (!isCompleted) {
+      try {
+        const { data: allowance, error: allowanceErr } = await supabase.rpc(
+          "ai_allowance_summary",
+          { _org_id: inspectionOrgId },
+        );
+        aiAvailable = !allowanceErr && Boolean((allowance as { active?: boolean } | null)?.active);
+      } catch {
+        aiAvailable = false;
+      }
+    }
+
     // Finalize pre-flight inputs — what's still open before locking.
     const checklistScore = scoreItems(checklistItems);
+
+    // Template options for the "Add a checklist" card — only needed when
+    // an in-progress inspection has no checklist yet.
+    let templateOptions: TemplateOption[] = [];
+    if (checklistItems.length === 0 && !isCompleted) {
+      const { data: customTemplates } = await supabase
+        .from("checklist_templates")
+        .select("id, name")
+        .order("name");
+      templateOptions = [
+        ...BUILTIN_TEMPLATES.map((t) => ({
+          id: t.id,
+          name: `${t.name} (${t.occupancy})`,
+          group: "standard" as const,
+        })),
+        ...(customTemplates ?? []).map((t) => ({
+          id: t.id as string,
+          name: t.name as string,
+          group: "custom" as const,
+        })),
+      ];
+    }
     const unconfirmedAiCount = checklistItems.filter(
       (i) => i.answered_by_ai && !i.ai_confirmed,
     ).length;
@@ -461,8 +506,10 @@ export default async function InspectionDetailPage({
               }}
             >
               <span>
-                That didn&apos;t save — the inspection status is unchanged.
-                Try again, or contact support if it keeps happening.
+                <strong className="font-semibold">That didn&apos;t save.</strong>{" "}
+                {/* The action passes a friendlyError() reason; cap length so a
+                    hand-crafted ?error= can't fill the page. */}
+                {errorMessage.slice(0, 240)}
               </span>
               <Link
                 href={`/inspections/${inspection.id}`}
@@ -544,7 +591,7 @@ export default async function InspectionDetailPage({
                 — the AI — reads each photo and drafts findings with code
                 citations. You confirm, correct, or add your own.
               </p>
-              <PhotoUploader inspectionId={inspection.id} />
+              <PhotoUploader inspectionId={inspection.id} aiAvailable={aiAvailable} />
             </>
           ) : null}
 
@@ -560,6 +607,24 @@ export default async function InspectionDetailPage({
               items={checklistItems}
               readOnly={isCompleted}
             />
+          ) : !isCompleted ? (
+            <>
+              {checklistFailed ? (
+                <p
+                  role="alert"
+                  className="rounded border px-3 py-2 text-sm"
+                  style={{
+                    borderColor: "rgba(168,54,43,0.4)",
+                    background: "rgba(168,54,43,0.08)",
+                    color: "#a8362b",
+                  }}
+                >
+                  The inspection was created, but its checklist didn&apos;t
+                  load. Pick the inspection type again below.
+                </p>
+              ) : null}
+              <AttachChecklistCard inspectionId={inspection.id} templates={templateOptions} />
+            </>
           ) : null}
 
           {/* Life-safety plan markup (migration 0025): the facility's plans

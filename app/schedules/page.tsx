@@ -46,7 +46,7 @@ export default async function SchedulesPage({
         {(error || params.error) && (
           <p role="alert" className="rounded border p-3">
             {params.error ??
-              "Scheduling is not installed yet. Existing inspections remain available."}
+              "Schedules couldn't be loaded. Refresh the page — your inspections are unaffected."}
           </p>
         )}
         <form
@@ -68,7 +68,7 @@ export default async function SchedulesPage({
             <select name="source_inspection_id" required className="cl-input">
               {(sources ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.facility_name} ? {s.location}
+                  {s.facility_name}{s.location ? ` · ${s.location}` : ""}
                 </option>
               ))}
             </select>
@@ -95,7 +95,7 @@ export default async function SchedulesPage({
           </label>
           <SubmitButton
             disabled={!!error || !sources?.length}
-            pendingLabel="Saving?"
+            pendingLabel="Saving…"
           >
             Create schedule
           </SubmitButton>
@@ -114,7 +114,7 @@ export default async function SchedulesPage({
               <div>
                 <h2 className="font-semibold">{s.name}</h2>
                 <p>
-                  {s.cadence} ? {s.next_due} ?{" "}
+                  {s.cadence} · {s.next_due} ·{" "}
                   {!s.enabled
                     ? "Paused"
                     : s.next_due < today
@@ -130,7 +130,7 @@ export default async function SchedulesPage({
                   <input type="hidden" name="due" value={s.next_due} />
                   <SubmitButton
                     disabled={!s.enabled || s.next_due > today}
-                    pendingLabel="Starting?"
+                    pendingLabel="Starting…"
                   >
                     Start due inspection
                   </SubmitButton>

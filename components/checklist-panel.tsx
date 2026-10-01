@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card } from "@/components/card";
 import {
@@ -40,12 +40,33 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
   // Optimistic local copy — server actions revalidate, but the panel
   // should feel instant on a phone in a stairwell.
   const [local, setLocal] = useState<ChecklistItemRow[]>(items);
+  // Items with a save still in flight — their optimistic value must survive
+  // a server refresh that lands before the save does.
+  const pending = useRef<Map<string, number>>(new Map());
+  // When the server sends fresh rows (router.refresh() after AI analysis
+  // fills answers in), adopt them; keep only rows the user is mid-save on.
+  const [prevItems, setPrevItems] = useState(items);
+  if (items !== prevItems) {
+    setPrevItems(items);
+    setLocal((prev) => {
+      const byId = new Map(prev.map((i) => [i.id, i]));
+      return items.map((i) =>
+        (pending.current.get(i.id) ?? 0) > 0 ? (byId.get(i.id) ?? i) : i,
+      );
+    });
+  }
   // Explicit user toggles win; sections with flagged (No) answers OR any
   // unconfirmed AI answer default open so nothing that needs a human is
   // hidden behind a collapsed header.
   const [toggled, setToggled] = useState<Map<string, boolean>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  function track(itemId: string, delta: 1 | -1) {
+    const n = (pending.current.get(itemId) ?? 0) + delta;
+    if (n > 0) pending.current.set(itemId, n);
+    else pending.current.delete(itemId);
+  }
 
   const sections = useMemo(() => {
     const map = new Map<string, { code: string; title: string; rows: ChecklistItemRow[] }>();
@@ -76,20 +97,42 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
   function answer(item: ChecklistItemRow, value: "yes" | "no" | "na") {
     if (readOnly) return;
     const next = item.answer === value && !item.answered_by_ai ? null : value;
+    const overrulesAi = item.answered_by_ai && !item.ai_confirmed && next !== "no";
     patchLocal(item.id, {
       answer: next,
       answered_by_ai: false,
       ai_confirmed: false,
+      // Mirrors setChecklistAnswer: overruling the AI unlinks its finding.
+      ...(overrulesAi
+        ? {
+            photo_id: null,
+            finding_id: null,
+            note:
+              item.note
+                ?.split("\n")
+                .filter((l) => !l.startsWith("AI: "))
+                .join("\n")
+                .trim() || null,
+          }
+        : {}),
     });
+    track(item.id, 1);
     startTransition(async () => {
-      const res = await setChecklistAnswer({
-        itemId: item.id,
-        inspectionId,
-        answer: next,
-      });
-      if (!res.ok) {
+      try {
+        const res = await setChecklistAnswer({
+          itemId: item.id,
+          inspectionId,
+          answer: next,
+        });
+        if (!res.ok) {
+          patchLocal(item.id, item);
+          setError(res.error ?? "Couldn't save the answer.");
+        }
+      } catch {
         patchLocal(item.id, item);
-        setError(res.error ?? "Couldn't save the answer.");
+        setError("Couldn't save the answer — check your connection and try again.");
+      } finally {
+        track(item.id, -1);
       }
     });
   }
@@ -97,13 +140,42 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
   function confirm(item: ChecklistItemRow) {
     if (readOnly) return;
     patchLocal(item.id, { ai_confirmed: true });
+    track(item.id, 1);
     startTransition(async () => {
-      const res = await confirmAiAnswer({ itemId: item.id, inspectionId });
-      if (!res.ok) {
+      try {
+        const res = await confirmAiAnswer({ itemId: item.id, inspectionId });
+        if (!res.ok) {
+          patchLocal(item.id, item);
+          setError(res.error ?? "Couldn't confirm.");
+        }
+      } catch {
         patchLocal(item.id, item);
-        setError(res.error ?? "Couldn't confirm.");
+        setError("Couldn't confirm — check your connection and try again.");
+      } finally {
+        track(item.id, -1);
       }
     });
+  }
+
+  async function saveNote(item: ChecklistItemRow, note: string): Promise<boolean> {
+    const trimmed = note.trim();
+    patchLocal(item.id, { note: trimmed.length > 0 ? trimmed : null });
+    track(item.id, 1);
+    try {
+      const res = await saveChecklistNote({ itemId: item.id, inspectionId, note });
+      if (!res.ok) {
+        patchLocal(item.id, { note: item.note });
+        setError(res.error ?? "Couldn't save the note.");
+        return false;
+      }
+      return true;
+    } catch {
+      patchLocal(item.id, { note: item.note });
+      setError("Couldn't save the note — check your connection and try again.");
+      return false;
+    } finally {
+      track(item.id, -1);
+    }
   }
 
   function toggleSection(code: string, currentlyOpen: boolean) {
@@ -151,9 +223,20 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
       </div>
 
       {error ? (
-        <p className="mx-5 mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-6">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="mx-5 mt-3 flex items-start justify-between gap-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-6"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0 px-1 font-semibold"
+          >
+            ✕
+          </button>
+        </div>
       ) : null}
 
       <div>
@@ -213,8 +296,7 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
                       readOnly={readOnly}
                       onAnswer={answer}
                       onConfirm={confirm}
-                      onNoteSaved={(note) => patchLocal(item.id, { note })}
-                      onError={setError}
+                      onSaveNote={(note) => saveNote(item, note)}
                     />
                   ))}
                 </div>
@@ -234,8 +316,7 @@ function ItemRow({
   readOnly,
   onAnswer,
   onConfirm,
-  onNoteSaved,
-  onError,
+  onSaveNote,
 }: {
   item: ChecklistItemRow;
   index: number;
@@ -243,26 +324,29 @@ function ItemRow({
   readOnly: boolean;
   onAnswer: (item: ChecklistItemRow, value: "yes" | "no" | "na") => void;
   onConfirm: (item: ChecklistItemRow) => void;
-  onNoteSaved: (note: string | null) => void;
-  onError: (msg: string) => void;
+  onSaveNote: (note: string) => Promise<boolean>;
 }) {
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(item.note ?? "");
+  const [noteStatus, setNoteStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [, startTransition] = useTransition();
 
   const aiPending = item.answered_by_ai && !item.ai_confirmed;
 
   function saveNote() {
     setEditingNote(false);
-    const trimmed = noteDraft.trim();
-    onNoteSaved(trimmed.length > 0 ? trimmed : null);
+    setNoteStatus("saving");
+    const draft = noteDraft;
     startTransition(async () => {
-      const res = await saveChecklistNote({
-        itemId: item.id,
-        inspectionId,
-        note: noteDraft,
-      });
-      if (!res.ok) onError(res.error ?? "Couldn't save the note.");
+      const ok = await onSaveNote(draft);
+      if (ok) {
+        setNoteStatus("saved");
+      } else {
+        // Keep what they typed — reopen the editor so nothing is lost.
+        setNoteStatus("failed");
+        setNoteDraft(draft);
+        setEditingNote(true);
+      }
     });
   }
 
@@ -381,6 +465,11 @@ function ItemRow({
                 {item.note ? "Edit note" : "Add note"}
               </button>
             ) : null}
+            {noteStatus === "saving" ? (
+              <span className="text-[11px] text-[var(--fg-subtle)]">Saving…</span>
+            ) : noteStatus === "saved" ? (
+              <span className="text-[11px] text-[var(--success)]">Note saved</span>
+            ) : null}
           </>
         ) : (
           <div className="flex w-full flex-col gap-1.5">
@@ -391,6 +480,11 @@ function ItemRow({
               className="cl-input text-sm"
               placeholder="What you observed, room number, notes…"
             />
+            {noteStatus === "failed" ? (
+              <span className="text-[11px] text-red-700">
+                Not saved yet — tap Save note to retry.
+              </span>
+            ) : null}
             <div className="flex gap-2">
               <button type="button" onClick={saveNote} className="cl-btn-accent px-3 py-1 text-xs">
                 Save note

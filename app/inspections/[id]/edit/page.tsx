@@ -28,11 +28,23 @@ export default async function EditInspectionPage({
   const { data: inspection } = await supabase
     .from("inspections")
     .select(
-      "id, facility_name, facility_address, location, inspector_name, manager_assigned, manager_assigned_email, date_of_inspection, date_assigned, status",
+      "id, facility_id, facility_name, facility_address, location, inspector_name, manager_assigned, manager_assigned_email, date_of_inspection, date_assigned, status",
     )
     .eq("id", id)
     .maybeSingle();
   if (!inspection) notFound();
+
+  // Same list as the New Inspection picker; an error (e.g. pre-0025
+  // schema) degrades to no picker options.
+  const { data: facilityRows } = await supabase
+    .from("facilities")
+    .select("id, name, address")
+    .order("name", { ascending: true });
+  const facilities = (facilityRows ?? []).map((f) => ({
+    id: f.id as string,
+    name: f.name as string,
+    address: (f.address as string | null) ?? null,
+  }));
 
   return (
     <AppShell
@@ -62,7 +74,9 @@ export default async function EditInspectionPage({
         <Card>
           <EditInspectionForm
             inspectionId={inspection.id}
+            facilities={facilities}
             initial={{
+              facility_id: (inspection.facility_id as string | null) ?? "",
               facility_name: inspection.facility_name ?? "",
               facility_address: inspection.facility_address ?? "",
               location: inspection.location ?? "",

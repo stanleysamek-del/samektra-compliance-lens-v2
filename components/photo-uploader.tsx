@@ -11,6 +11,8 @@ import { formatDuration } from "@/lib/format-duration";
 
 type Props = {
   inspectionId: string;
+  /** Workspace has an active AI plan — AI analysis starts switched on. */
+  aiAvailable?: boolean;
 };
 
 /**
@@ -109,12 +111,12 @@ function nextId() {
 const isInFlight = (s: ItemStatus) => s === "uploading" || s === "saving";
 const isServerPending = (s: ItemStatus) => s === "server_queued" || s === "server_analyzing";
 
-export function PhotoUploader({ inspectionId }: Props) {
+export function PhotoUploader({ inspectionId, aiAvailable = false }: Props) {
   const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const [photoLocation, setPhotoLocation] = useState("");
-  const [useAi, setUseAi] = useState(false);
+  const [useAi, setUseAi] = useState(aiAvailable);
   // The queue lives in a ref (source of truth the async pump can read
   // without stale closures) and is mirrored into state for rendering.
   const queueRef = useRef<QueueItem[]>([]);
@@ -152,6 +154,22 @@ export function PhotoUploader({ inspectionId }: Props) {
     }, 2200);
     return () => clearInterval(interval);
   }, [active?.status]);
+
+  // Photos not yet on the server live only in this tab — warn before a
+  // reload/close drops them. (Already-uploaded photos are safe: their
+  // analysis continues server-side.)
+  const unsentCount = queue.filter(
+    (q) => q.status === "queued" || isInFlight(q.status),
+  ).length;
+  useEffect(() => {
+    if (unsentCount === 0) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [unsentCount]);
 
   // Tick the clock every 100ms while an item is in flight.
   useEffect(() => {
@@ -547,7 +565,9 @@ export function PhotoUploader({ inspectionId }: Props) {
       <label className="mb-3 flex items-start gap-3 rounded-lg border border-[var(--border)] p-3 text-sm">
         <input type="checkbox" checked={useAi} onChange={e => setUseAi(e.target.checked)} className="mt-1" />
         <span><strong>Analyze with Chip</strong><br />
-          Paid plan required. Leave off to capture and review photos manually at no AI cost.
+          {aiAvailable
+            ? "Included in your AI plan. Turn off to capture photos for manual review."
+            : "Paid plan required. Leave off to capture and review photos manually at no AI cost."}
           <Link href="/usage" className="ml-1 underline">View AI plan and usage</Link>
         </span>
       </label>

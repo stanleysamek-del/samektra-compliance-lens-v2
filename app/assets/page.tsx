@@ -65,7 +65,7 @@ export default async function AssetsPage({
         {(error || params.error) && (
           <p role="alert">
             {params.error ??
-              "Equipment storage is not installed yet. Contact your administrator."}
+              "Equipment couldn't be loaded. Refresh the page, or contact your administrator if this keeps happening."}
           </p>
         )}
         <BarcodeScanner
@@ -177,8 +177,8 @@ export default async function AssetsPage({
                 {a.label ?? a.barcode ?? assetTypeLabel(a.type)}
               </Link>
               <p>
-                {assetTypeLabel(a.type)} ?{" "}
-                {a.location_text ?? "Location not set"} ?{" "}
+                {assetTypeLabel(a.type)} ·{" "}
+                {a.location_text ?? "Location not set"} ·{" "}
                 {a.status.replaceAll("_", " ")}
               </p>
               <p>

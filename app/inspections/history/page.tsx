@@ -7,6 +7,7 @@ import { InspectionRowMenu } from "@/components/inspection-row-menu";
 import { FoldersManager, type FolderRow } from "@/components/folders-manager";
 import { InspectionMoveMenu } from "@/components/inspection-move-menu";
 import { getCurrentOrg } from "@/lib/org/current";
+import { scopeToWorkspace } from "@/lib/org/scope";
 
 type Sort = "newest" | "oldest" | "name" | "facility-date";
 type StatusFilter = "all" | "in_progress" | "completed" | "archived";
@@ -53,11 +54,15 @@ export default async function HistoryPage({
   const currentOrg = await getCurrentOrg();
 
   // Build the query — also pull folder_id so we can group inspections.
-  let query = supabase
-    .from("inspections")
-    .select(
-      "id, facility_name, facility_address, location, status, date_of_inspection, created_at, updated_at, folder_id, organization_id",
-    );
+  let query = scopeToWorkspace(
+    supabase
+      .from("inspections")
+      .select(
+        "id, facility_name, facility_address, location, status, date_of_inspection, created_at, updated_at, folder_id, organization_id",
+      ),
+    currentOrg?.id ?? null,
+    user.id,
+  );
 
   if (status !== "all") {
     query = query.eq("status", status);
@@ -162,9 +167,11 @@ export default async function HistoryPage({
 
   // Counts for the filter pills (run once with no filter so the counts always
   // reflect the user's full library, not the current view).
-  const { data: allRows } = await supabase
-    .from("inspections")
-    .select("status");
+  const { data: allRows } = await scopeToWorkspace(
+    supabase.from("inspections").select("status"),
+    currentOrg?.id ?? null,
+    user.id,
+  );
   const totals = (allRows ?? []).reduce(
     (acc, r) => {
       const s = (r.status as keyof typeof acc) ?? "all";

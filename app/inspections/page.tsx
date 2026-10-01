@@ -8,6 +8,8 @@ import { TeamTipBanner } from "@/components/team-tip-banner";
 import { HelpTip } from "@/components/help-tip";
 import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
+import { getCurrentOrg } from "@/lib/org/current";
+import { scopeToWorkspace } from "@/lib/org/scope";
 
 /**
  * Runs a Supabase query with a hard timeout. If Supabase is slow we return
@@ -70,13 +72,24 @@ export default async function InspectionsPage() {
     redirect("/onboarding");
   }
 
+  // Everything below follows the workspace switcher (team or personal),
+  // matching History and the campus dashboard.
+  const currentOrg = await getCurrentOrg();
+  const orgId = currentOrg?.id ?? null;
+
   // Fire the rest of the queries in parallel and let any of them fail open.
   const [inProgressResult, recentResult, weeklyScansResult, weeklyHighFindingsResult] =
     await Promise.all([
       withQueryTimeout(
-        supabase
-          .from("inspections")
-          .select("id, facility_name, location, date_of_inspection, updated_at")
+        scopeToWorkspace(
+          supabase
+            .from("inspections")
+            .select("id, facility_name, location, date_of_inspection, updated_at", {
+              count: "exact",
+            }),
+          orgId,
+          user.id,
+        )
           .eq("status", "in_progress")
           .order("updated_at", { ascending: false })
           .limit(5),
@@ -84,27 +97,48 @@ export default async function InspectionsPage() {
         "in_progress",
       ),
       withQueryTimeout(
-        supabase
-          .from("inspections")
-          .select("id, facility_name, location, status, date_of_inspection, created_at")
+        scopeToWorkspace(
+          supabase
+            .from("inspections")
+            .select("id, facility_name, location, status, date_of_inspection, created_at"),
+          orgId,
+          user.id,
+        )
           .order("created_at", { ascending: false })
           .limit(5),
         4000,
         "recent",
       ),
       withQueryTimeout(
-        supabase
-          .from("photos")
-          .select("id", { count: "exact", head: true })
-          .gte("created_at", sevenDaysAgo),
+        scopeToWorkspace(
+          supabase
+            .from("photos")
+            .select("id, inspections!inner(organization_id, created_by)", {
+              count: "exact",
+              head: true,
+            }),
+          orgId,
+          user.id,
+          "inspections.",
+        ).gte("created_at", sevenDaysAgo),
         4000,
         "weekly_scans",
       ),
       withQueryTimeout(
-        supabase
-          .from("findings")
-          .select("id", { count: "exact", head: true })
+        scopeToWorkspace(
+          supabase
+            .from("findings")
+            .select("id, inspections!inner(organization_id, created_by)", {
+              count: "exact",
+              head: true,
+            }),
+          orgId,
+          user.id,
+          "inspections.",
+        )
           .eq("severity", "High")
+          // "Open" means not yet fixed — done/verified/won't-fix drop out.
+          .in("cap_status", ["open", "in_progress"])
           .gte("created_at", sevenDaysAgo),
         4000,
         "weekly_high_findings",
@@ -112,6 +146,8 @@ export default async function InspectionsPage() {
     ]);
 
   const inProgress = inProgressResult?.data ?? null;
+  // Only 5 cards render; the header shows the real total.
+  const inProgressTotal = inProgressResult?.count ?? inProgress?.length ?? 0;
   const recent = recentResult?.data ?? null;
   const weeklyScans = weeklyScansResult?.count ?? null;
   const weeklyHighFindings = weeklyHighFindingsResult?.count ?? null;
@@ -266,9 +302,9 @@ export default async function InspectionsPage() {
               value={String(weeklyHighFindings ?? 0)}
               sub={
                 (weeklyHighFindings ?? 0) === 0 ? (
-                  <span style={{ color: "#607a3a" }}>None this week</span>
+                  <span style={{ color: "#607a3a" }}>None open this week</span>
                 ) : (
-                  "open issues"
+                  "still open · last 7 days"
                 )
               }
               tone="warning"
@@ -313,7 +349,7 @@ export default async function InspectionsPage() {
               <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
                 In progress
                 <span className="ml-1.5 font-medium text-[var(--fg-subtle)]">
-                  · {inProgress.length}
+                  · {inProgressTotal}
                 </span>
               </h2>
               <Link

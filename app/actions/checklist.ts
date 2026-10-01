@@ -18,6 +18,48 @@ function revalidateInspection(inspectionId: string) {
   revalidatePath(`/inspections/${inspectionId}`);
 }
 
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Completed inspections are locked. The UI hides the controls, but the
+ * server must refuse too — a stale tab could still post an answer.
+ * The item must also belong to the inspection we revalidate.
+ */
+async function checkEditable(
+  supabase: Supabase,
+  itemId: string,
+  inspectionId: string,
+): Promise<string | null> {
+  const { data: inspection } = await supabase
+    .from("inspections")
+    .select("status")
+    .eq("id", inspectionId)
+    .maybeSingle();
+  if (!inspection) return "Inspection not found.";
+  if (inspection.status === "completed") {
+    return "This inspection is finalized — reopen it to change answers.";
+  }
+  const { data: item } = await supabase
+    .from("inspection_checklist_items")
+    .select("id")
+    .eq("id", itemId)
+    .eq("inspection_id", inspectionId)
+    .maybeSingle();
+  if (!item) return "Checklist question not found.";
+  return null;
+}
+
+/** Drop the "AI: …" lines prefillChecklistFromFindings appends to a note. */
+function stripAiNoteLines(note: string | null): string | null {
+  if (!note) return note;
+  const kept = note
+    .split("\n")
+    .filter((line) => !line.startsWith("AI: "))
+    .join("\n")
+    .trim();
+  return kept.length > 0 ? kept : null;
+}
+
 export async function setChecklistAnswer(input: {
   itemId: string;
   inspectionId: string;
@@ -30,6 +72,15 @@ export async function setChecklistAnswer(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
+
+  const { data: current } = await supabase
+    .from("inspection_checklist_items")
+    .select("answered_by_ai, ai_confirmed, note")
+    .eq("id", input.itemId)
+    .maybeSingle();
+
   const patch: Record<string, unknown> = {
     answer: input.answer,
     answered_by: input.answer === null ? null : user.id,
@@ -37,6 +88,14 @@ export async function setChecklistAnswer(input: {
     ai_confirmed: false,
     answered_at: input.answer === null ? null : new Date().toISOString(),
   };
+  // Overruling an AI "No": the question no longer describes that
+  // deficiency, so unlink the finding/photo and drop the AI note line.
+  // (The finding itself stays on its photo for the inspector to dismiss.)
+  if (current?.answered_by_ai && !current.ai_confirmed && input.answer !== "no") {
+    patch.finding_id = null;
+    patch.photo_id = null;
+    if (input.note === undefined) patch.note = stripAiNoteLines(current.note);
+  }
   if (input.note !== undefined) patch.note = input.note;
 
   const { error } = await supabase
@@ -59,6 +118,9 @@ export async function confirmAiAnswer(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
+
   const { error } = await supabase
     .from("inspection_checklist_items")
     .update({ ai_confirmed: true, answered_by: user.id })
@@ -75,6 +137,8 @@ export async function saveChecklistNote(input: {
   note: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
   const trimmed = input.note.trim();
   const { error } = await supabase
     .from("inspection_checklist_items")
@@ -95,6 +159,16 @@ export async function attachChecklistToInspection(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
+
+  const { data: inspection } = await supabase
+    .from("inspections")
+    .select("status")
+    .eq("id", input.inspectionId)
+    .maybeSingle();
+  if (!inspection) return { ok: false, error: "Inspection not found." };
+  if (inspection.status === "completed") {
+    return { ok: false, error: "This inspection is finalized — reopen it to add a checklist." };
+  }
 
   const { count } = await supabase
     .from("inspection_checklist_items")

@@ -1,5 +1,6 @@
 "use server";
 
+import { safeNext } from "@/lib/safe-next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -20,7 +21,9 @@ export async function signUp(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm_password") ?? "");
-  const next = String(formData.get("next") ?? "");
+  const rawNext = String(formData.get("next") ?? "");
+  // Empty when absent or unsafe, so the query-string round-trips below drop it.
+  const next = rawNext ? safeNext(rawNext, "") : "";
 
   const buildRedirect = (qs: string) =>
     `/signup?${qs}${next ? `&next=${encodeURIComponent(next)}` : ""}`;

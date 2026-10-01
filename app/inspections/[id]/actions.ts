@@ -86,6 +86,7 @@ export async function finalizeInspection(formData: FormData) {
 
 /** Field values the edit form round-trips so a failed save never wipes them. */
 export type InspectionEditValues = {
+  facility_id: string;
   facility_name: string;
   facility_address: string;
   location: string;
@@ -114,6 +115,7 @@ export async function updateInspection(
   const inspectionId = String(formData.get("inspection_id") ?? "");
 
   const values: InspectionEditValues = {
+    facility_id: String(formData.get("facility_id") ?? "").trim(),
     facility_name: String(formData.get("facility_name") ?? "").trim(),
     facility_address: String(formData.get("facility_address") ?? ""),
     location: String(formData.get("location") ?? ""),
@@ -138,7 +140,41 @@ export async function updateInspection(
     return { ok: false, error: "Facility name is required.", values };
   }
 
+  // Facility link: "" unlinks; a uuid must be a facility this user can see
+  // AND in the same workspace as the inspection, so a pasted id can't
+  // attach another organization's plans.
+  let facility_id: string | null = null;
+  if (values.facility_id) {
+    if (!/^[0-9a-f-]{36}$/i.test(values.facility_id)) {
+      return { ok: false, error: "Choose a facility from the list.", values };
+    }
+    const [{ data: insp }, { data: fac }] = await Promise.all([
+      supabase
+        .from("inspections")
+        .select("organization_id")
+        .eq("id", inspectionId)
+        .maybeSingle(),
+      supabase
+        .from("facilities")
+        .select("id, organization_id")
+        .eq("id", values.facility_id)
+        .maybeSingle(),
+    ]);
+    if (!fac) {
+      return { ok: false, error: "That facility no longer exists.", values };
+    }
+    if ((fac.organization_id ?? null) !== (insp?.organization_id ?? null)) {
+      return {
+        ok: false,
+        error: "That facility belongs to a different workspace than this inspection.",
+        values,
+      };
+    }
+    facility_id = fac.id as string;
+  }
+
   const patch: Record<string, string | null> = {
+    facility_id,
     facility_name: values.facility_name,
     facility_address: stringOrNull(values.facility_address),
     location: stringOrNull(values.location),

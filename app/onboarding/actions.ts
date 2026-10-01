@@ -21,6 +21,13 @@ export async function saveProfile(formData: FormData) {
     redirect("/login");
   }
 
+  // Existing profile → this is an edit from /profile, not first run.
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const { error } = await supabase.from("profiles").upsert(
     {
       user_id: user.id,
@@ -33,8 +40,15 @@ export async function saveProfile(formData: FormData) {
   );
 
   if (error) {
-    redirect(`/onboarding?error=${encodeURIComponent(error.message)}`);
+    console.error("[saveProfile]", error);
+    redirect(
+      `/onboarding?error=${encodeURIComponent(
+        "Couldn't save your profile. Check your connection and try again.",
+      )}`,
+    );
   }
+
+  if (existing) redirect("/profile");
 
   // Land first-time users on /welcome so they immediately understand what
   // they can do, instead of being dropped onto an empty Home screen.

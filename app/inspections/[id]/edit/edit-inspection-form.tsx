@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
+import type { FacilityOption } from "../../new/facility-picker";
 import { showToast } from "@/components/toaster";
 import {
   updateInspection,
@@ -22,9 +23,11 @@ import {
  */
 export function EditInspectionForm({
   inspectionId,
+  facilities,
   initial,
 }: {
   inspectionId: string;
+  facilities: FacilityOption[];
   initial: InspectionEditValues;
 }) {
   const [state, formAction] = useActionState<UpdateInspectionState, FormData>(
@@ -48,6 +51,46 @@ export function EditInspectionForm({
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="inspection_id" value={inspectionId} />
+
+      <div className="flex flex-col">
+        <label htmlFor="facility_id" className="cl-label">
+          Facility
+        </label>
+        <select
+          id="facility_id"
+          name="facility_id"
+          className="cl-input"
+          value={values.facility_id}
+          onChange={(e) => {
+            const id = e.target.value;
+            const f = facilities.find((x) => x.id === id);
+            setValues((prev) => ({
+              ...prev,
+              facility_id: id,
+              ...(f
+                ? {
+                    facility_name: f.name,
+                    facility_address: f.address ?? prev.facility_address,
+                  }
+                : {}),
+            }));
+          }}
+        >
+          <option value="">— None —</option>
+          {facilities.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+              {f.address ? ` — ${f.address}` : ""}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
+          Linking a facility lets you pin findings on its life-safety plan.{" "}
+          <Link href="/facilities" className="underline">
+            Manage facilities
+          </Link>
+        </p>
+      </div>
 
       <div className="flex flex-col">
         <label htmlFor="facility_name" className="cl-label">
