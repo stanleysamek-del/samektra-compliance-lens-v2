@@ -56,7 +56,10 @@ export async function signUp(formData: FormData) {
     const headerList = await headers();
     const origin = headerList.get("origin") ?? `https://${headerList.get("host")}`;
     const callbackUrl = new URL("/auth/callback", origin);
-    if (next) callbackUrl.searchParams.set("next", next);
+    // Always carry `next`: the Confirm-signup email template appends
+    // "&token_hash=…" to {{ .RedirectTo }}, so the URL must already have
+    // a query string. Invite sign-ups keep their /team/invite/… target.
+    callbackUrl.searchParams.set("next", next || "/onboarding");
 
     const signUpPromise = supabase.auth.signUp({
       email,
