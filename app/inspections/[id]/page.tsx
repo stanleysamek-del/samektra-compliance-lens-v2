@@ -717,12 +717,24 @@ export default async function InspectionDetailPage({
                 </HelpTip>
               </h2>
               {!isCompleted ? (
-                <p className="mt-1 text-sm text-[var(--fg-muted)]">
-                  Downloads unlock once the inspection is finalized.{" "}
-                  <Link href={`/inspections/${inspection.id}?step=review`} className="font-medium underline">
-                    Review and finalize →
-                  </Link>
-                </p>
+                <div className="mt-2 flex flex-col gap-3 rounded border border-[var(--rule-strong)] bg-[var(--paper-2)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-[var(--fg-muted)]">
+                    See the report as it stands. Every page is marked{" "}
+                    <strong className="text-[var(--ink)]">DRAFT</strong> until you finalize; the
+                    downloads below unlock then.{" "}
+                    <Link href={`/inspections/${inspection.id}?step=review`} className="font-medium underline">
+                      Review and finalize →
+                    </Link>
+                  </p>
+                  <a
+                    href={`/api/inspections/${inspection.id}/export/pdf?inline=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cl-btn-outline shrink-0"
+                  >
+                    Preview draft PDF ↗
+                  </a>
+                </div>
               ) : null}
               <div className="mt-3">
                 <ExportButtons inspectionId={inspection.id} enabled={isCompleted} />

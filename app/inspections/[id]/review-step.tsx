@@ -122,6 +122,27 @@ export function ReviewStep({
         </div>
       ) : null}
 
+      {!isCompleted ? (
+        <Card>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-[var(--ink)]">Check the report before you sign</h2>
+              <p className="mt-1 text-sm text-[var(--fg-muted)]">
+                Opens the PDF as it stands now, marked DRAFT on every page.
+              </p>
+            </div>
+            <a
+              href={`/api/inspections/${inspectionId}/export/pdf?inline=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="cl-btn-outline shrink-0"
+            >
+              Preview draft PDF ↗
+            </a>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <h2 className="text-base font-semibold text-[var(--ink)]">Sign-off</h2>
         <div className="mt-3 grid grid-cols-1 gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-2">

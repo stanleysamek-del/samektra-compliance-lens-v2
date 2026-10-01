@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 import type { PDFPage, PDFFont, RGB } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { buildExportFilename } from "@/lib/exports/filename";
@@ -66,7 +66,11 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id: inspectionId } = await ctx.params;
-  const debug = new URL(request.url).searchParams.get("debug") === "1";
+  const url = new URL(request.url);
+  const debug = url.searchParams.get("debug") === "1";
+  // ?inline=1 opens the PDF in the browser (draft preview) instead of
+  // downloading it.
+  const inline = url.searchParams.get("inline") === "1";
   try {
     const supabase = await createClient();
     const {
@@ -1123,8 +1127,34 @@ export async function GET(
     }
 
     /* ============================ FOOTER ============================ */
+    // An inspection that isn't finalized can only ever produce a DRAFT:
+    // every page is watermarked, whichever link was used, so an
+    // unfinished report can't pass as the final record.
+    const isDraft = inspection.status !== "completed";
+    const generatedAt = new Date().toISOString().slice(0, 16).replace("T", " ");
     const pages = pdf.getPages();
     pages.forEach((pg, idx) => {
+      if (isDraft) {
+        const { width, height } = pg.getSize();
+        const mark = "DRAFT - NOT FINALIZED";
+        const size = Math.min(width, height) / 9;
+        const w = helvBold.widthOfTextAtSize(mark, size);
+        const angle = Math.atan2(height, width);
+        pg.drawText(mark, {
+          // Center the rotated baseline on the page diagonal.
+          x: width / 2 - (w / 2) * Math.cos(angle),
+          y: height / 2 - (w / 2) * Math.sin(angle),
+          size,
+          font: helvBold,
+          color: rgb(0.71, 0.14, 0.09),
+          opacity: 0.12,
+          rotate: degrees((angle * 180) / Math.PI),
+        });
+        pg.drawText(
+          safeText(`DRAFT preview generated ${generatedAt} UTC - not finalized, not for distribution`),
+          { x: MARGIN, y: 36, size: 8, font: helvBold, color: rgb(0.71, 0.14, 0.09) },
+        );
+      }
       pg.drawText(safeText(`${idx + 1} / ${pages.length}`), {
         x: COL_RIGHT - 30,
         y: 24,
@@ -1142,13 +1172,13 @@ export async function GET(
     });
 
     const bytes = await pdf.save();
-    const filename = buildExportFilename(inspection, "EOC-LS-Inspection", "pdf");
+    const filename = `${isDraft ? "DRAFT-" : ""}${buildExportFilename(inspection, "EOC-LS-Inspection", "pdf")}`;
 
     return new Response(Buffer.from(bytes), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       },
     });
