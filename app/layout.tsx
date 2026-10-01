@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceStatusBanner } from "@/components/service-status-banner";
@@ -55,6 +55,15 @@ export const metadata: Metadata = {
     description: "AI-powered code compliance inspection. CAP, LSRA, ILSM, and signed PDF reports — generated from photos.",
   },
   icons: { icon: "/favicon.ico" },
+};
+
+// viewport-fit=cover makes env(safe-area-inset-*) real on iPhones (the tab
+// bar, toasts and photo editor pad around the home indicator).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#faf8f2",
 };
 
 export default function RootLayout({

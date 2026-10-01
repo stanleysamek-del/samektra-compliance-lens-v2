@@ -31,7 +31,7 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)]"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
           <circle cx="5" cy="12" r="1.6" fill="currentColor" />
@@ -47,13 +47,13 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
         >
           <Link
             href={`/inspections/${inspectionId}`}
-            className="block px-4 py-2.5 text-sm text-[var(--fg)] transition hover:bg-white/[0.04]"
+            className="block px-4 py-2.5 text-sm text-[var(--fg)] transition hover:bg-black/[0.04]"
           >
             Open
           </Link>
           <Link
             href={`/inspections/${inspectionId}/edit`}
-            className="block px-4 py-2.5 text-sm text-[var(--fg)] transition hover:bg-white/[0.04]"
+            className="block px-4 py-2.5 text-sm text-[var(--fg)] transition hover:bg-black/[0.04]"
           >
             Edit details
           </Link>
@@ -79,7 +79,7 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
             />
             <button
               type="submit"
-              className="block w-full border-t border-[var(--border)] px-4 py-2.5 text-left text-sm text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.06)]"
+              className="block w-full border-t border-[var(--border)] px-4 py-2.5 text-left text-sm text-[#b42318] transition hover:bg-[rgba(168,54,43,0.06)]"
             >
               Delete
             </button>

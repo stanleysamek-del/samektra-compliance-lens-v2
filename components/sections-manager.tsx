@@ -186,7 +186,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                       disabled={isFirst || isPending}
                       title="Move up"
                       aria-label="Move section up"
-                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <UpIcon />
                     </button>
@@ -196,7 +196,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                       disabled={isLast || isPending}
                       title="Move down"
                       aria-label="Move section down"
-                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <DownIcon />
                     </button>
@@ -207,7 +207,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                         setEditingId(s.id);
                         setEditName(s.name);
                       }}
-                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
                     >
                       Rename
                     </button>
@@ -215,7 +215,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
                       type="button"
                       onClick={() => remove(s.id, s.name)}
                       disabled={isPending}
-                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
+                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318]"
                     >
                       Delete
                     </button>
@@ -260,7 +260,7 @@ export function SectionsManager({ inspectionId, sections, readOnly }: Props) {
               setAdding(false);
               setNewName("");
             }}
-            className="rounded px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+            className="rounded px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
           >
             Cancel
           </button>

@@ -27,7 +27,7 @@ export function DeleteTeamDialog({ orgId, orgName, action }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium" style={{ color: "#a8362b" }}>
+          <p className="text-sm font-medium" style={{ color: "#b42318" }}>
             Delete this team
           </p>
           <p className="mt-0.5 text-[11px] text-[var(--fg-muted)]">
@@ -44,7 +44,7 @@ export function DeleteTeamDialog({ orgId, orgName, action }: Props) {
             className="shrink-0 rounded px-3 py-1.5 text-[11px] font-medium transition"
             style={{
               border: "1px solid rgba(168,54,43,0.4)",
-              color: "#a8362b",
+              color: "#b42318",
               background: "rgba(168,54,43,0.05)",
             }}
           >
@@ -67,7 +67,7 @@ export function DeleteTeamDialog({ orgId, orgName, action }: Props) {
             To confirm, type{" "}
             <span
               className="font-medium"
-              style={{ color: "#a8362b" }}
+              style={{ color: "#b42318" }}
             >
               {orgName}
             </span>{" "}
@@ -89,7 +89,7 @@ export function DeleteTeamDialog({ orgId, orgName, action }: Props) {
                 setOpen(false);
                 setTyped("");
               }}
-              className="rounded px-3 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05]"
+              className="rounded px-3 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04]"
             >
               Cancel
             </button>
@@ -98,7 +98,7 @@ export function DeleteTeamDialog({ orgId, orgName, action }: Props) {
               disabled={!matches || pending}
               className="rounded px-3 py-1.5 text-[11px] font-medium text-white transition disabled:opacity-40"
               style={{
-                background: matches ? "#a8362b" : "rgba(168,54,43,0.5)",
+                background: matches ? "#b42318" : "rgba(168,54,43,0.5)",
                 cursor: matches && !pending ? "pointer" : "not-allowed",
               }}
             >

@@ -94,7 +94,7 @@ export function PlaceOnPlanButton({
         className={btnClass}
         style={
           compact
-            ? { color: pinned ? "#607a3a" : "var(--fg-muted)", background: "rgba(15,21,24,0.04)" }
+            ? { color: pinned ? "#2f6b2f" : "var(--fg-muted)", background: "rgba(15,21,24,0.04)" }
             : undefined
         }
         title={pinned ? "Move this pin on the plan" : "Mark where this is on the life-safety plan"}
@@ -285,7 +285,7 @@ function PlaceSheet({
         {plans === null ? (
           <p className="px-4 py-8 text-center text-sm text-[var(--fg-muted)]">Loading plans…</p>
         ) : error ? (
-          <p className="px-4 py-8 text-center text-sm" style={{ color: "#a8362b" }}>
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "#b42318" }}>
             {error}
           </p>
         ) : plans.length === 0 ? (

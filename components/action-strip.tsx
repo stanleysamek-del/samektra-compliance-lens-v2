@@ -69,9 +69,9 @@ const STATUS_META: Record<
   { label: string; bg: string; fg: string }
 > = {
   open: { label: "Open", bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" },
-  in_progress: { label: "In progress", bg: "rgba(184,118,42,0.12)", fg: "#b8762a" },
+  in_progress: { label: "In progress", bg: "rgba(184,118,42,0.12)", fg: "#8a5300" },
   done: { label: "Done — verify", bg: "rgba(20,184,166,0.12)", fg: "#0f766e" },
-  verified: { label: "Verified", bg: "rgba(96,122,58,0.12)", fg: "#607a3a" },
+  verified: { label: "Verified", bg: "rgba(96,122,58,0.12)", fg: "#2f6b2f" },
   wont_fix: { label: "Won't fix", bg: "rgba(15,21,24,0.06)", fg: "var(--fg-subtle)" },
 };
 
@@ -288,7 +288,7 @@ export function ActionStrip({
               className="rounded-full px-2 py-0.5 text-[11px] font-medium"
               style={
                 action.priority === "high"
-                  ? { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
+                  ? { background: "rgba(168,54,43,0.10)", color: "#b42318" }
                   : { background: "rgba(15,21,24,0.05)", color: "var(--fg-subtle)" }
               }
             >
@@ -301,7 +301,7 @@ export function ActionStrip({
           {action.cap_target_date ? (
             <span
               className="text-[11px] font-medium"
-              style={{ color: overdue ? "#a8362b" : "var(--fg-subtle)" }}
+              style={{ color: overdue ? "#b42318" : "var(--fg-subtle)" }}
             >
               {overdue ? "OVERDUE · " : "due "}
               {formatDate(action.cap_target_date)}
@@ -441,7 +441,7 @@ export function ActionStrip({
                         setActionStatus({ findingId, inspectionId, status: "open" }),
                       )
                     }
-                    className={`${TAP} rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)]`}
+                    className={`${TAP} rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]`}
                   >
                     Reopen
                   </button>
@@ -466,7 +466,7 @@ export function ActionStrip({
                     <label className="mt-2 flex flex-col">
                       <span className="cl-label">Close-out photo (from this inspection)</span>
                       {photos.kind === "error" ? (
-                        <span className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "#a8362b" }}>
+                        <span className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "#b42318" }}>
                           Couldn&apos;t load this inspection&apos;s photos.
                           <button
                             type="button"
@@ -550,7 +550,7 @@ export function ActionStrip({
           ) : null}
 
           {error ? (
-            <p role="alert" className="text-xs font-medium" style={{ color: "#a8362b" }}>
+            <p role="alert" className="text-xs font-medium" style={{ color: "#b42318" }}>
               {error}
             </p>
           ) : null}
@@ -560,7 +560,7 @@ export function ActionStrip({
             {comments.kind === "idle" || comments.kind === "loading" ? (
               <p className="text-[11px] text-[var(--fg-subtle)]">Loading thread…</p>
             ) : comments.kind === "error" ? (
-              <p className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "#a8362b" }}>
+              <p className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "#b42318" }}>
                 Couldn&apos;t load comments.
                 <button
                   type="button"

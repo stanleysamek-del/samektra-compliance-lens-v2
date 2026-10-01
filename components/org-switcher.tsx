@@ -72,7 +72,8 @@ export function OrgSwitcher() {
   // No teams yet: a static pill, not a dropdown with one dead option.
   if (!hasTeams) {
     return (
-      <div className="inline-flex items-center gap-1">
+      // Phones: nothing to switch, so give the header space back.
+      <div className="hidden items-center gap-1 sm:inline-flex">
         <span
           className="inline-flex max-w-[180px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--fg-muted)]"
           title="You're in your personal workspace"
@@ -90,7 +91,7 @@ export function OrgSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex max-w-[180px] items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:border-[var(--primary)]"
+        className="inline-flex max-w-[120px] items-center gap-1.5 rounded-md border border-[var(--rule-strong)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:border-[var(--primary)] sm:max-w-[180px]"
         aria-haspopup="menu"
         aria-expanded={open}
         title="Switch workspace"
@@ -99,7 +100,7 @@ export function OrgSwitcher() {
         <span className="truncate">{label}</span>
         <CaretIcon />
       </button>
-      {tip}
+      <span className="hidden sm:inline-flex">{tip}</span>
 
       {open ? (
         <div
@@ -120,7 +121,7 @@ export function OrgSwitcher() {
                       type="submit"
                       role="menuitem"
                       className={[
-                        "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-white/[0.05]",
+                        "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-black/[0.04]",
                         isCurrent
                           ? "font-semibold text-[var(--primary)]"
                           : "text-[var(--fg)]",
@@ -149,7 +150,7 @@ export function OrgSwitcher() {
                   type="submit"
                   role="menuitem"
                   className={[
-                    "flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-1.5 text-left text-xs transition hover:bg-white/[0.05]",
+                    "flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-1.5 text-left text-xs transition hover:bg-black/[0.04]",
                     !ctx.current
                       ? "font-semibold text-[var(--primary)]"
                       : "text-[var(--fg-muted)]",

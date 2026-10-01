@@ -72,11 +72,13 @@ export function ServiceStatusBanner() {
   return (
     <div
       role="status"
-      className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b px-4 py-2 text-xs font-medium"
+      // Not sticky: the app header is already sticky at top-0, and two
+      // sticky bars made content visibly scroll under the translucent one.
+      className="relative z-40 flex items-center justify-between gap-3 border-b px-4 py-2 text-xs font-medium"
       style={{
-        borderColor: isDown ? "rgba(168,54,43,0.45)" : "rgba(184,118,42,0.45)",
-        background: isDown ? "rgba(168,54,43,0.10)" : "rgba(184,118,42,0.10)",
-        color: isDown ? "#a8362b" : "#b8762a",
+        borderColor: isDown ? "#b42318" : "#8a5300",
+        background: isDown ? "#fdecea" : "#fdf3dc",
+        color: isDown ? "#b42318" : "#8a5300",
         fontFamily: "var(--font-jetbrains-mono)",
         letterSpacing: "0.04em",
       }}
@@ -86,7 +88,7 @@ export function ServiceStatusBanner() {
           aria-hidden
           className="inline-block h-2 w-2 shrink-0 rounded-full"
           style={{
-            background: isDown ? "#a8362b" : "#b8762a",
+            background: isDown ? "#b42318" : "#8a5300",
           }}
         />
         <span className="truncate">{message}</span>

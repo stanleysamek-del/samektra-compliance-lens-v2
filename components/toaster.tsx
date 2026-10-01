@@ -45,26 +45,27 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6 sm:items-end sm:px-6"
+      // Above the mobile tab bar AND the iPhone home indicator.
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6 sm:items-end sm:px-6"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
           role={t.kind === "error" ? "alert" : "status"}
-          className="pointer-events-auto max-w-sm rounded-lg border px-4 py-3 text-sm shadow-lg"
+          className="pointer-events-auto max-w-sm rounded border px-4 py-3 text-sm shadow-lg"
           style={{
             background:
               t.kind === "error"
                 ? "#fdecea"
                 : t.kind === "success"
                   ? "#eaf5ea"
-                  : "var(--bg-elevated, #f3efe3)",
+                  : "#ffffff",
             borderColor:
               t.kind === "error"
-                ? "#a8362b"
+                ? "#b42318"
                 : t.kind === "success"
-                  ? "#3d7a3d"
-                  : "var(--border, #b9b39e)",
+                  ? "#2f6b2f"
+                  : "var(--ink, #0f1518)",
             color: "#0f1518",
           }}
         >

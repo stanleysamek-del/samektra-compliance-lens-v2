@@ -90,7 +90,7 @@ export function NotVisibleChecklist({
           style={{
             borderColor: "rgba(96,122,58,0.4)",
             background: "rgba(96,122,58,0.08)",
-            color: "#607a3a",
+            color: "#2f6b2f",
           }}
         >
           ✓ Nothing left on the punch-list. Good job.
@@ -284,7 +284,7 @@ function NotVisibleRow({
           </div>
           {item.resolved && item.resolved_note ? (
             <p
-              className="mt-2 rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-2 py-1 text-[11px]"
+              className="mt-2 rounded border-l-2 border-[var(--primary)] bg-black/[0.03] px-2 py-1 text-[11px]"
               style={{ color: "var(--fg-muted)" }}
             >
               Resolved: {item.resolved_note}
@@ -292,7 +292,7 @@ function NotVisibleRow({
           ) : null}
           {item.skipped && item.skipped_reason ? (
             <p
-              className="mt-2 rounded border-l-2 border-[var(--fg-subtle)] bg-white/[0.02] px-2 py-1 text-[11px]"
+              className="mt-2 rounded border-l-2 border-[var(--fg-subtle)] bg-black/[0.03] px-2 py-1 text-[11px]"
               style={{ color: "var(--fg-muted)" }}
             >
               Skipped: {item.skipped_reason}
@@ -316,7 +316,7 @@ function NotVisibleRow({
               type="button"
               onClick={() => setMode("skipping")}
               disabled={isPending}
-              className={`${TAP} rounded-md border border-[var(--border-strong)] px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition active:scale-[0.97] hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2.5`}
+              className={`${TAP} rounded-md border border-[var(--border-strong)] px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition active:scale-[0.97] hover:bg-black/[0.04] hover:text-[var(--fg)] sm:px-2.5`}
               title="Skip — Chip flagged this but you've decided no re-photograph is needed (false positive, out of scope, etc.)"
             >
               ↷ Skip
@@ -332,7 +332,7 @@ function NotVisibleRow({
             type="button"
             onClick={item.resolved ? reopenResolved : reopenSkipped}
             disabled={isPending}
-            className={`${TAP} shrink-0 rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2`}
+            className={`${TAP} shrink-0 rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] sm:px-2`}
             title="Send back to the open to-do list"
           >
             {isPending ? "Reopening…" : "Reopen"}
@@ -365,7 +365,7 @@ function NotVisibleRow({
                 setNote("");
               }}
               disabled={isPending}
-              className={`${TAP} rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:px-2`}
+              className={`${TAP} rounded px-3 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] sm:px-2`}
             >
               Cancel
             </button>
@@ -379,7 +379,7 @@ function NotVisibleRow({
                 "rounded-md px-3 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                 mode === "resolving"
                   ? "bg-[var(--primary)] text-[#0a0d12] hover:bg-[var(--primary-hover)]"
-                  : "border border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.05] hover:text-[var(--fg)]",
+                  : "border border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04] hover:text-[var(--fg)]",
               ].join(" ")}
             >
               {isPending

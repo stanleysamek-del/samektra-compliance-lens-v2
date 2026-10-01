@@ -792,12 +792,12 @@ function QueueRow({
     item.status === "uploading" || item.status === "saving" || item.status === "server_analyzing";
   const tone =
     item.status === "done"
-      ? "#607a3a"
+      ? "#2f6b2f"
       : item.status === "failed"
-        ? "#a8362b"
+        ? "#b42318"
         : item.status === "queued" || item.status === "server_queued"
           ? "var(--fg-subtle)"
-          : "#b8762a";
+          : "#8a5300";
 
   return (
     <li className="flex items-center gap-3 px-3 py-2 text-xs">
@@ -839,7 +839,7 @@ function QueueRow({
           ) : null}
         </div>
         {item.status === "failed" && item.error ? (
-          <p className="mt-0.5 text-[11px] leading-snug" style={{ color: "#a8362b" }}>
+          <p className="mt-0.5 text-[11px] leading-snug" style={{ color: "#b42318" }}>
             {item.error}
           </p>
         ) : null}

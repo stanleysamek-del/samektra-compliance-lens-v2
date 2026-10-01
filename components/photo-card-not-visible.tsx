@@ -46,7 +46,7 @@ export function PhotoCardNotVisible({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-white/[0.02]"
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-black/[0.03]"
         aria-expanded={expanded}
       >
         <span
@@ -211,7 +211,7 @@ function CompactRow({
               ) : null}
               {item.resolved && item.resolved_note ? (
                 <p
-                  className="rounded border-l-2 border-[var(--primary)] bg-white/[0.02] px-1.5 py-0.5 text-[11px]"
+                  className="rounded border-l-2 border-[var(--primary)] bg-black/[0.03] px-1.5 py-0.5 text-[11px]"
                   style={{ color: "var(--fg-muted)" }}
                 >
                   Resolved: {item.resolved_note}
@@ -219,7 +219,7 @@ function CompactRow({
               ) : null}
               {item.skipped && item.skipped_reason ? (
                 <p
-                  className="rounded border-l-2 border-[var(--fg-subtle)] bg-white/[0.02] px-1.5 py-0.5 text-[11px]"
+                  className="rounded border-l-2 border-[var(--fg-subtle)] bg-black/[0.03] px-1.5 py-0.5 text-[11px]"
                   style={{ color: "var(--fg-muted)" }}
                 >
                   Skipped: {item.skipped_reason}
@@ -278,7 +278,7 @@ function CompactRow({
               reopen();
             }}
             disabled={isPending}
-            className="min-h-[40px] shrink-0 rounded px-2.5 py-1 text-xs font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
+            className="min-h-[40px] shrink-0 rounded px-2.5 py-1 text-xs font-medium text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] sm:min-h-0 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
             title="Reopen — send back to the to-do list"
           >
             Reopen
@@ -311,7 +311,7 @@ function CompactRow({
                 setNote("");
               }}
               disabled={isPending}
-              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
             >
               Cancel
             </button>

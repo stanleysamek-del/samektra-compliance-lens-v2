@@ -32,6 +32,7 @@ import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
 import { finalizeInspection } from "./actions";
 
+import { SeverityBadge } from "@/components/severity-badge";
 type SearchParams = {
   /** Set by finalizeInspection / reopenInspection when the update fails. */
   error?: string;
@@ -502,7 +503,7 @@ export default async function InspectionDetailPage({
               style={{
                 borderColor: "rgba(168,54,43,0.4)",
                 background: "rgba(168,54,43,0.08)",
-                color: "#a8362b",
+                color: "#b42318",
               }}
             >
               <span>
@@ -556,7 +557,7 @@ export default async function InspectionDetailPage({
                 style={{
                   borderColor: "rgba(184,118,42,0.4)",
                   background: "rgba(184,118,42,0.08)",
-                  color: "#b8762a",
+                  color: "#8a5300",
                 }}
               >
                 <a href="#punch-list" className="no-underline" style={{ color: "inherit" }}>
@@ -616,7 +617,7 @@ export default async function InspectionDetailPage({
                   style={{
                     borderColor: "rgba(168,54,43,0.4)",
                     background: "rgba(168,54,43,0.08)",
-                    color: "#a8362b",
+                    color: "#b42318",
                   }}
                 >
                   The inspection was created, but its checklist didn&apos;t
@@ -743,9 +744,9 @@ export default async function InspectionDetailPage({
                                             className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
                                             style={
                                               p.analysis_status === "failed"
-                                                ? { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
+                                                ? { background: "rgba(168,54,43,0.10)", color: "#b42318" }
                                                 : p.analysis_status === "analyzing"
-                                                  ? { background: "rgba(184,118,42,0.12)", color: "#b8762a" }
+                                                  ? { background: "rgba(184,118,42,0.12)", color: "#8a5300" }
                                                   : { background: "rgba(15,21,24,0.06)", color: "var(--fg-muted)" }
                                             }
                                             title={
@@ -760,7 +761,7 @@ export default async function InspectionDetailPage({
                                               <span
                                                 aria-hidden
                                                 className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-                                                style={{ background: "#b8762a" }}
+                                                style={{ background: "#8a5300" }}
                                               />
                                             ) : null}
                                             {p.analysis_status === "failed"
@@ -775,12 +776,9 @@ export default async function InspectionDetailPage({
                                           </span>
                                         )}
                                         {counts.high > 0 ? (
-                                          <span
-                                            className="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                            style={{ background: "rgba(168,54,43,0.10)", color: "#a8362b" }}
-                                          >
+                                          <SeverityBadge severity="High" size="sm">
                                             {counts.high} high
-                                          </span>
+                                          </SeverityBadge>
                                         ) : null}
                                       </div>
                                       {p.photo_location ? (
@@ -789,7 +787,7 @@ export default async function InspectionDetailPage({
                                         </p>
                                       ) : null}
                                       {p.analysis_status === "failed" && p.analysis_error ? (
-                                        <p className="mt-1 text-[11px] leading-snug" style={{ color: "#a8362b" }}>
+                                        <p className="mt-1 text-[11px] leading-snug" style={{ color: "#b42318" }}>
                                           {p.analysis_error}
                                         </p>
                                       ) : null}
@@ -1056,8 +1054,8 @@ function Diag({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
-    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#607a3a" },
+    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#8a5300" },
+    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#2f6b2f" },
     archived: { label: "Archived", bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
   };
   const m = map[status] ?? map.archived;

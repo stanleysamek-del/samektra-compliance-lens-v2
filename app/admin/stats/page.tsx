@@ -289,15 +289,15 @@ export default async function AdminStatsPage() {
               return (
                 <li key={c.id}>
                   <details className="group">
-                    <summary className="flex cursor-pointer flex-col gap-1 px-5 py-3 text-sm transition hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
+                    <summary className="flex cursor-pointer flex-col gap-1 px-5 py-3 text-sm transition hover:bg-black/[0.03] sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
                             className="rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider"
                             style={
                               c.status === "success"
-                                ? { background: "rgba(96,122,58,0.10)", color: "#607a3a" }
-                                : { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
+                                ? { background: "rgba(96,122,58,0.10)", color: "#2f6b2f" }
+                                : { background: "rgba(168,54,43,0.10)", color: "#b42318" }
                             }
                           >
                             {c.status}
@@ -323,7 +323,7 @@ export default async function AdminStatsPage() {
                           </span>
                         </div>
                         {c.error_message ? (
-                          <p className="mt-0.5 truncate text-xs text-[#a8362b]">
+                          <p className="mt-0.5 truncate text-xs text-[#b42318]">
                             {c.error_message}
                           </p>
                         ) : (

@@ -90,7 +90,7 @@ export function PlanCardActions({ planId, name }: { planId: string; name: string
         type="button"
         onClick={remove}
         disabled={pending}
-        className="min-h-[40px] rounded-md px-2 text-xs font-medium text-[var(--fg-muted)] transition hover:text-[#a8362b]"
+        className="min-h-[40px] rounded-md px-2 text-xs font-medium text-[var(--fg-muted)] transition hover:text-[#b42318]"
       >
         {pending ? "…" : "Delete"}
       </button>

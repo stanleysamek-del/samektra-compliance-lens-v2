@@ -209,7 +209,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
                       onClick={() => move(f.id, "up")}
                       disabled={isFirst || isPending}
                       title="Move up"
-                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <UpIcon />
                     </button>
@@ -218,7 +218,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
                       onClick={() => move(f.id, "down")}
                       disabled={isLast || isPending}
                       title="Move down"
-                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded p-1 text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <DownIcon />
                     </button>
@@ -229,7 +229,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
                         setEditingId(f.id);
                         setEditName(f.name);
                       }}
-                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
                     >
                       Rename
                     </button>
@@ -237,7 +237,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
                       type="button"
                       onClick={() => remove(f.id, f.name)}
                       disabled={isPending}
-                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b]"
+                      className="rounded px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318]"
                     >
                       Delete
                     </button>
@@ -281,7 +281,7 @@ export function FoldersManager({ organizationId, folders }: Props) {
               setAdding(false);
               setNewName("");
             }}
-            className="rounded px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+            className="rounded px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
           >
             Cancel
           </button>
@@ -331,7 +331,7 @@ function ColorSwatchPicker({
           setOpen((v) => !v);
         }}
         disabled={disabled}
-        className="inline-flex h-5 w-5 items-center justify-center rounded transition hover:bg-white/[0.05]"
+        className="inline-flex h-5 w-5 items-center justify-center rounded transition hover:bg-black/[0.04]"
         title={currentColor ? `Color: ${currentColor}` : "Set a color"}
         aria-label="Pick folder color"
       >

@@ -197,7 +197,7 @@ export default async function HistoryPage({
             style={{
               borderColor: "rgba(96,122,58,0.4)",
               background: "rgba(96,122,58,0.08)",
-              color: "#607a3a",
+              color: "#2f6b2f",
             }}
           >
             <span>
@@ -218,7 +218,7 @@ export default async function HistoryPage({
             style={{
               borderColor: "rgba(168,54,43,0.4)",
               background: "rgba(168,54,43,0.08)",
-              color: "#a8362b",
+              color: "#b42318",
             }}
           >
             <span>{errorMessage}</span>
@@ -524,8 +524,8 @@ function InspectionListRow({
               title={`${counts.total} findings · ${counts.high} High`}
               style={
                 counts.high > 0
-                  ? { background: "rgba(168,54,43,0.10)", color: "#a8362b" }
-                  : { background: "rgba(96,122,58,0.10)", color: "#607a3a" }
+                  ? { background: "rgba(168,54,43,0.10)", color: "#b42318" }
+                  : { background: "rgba(96,122,58,0.10)", color: "#2f6b2f" }
               }
             >
               {counts.high > 0 ? `${counts.high}H · ` : ""}
@@ -604,8 +604,8 @@ function FilterPill({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
-    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#607a3a" },
+    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#8a5300" },
+    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#2f6b2f" },
     archived: { label: "Archived", bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" },
   };
   const m = map[status] ?? map.archived;

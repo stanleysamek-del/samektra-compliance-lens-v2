@@ -93,7 +93,7 @@ export function PhotoMoveMenu({
                     move(null);
                   }}
                   className={[
-                    "w-full px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:py-1.5",
+                    "w-full px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:py-1.5",
                     currentSectionId === null
                       ? "font-semibold text-[var(--primary)]"
                       : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
@@ -117,7 +117,7 @@ export function PhotoMoveMenu({
                       move(s.id);
                     }}
                     className={[
-                      "w-full truncate px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:py-1.5",
+                      "w-full truncate px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:py-1.5",
                       s.id === currentSectionId
                         ? "font-semibold text-[var(--primary)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg)]",

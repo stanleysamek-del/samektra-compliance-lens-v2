@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import { createOrganization, switchCurrentOrg } from "./actions";
 
+import { SeverityBadge } from "@/components/severity-badge";
 type Severity = "High" | "Medium" | "Low";
 
 export default async function TeamDashboardPage({
@@ -71,7 +72,7 @@ export default async function TeamDashboardPage({
                 className="cl-input"
               />
               {error ? (
-                <p className="text-xs" style={{ color: "#a8362b" }}>{error}</p>
+                <p className="text-xs" style={{ color: "#b42318" }}>{error}</p>
               ) : null}
               <SubmitButton className="cl-btn-primary self-start" pendingLabel="Creating…">
                 Create team
@@ -402,7 +403,7 @@ export default async function TeamDashboardPage({
                 value={String(openPunchListCount)}
                 sub={
                   openPunchListCount === 0 ? (
-                    <span style={{ color: "#607a3a" }}>All clear ✓</span>
+                    <span style={{ color: "#2f6b2f" }}>All clear ✓</span>
                   ) : (
                     "items open"
                   )
@@ -555,7 +556,7 @@ export default async function TeamDashboardPage({
                   <li key={`${it.kind}-${idx}`}>
                     <Link
                       href={it.href}
-                      className="block px-4 py-2.5 transition hover:bg-white/[0.02]"
+                      className="block px-4 py-2.5 transition hover:bg-black/[0.03]"
                     >
                       <div className="flex items-center gap-2">
                         <span
@@ -707,7 +708,7 @@ function SummaryTile({
     return (
       <Link
         href={href}
-        className="block transition hover:bg-white/[0.02]"
+        className="block transition hover:bg-black/[0.03]"
       >
         {inner}
       </Link>
@@ -766,18 +767,11 @@ function SevPill({
   children: React.ReactNode;
   tone: "high" | "medium" | "low";
 }) {
-  const styles = {
-    high: { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" },
-    medium: { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
-    low: { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" },
-  }[tone];
+  const severity = tone === "high" ? "High" : tone === "medium" ? "Medium" : "Low";
   return (
-    <span
-      className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-      style={{ background: styles.bg, color: styles.fg }}
-    >
+    <SeverityBadge severity={severity} size="sm">
       {children}
-    </span>
+    </SeverityBadge>
   );
 }
 

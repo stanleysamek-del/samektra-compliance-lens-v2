@@ -234,7 +234,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
                           "min-h-[40px] rounded-full border px-2.5 py-1 text-xs font-medium transition sm:min-h-0",
                           selected
                             ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
-                            : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5 hover:text-[var(--fg)]",
+                            : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04] hover:text-[var(--fg)]",
                         ].join(" ")}
                       >
                         {opt}
@@ -313,7 +313,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
         style={{
           borderColor: "rgba(168,54,43,0.4)",
           background: "rgba(168,54,43,0.08)",
-          color: "#a8362b",
+          color: "#b42318",
         }}
       >
         {stage.message}

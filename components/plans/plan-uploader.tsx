@@ -252,9 +252,9 @@ export function PlanUploader({ facilityId }: { facilityId: string }) {
                   style={{
                     color:
                       it.status === "done"
-                        ? "#607a3a"
+                        ? "#2f6b2f"
                         : it.status === "failed"
-                          ? "#a8362b"
+                          ? "#b42318"
                           : "var(--fg-muted)",
                   }}
                 >

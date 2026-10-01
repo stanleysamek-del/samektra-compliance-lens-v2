@@ -324,7 +324,7 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
           style={{
             borderColor: "rgba(168,54,43,0.4)",
             background: "rgba(168,54,43,0.08)",
-            color: "#a8362b",
+            color: "#b42318",
           }}
         >
           {status.message}
@@ -368,7 +368,7 @@ export function CoachTheAI({ photoId, annotations = [] }: Props) {
                       "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
                       selected
                         ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
-                        : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]",
+                        : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04] hover:text-[var(--fg)]",
                     ].join(" ")}
                     title={`${a.type} at (${Math.round(a.x1 * 100)}%, ${Math.round(a.y1 * 100)}%)`}
                   >
@@ -504,7 +504,7 @@ function AIBubble({
           background: isError
             ? "rgba(168,54,43,0.08)"
             : "var(--bg-elevated)",
-          color: isError ? "#a8362b" : "var(--fg)",
+          color: isError ? "#b42318" : "var(--fg)",
         }}
       >
         <p className="whitespace-pre-wrap leading-relaxed">{text}</p>
@@ -551,7 +551,7 @@ function AIBubble({
                 className="rounded-full px-2 py-0.5"
                 style={{
                   background: "rgba(184,118,42,0.10)",
-                  color: "#b8762a",
+                  color: "#8a5300",
                 }}
               >
                 {Math.round(meta.confidence * 100)}% confidence

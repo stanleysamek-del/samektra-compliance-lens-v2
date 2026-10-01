@@ -15,9 +15,9 @@ import {
   type OrgMember,
 } from "@/components/action-strip";
 import { showToast } from "@/components/toaster";
-import { severityColor } from "@/lib/severity";
 import { PlaceOnPlanButton } from "@/components/plans/place-on-plan-button";
 
+import { SeverityBadge } from "@/components/severity-badge";
 /** Everything "Place on plan" needs; the photo page passes it. */
 export type FindingPlanContext = {
   facilityId: string | null;
@@ -172,8 +172,6 @@ export function FindingCard({
     });
   }
 
-  const sev = severityColor(finding.severity);
-
   return (
     <div className="cl-card p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
@@ -185,12 +183,7 @@ export function FindingCard({
             >
               #{index + 1}
             </span>
-            <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-medium"
-              style={{ background: sev.bg, color: sev.fg }}
-            >
-              {finding.severity}
-            </span>
+            <SeverityBadge severity={finding.severity} />
             <span className="text-[11px] font-medium text-[var(--fg-muted)]">
               {finding.category}
             </span>
@@ -230,9 +223,9 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(1)}
                 className={[
-                  "flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06] sm:min-h-0 sm:min-w-0",
+                  "flex min-h-11 min-w-11 items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-black/[0.04]",
                   localRating === 1
-                    ? "text-[#607a3a] scale-110"
+                    ? "text-[#2f6b2f] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >
@@ -249,9 +242,9 @@ export function FindingCard({
                 disabled={isPending}
                 onClick={() => rate(-1)}
                 className={[
-                  "flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-white/[0.06] sm:min-h-0 sm:min-w-0",
+                  "flex min-h-11 min-w-11 items-center justify-center rounded-md px-1.5 py-1 text-sm transition-all duration-150 active:scale-90 hover:bg-black/[0.04]",
                   localRating === -1
-                    ? "text-[#a8362b] scale-110"
+                    ? "text-[#b42318] scale-110"
                     : "text-[var(--fg-subtle)] hover:text-[var(--fg)]",
                 ].join(" ")}
               >
@@ -261,7 +254,7 @@ export function FindingCard({
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)] sm:min-h-0"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] sm:min-h-0"
               >
                 Edit
               </button>
@@ -269,7 +262,7 @@ export function FindingCard({
                 type="button"
                 disabled={isPending}
                 onClick={remove}
-                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[#a8362b] sm:min-h-0"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] sm:min-h-0"
               >
                 {isPending ? "Deleting…" : "Delete"}
               </button>
@@ -280,7 +273,7 @@ export function FindingCard({
                 type="button"
                 disabled={isPending}
                 onClick={() => setEditing(false)}
-                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.04] hover:text-[var(--fg)] sm:min-h-0"
+                className="min-h-[40px] rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)] sm:min-h-0"
               >
                 Cancel
               </button>
@@ -398,7 +391,7 @@ export function FindingCard({
                       <button
                         type="button"
                         onClick={() => setBboxDraft(null)}
-                        className="rounded-full px-2 py-0.5 text-[var(--fg-muted)] underline-offset-2 hover:text-[#a8362b] hover:underline"
+                        className="rounded-full px-2 py-0.5 text-[var(--fg-muted)] underline-offset-2 hover:text-[#b42318] hover:underline"
                       >
                         Remove box
                       </button>

@@ -160,7 +160,7 @@ export default async function TeamRulesPage({
             style={{
               borderColor: "rgba(168,54,43,0.4)",
               background: "rgba(168,54,43,0.08)",
-              color: "#a8362b",
+              color: "#b42318",
             }}
           >
             {error}
@@ -245,7 +245,7 @@ export default async function TeamRulesPage({
                           <input type="hidden" name="rule_id" value={r.id} />
                           <button
                             type="submit"
-                            className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+                            className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
                           >
                             Archive
                           </button>
@@ -307,7 +307,7 @@ export default async function TeamRulesPage({
                         <input type="hidden" name="rule_id" value={r.id} />
                         <button
                           type="submit"
-                          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+                          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
                         >
                           Restore
                         </button>
@@ -329,7 +329,7 @@ export default async function TeamRulesPage({
                       <form action={deleteLearnedRule}>
                         <input type="hidden" name="rule_id" value={r.id} />
                         <SubmitButton
-                          className="rounded px-2 py-1 text-[11px] font-medium text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.08)] disabled:opacity-50"
+                          className="rounded px-2 py-1 text-[11px] font-medium text-[#b42318] transition hover:bg-[rgba(168,54,43,0.08)] disabled:opacity-50"
                           pendingLabel="Deleting…"
                           confirmMessage="Delete this rule permanently? Archive keeps the history; delete does not."
                         >
@@ -338,7 +338,7 @@ export default async function TeamRulesPage({
                       </form>
                       <HelpTip title="What does Delete do?">
                         <p>
-                          <span className="font-medium" style={{ color: "#a8362b" }}>
+                          <span className="font-medium" style={{ color: "#b42318" }}>
                             Permanent.
                           </span>{" "}
                           Removes the rule row entirely — author, history,

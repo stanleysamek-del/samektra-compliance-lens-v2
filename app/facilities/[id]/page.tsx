@@ -51,7 +51,7 @@ export default async function FacilityPage({
     return (
       <AppShell user={userShell}>
         <Card>
-          <p className="text-sm" style={{ color: "#a8362b" }}>
+          <p className="text-sm" style={{ color: "#b42318" }}>
             Facilities aren&apos;t available on this workspace yet.
           </p>
           <p className="mt-1 text-xs text-[var(--fg-subtle)]">
@@ -244,7 +244,7 @@ export default async function FacilityPage({
                             i.status === "completed"
                               ? "rgba(96,122,58,0.12)"
                               : "rgba(184,118,42,0.12)",
-                          color: i.status === "completed" ? "#607a3a" : "#b8762a",
+                          color: i.status === "completed" ? "#2f6b2f" : "#8a5300",
                         }}
                       >
                         {i.status === "completed" ? "Completed" : "In progress"}

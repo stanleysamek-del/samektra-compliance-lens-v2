@@ -367,7 +367,7 @@ export default async function ActionsBoardPage({
                       }
                       className="block rounded-lg border bg-[var(--bg-elevated)] px-3 py-2.5 transition hover:border-[var(--primary)]"
                       style={{
-                        borderColor: overdue ? "#a8362b" : "var(--border)",
+                        borderColor: overdue ? "#b42318" : "var(--border)",
                       }}
                     >
                       <div className="flex flex-wrap items-center gap-2">
@@ -375,7 +375,7 @@ export default async function ActionsBoardPage({
                         {r.priority === "high" ? (
                           <span
                             className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                            style={{ background: "rgba(168,54,43,0.10)", color: "#a8362b" }}
+                            style={{ background: "rgba(168,54,43,0.10)", color: "#b42318" }}
                           >
                             High priority
                           </span>
@@ -386,7 +386,7 @@ export default async function ActionsBoardPage({
                         </span>
                         <span
                           className="ml-auto text-[10px] font-medium"
-                          style={{ color: overdue ? "#a8362b" : "var(--fg-subtle)" }}
+                          style={{ color: overdue ? "#b42318" : "var(--fg-subtle)" }}
                         >
                           {r.cap_target_date
                             ? `${overdue ? "OVERDUE · " : "due "}${formatDate(r.cap_target_date)}`
@@ -430,9 +430,9 @@ function Tile({
 }) {
   const color =
     tone === "high"
-      ? "#a8362b"
+      ? "#b42318"
       : tone === "medium"
-        ? "#b8762a"
+        ? "#8a5300"
         : tone === "teal"
           ? "#0f766e"
           : "var(--fg)";
@@ -461,13 +461,13 @@ function StatusPill({
 }) {
   const styles =
     overdue
-      ? { bg: "rgba(168,54,43,0.12)", fg: "#a8362b" }
+      ? { bg: "rgba(168,54,43,0.12)", fg: "#b42318" }
       : status === "in_progress"
-        ? { bg: "rgba(184,118,42,0.12)", fg: "#b8762a" }
+        ? { bg: "rgba(184,118,42,0.12)", fg: "#8a5300" }
         : status === "done"
           ? { bg: "rgba(20,184,166,0.12)", fg: "#0f766e" }
           : status === "verified"
-            ? { bg: "rgba(96,122,58,0.12)", fg: "#607a3a" }
+            ? { bg: "rgba(96,122,58,0.12)", fg: "#2f6b2f" }
             : { bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" };
   return (
     <span
@@ -505,7 +505,7 @@ function FilterGroup({
               "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition",
               selected
                 ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
-                : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]",
+                : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04] hover:text-[var(--fg)]",
             ].join(" ")}
           >
             {opt.label}

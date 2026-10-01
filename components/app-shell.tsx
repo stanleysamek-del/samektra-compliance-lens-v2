@@ -78,13 +78,14 @@ type Props = PropsWithChildren<{
 
 export function AppShell({ user, children }: Props) {
   return (
-    <div className="min-h-dvh">
+    // .cl-app switches on the field-tuned tokens (app/globals.css).
+    <div className="cl-app min-h-dvh">
       <SessionGuard />
       {/* ===== Header ===== */}
       <header
         className="sticky top-0 z-30 border-b border-[var(--ink)]"
         style={{
-          background: "rgba(236, 232, 218, 0.92)",
+          background: "rgba(250, 248, 242, 0.92)",
           backdropFilter: "blur(8px) saturate(120%)",
           WebkitBackdropFilter: "blur(8px) saturate(120%)",
         }}
@@ -138,7 +139,7 @@ export function AppShell({ user, children }: Props) {
             {/* Persistent primary action — always one click away. */}
             <Link
               href="/inspections/new"
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold transition sm:px-2.5"
+              className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded px-3 text-sm font-semibold transition"
               style={{
                 background: "var(--gold)",
                 color: "var(--ink)",
@@ -246,17 +247,18 @@ function SidebarNav() {
           <Link
             key={item.href}
             href={item.href}
+            aria-current={active ? "page" : undefined}
             className="group flex items-center gap-3 px-3 py-2.5 transition"
             style={{
               background: active ? "rgba(15, 21, 24, 0.04)" : "transparent",
               color: active
                 ? "var(--ink)"
                 : item.accent
-                  ? "var(--gold-soft)"
+                  ? "var(--gold-text)"
                   : "var(--slate)",
               borderLeft: active
-                ? "2px solid var(--gold)"
-                : "2px solid transparent",
+                ? "3px solid var(--ink)"
+                : "3px solid transparent",
               fontFamily: "var(--font-geist-sans)",
               fontSize: 13,
               fontWeight: active ? 600 : 500,
@@ -266,9 +268,9 @@ function SidebarNav() {
             <span
               style={{
                 color: item.accent
-                  ? "var(--gold-soft)"
+                  ? "var(--gold-text)"
                   : active
-                    ? "var(--gold-soft)"
+                    ? "var(--ink)"
                     : "var(--slate)",
               }}
             >
@@ -290,7 +292,7 @@ function BottomTabBar() {
       className="fixed inset-x-0 bottom-0 z-30 lg:hidden"
       style={{
         borderTop: "1px solid var(--ink)",
-        background: "rgba(236, 232, 218, 0.94)",
+        background: "rgba(250, 248, 242, 0.94)",
         backdropFilter: "blur(8px) saturate(120%)",
         WebkitBackdropFilter: "blur(8px) saturate(120%)",
         paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
@@ -328,11 +330,14 @@ function BottomTabBar() {
             <Link
               key={item.href}
               href={item.href}
-              aria-label={item.label}
-              className="flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition"
+              aria-current={active ? "page" : undefined}
+              className="flex h-14 flex-col items-center justify-center gap-1 text-[11px] transition"
               style={{
                 color: active ? "var(--ink)" : "var(--slate)",
                 fontFamily: "var(--font-geist-sans)",
+                fontWeight: active ? 700 : 500,
+                // Non-color active cue: a bar along the top edge.
+                borderTop: active ? "3px solid var(--ink)" : "3px solid transparent",
               }}
             >
               {item.icon}
@@ -359,7 +364,7 @@ function UserAvatar({ name }: { name: string }) {
   return (
     <Link
       href="/profile"
-      className="flex h-9 w-9 items-center justify-center text-xs transition hover:opacity-90"
+      className="flex h-11 w-11 items-center justify-center rounded-full text-xs transition hover:opacity-90"
       style={{
         background: "var(--gold)",
         color: "var(--ink)",

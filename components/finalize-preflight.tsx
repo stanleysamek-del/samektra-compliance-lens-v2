@@ -143,7 +143,7 @@ export function FinalizePreflight({
             <span
               aria-hidden
               className="mt-px w-4 shrink-0 text-center font-semibold"
-              style={{ color: c.ok ? "#607a3a" : "#b8762a" }}
+              style={{ color: c.ok ? "#2f6b2f" : "#8a5300" }}
             >
               {c.ok ? "✓" : "⚠"}
             </span>

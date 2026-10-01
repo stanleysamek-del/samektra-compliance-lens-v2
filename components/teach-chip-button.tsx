@@ -41,7 +41,7 @@ export function TeachChipButton({
           // hint change picks up the new pre-fill.
           setText(suggestion);
         }}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition hover:bg-white/[0.05]"
+        className="mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition hover:bg-black/[0.04]"
         style={{
           borderColor: "var(--gold)",
           color: "var(--ink)",
@@ -76,7 +76,7 @@ export function TeachChipButton({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+          className="rounded px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
         >
           Cancel
         </button>

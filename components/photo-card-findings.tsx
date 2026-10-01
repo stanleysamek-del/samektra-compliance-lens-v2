@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { deleteFinding } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { HelpTip } from "@/components/help-tip";
-import { severityColor } from "@/lib/severity";
 
+import { SeverityBadge } from "@/components/severity-badge";
 export type CompactFinding = {
   id: string;
   title: string;
@@ -113,13 +113,13 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
           <button
             type="button"
             onClick={toggle}
-            className="flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium text-[var(--fg-muted)] transition hover:bg-white/5 hover:text-[var(--fg)]"
+            className="flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
             aria-pressed={includeAdvisories}
           >
             <span
               className={[
                 "relative inline-block h-3.5 w-6 rounded-full transition",
-                includeAdvisories ? "bg-[var(--primary)]" : "bg-white/15",
+                includeAdvisories ? "bg-[var(--primary)]" : "bg-[var(--paper-3)]",
               ].join(" ")}
             >
               <span
@@ -143,7 +143,7 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
           return (
             <li
               key={f.id}
-              className="flex items-center gap-2 px-4 py-2 transition hover:bg-white/[0.02]"
+              className="flex items-center gap-2 px-4 py-2 transition hover:bg-black/[0.03]"
             >
               <SeverityPill severity={f.severity} />
               <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg)]">
@@ -164,18 +164,13 @@ export function PhotoCardFindings({ inspectionId, photoId, findings }: Props) {
 }
 
 function SeverityPill({ severity }: { severity: "Low" | "Medium" | "High" }) {
-  // Shared palette — Medium used to render identical to High here.
-  const m = severityColor(severity);
-  const label = severity === "Low" ? "Advisory" : severity;
   return (
-    <span
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-      style={{ background: m.bg, color: m.fg }}
-      title={label}
-      aria-label={label}
-    >
-      {m.letter}
-    </span>
+    <SeverityBadge
+      severity={severity}
+      label={severity === "Low" ? "Advisory" : severity}
+      size="sm"
+      compact
+    />
   );
 }
 
@@ -284,7 +279,7 @@ function FindingRowMenu({
         >
           <Link
             href={`/inspections/${inspectionId}/photos/${photoId}#finding-${findingId}`}
-            className="block px-3 py-1.5 text-xs text-[var(--fg)] transition hover:bg-white/5"
+            className="block px-3 py-1.5 text-xs text-[var(--fg)] transition hover:bg-black/[0.04]"
             onClick={() => setOpen(false)}
           >
             Edit
@@ -300,7 +295,7 @@ function FindingRowMenu({
               setOpen(false);
               await deleteFinding(findingId, inspectionId);
             }}
-            className="block w-full px-3 py-1.5 text-left text-xs text-[#a8362b] transition hover:bg-[rgba(168,54,43,0.08)]"
+            className="block w-full px-3 py-1.5 text-left text-xs text-[#b42318] transition hover:bg-[rgba(168,54,43,0.08)]"
           >
             Delete
           </button>

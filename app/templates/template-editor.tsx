@@ -410,7 +410,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
           {totalQuestions} question{totalQuestions === 1 ? "" : "s"} across{" "}
           {sections.length} section{sections.length === 1 ? "" : "s"}
           {dirty ? (
-            <span className="ml-2 font-medium" style={{ color: "#b8762a" }}>
+            <span className="ml-2 font-medium" style={{ color: "#8a5300" }}>
               · Unsaved changes
             </span>
           ) : null}

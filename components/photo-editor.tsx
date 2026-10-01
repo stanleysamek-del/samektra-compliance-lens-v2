@@ -74,7 +74,7 @@ type Mode =
 const COLORS = [
   { hex: "#f87171", label: "Red" },
   { hex: "#fb923c", label: "Orange" },
-  { hex: "#b8762a", label: "Yellow" },
+  { hex: "#facc15", label: "Yellow" },
   { hex: "#34d399", label: "Green" },
   { hex: "#60a5fa", label: "Blue" },
   { hex: "#ffffff", label: "White" },
@@ -82,7 +82,8 @@ const COLORS = [
 
 /** Stroke/badge color for an AI bbox — ONE palette app-wide (lib/severity). */
 function sevStroke(s: Severity): string {
-  return severityColor(s).fg;
+  // Solid tones: bright enough to read against a photo (Medium amber).
+  return severityColor(s).solid;
 }
 
 type Props = {
@@ -1078,7 +1079,7 @@ export function PhotoEditor({
                     fill === undefined ? "0 0 0 2px rgba(200,155,60,0.6)" : "none",
                 }}
               >
-                <span className="absolute h-[2px] w-5 rotate-45 bg-[#a8362b]" />
+                <span className="absolute h-[2px] w-5 rotate-45 bg-[#b42318]" />
               </button>
               {COLORS.map((c) => (
                 <button

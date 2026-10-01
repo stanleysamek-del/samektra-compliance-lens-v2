@@ -172,7 +172,7 @@ export function SignaturePad({
           </button>
           <button
             type="button"
-            className="min-h-[40px] underline-offset-2 hover:text-[#a8362b] hover:underline disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+            className="min-h-[40px] underline-offset-2 hover:text-[#b42318] hover:underline disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
             disabled={isPending}
             aria-busy={isPending}
             onClick={removeSignature}
@@ -244,7 +244,7 @@ export function SignaturePad({
         </button>
       </div>
       {error ? (
-        <p className="text-xs font-medium" style={{ color: "#a8362b" }}>
+        <p className="text-xs font-medium" style={{ color: "#b42318" }}>
           {error}
         </p>
       ) : null}

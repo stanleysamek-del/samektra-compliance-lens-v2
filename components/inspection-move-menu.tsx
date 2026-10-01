@@ -83,7 +83,7 @@ export function InspectionMoveMenu({
                     move(null);
                   }}
                   className={[
-                    "min-h-[40px] w-full px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:min-h-0 sm:py-1.5",
+                    "min-h-[40px] w-full px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:min-h-0 sm:py-1.5",
                     currentFolderId === null
                       ? "font-semibold text-[var(--primary)]"
                       : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
@@ -104,7 +104,7 @@ export function InspectionMoveMenu({
                       move(f.id);
                     }}
                     className={[
-                      "min-h-[40px] w-full truncate px-3 py-2.5 text-left transition hover:bg-white/[0.05] sm:min-h-0 sm:py-1.5",
+                      "min-h-[40px] w-full truncate px-3 py-2.5 text-left transition hover:bg-black/[0.04] sm:min-h-0 sm:py-1.5",
                       f.id === currentFolderId
                         ? "font-semibold text-[var(--primary)]"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg)]",

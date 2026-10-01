@@ -153,7 +153,7 @@ export default async function TeamMembersPage({
             style={{
               borderColor: "rgba(168,54,43,0.4)",
               background: "rgba(168,54,43,0.08)",
-              color: "#a8362b",
+              color: "#b42318",
             }}
           >
             {error}
@@ -233,7 +233,7 @@ export default async function TeamMembersPage({
                       <form action={revokeInvite}>
                         <input type="hidden" name="invite_id" value={inv.id} />
                         <SubmitButton
-                          className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                          className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                           pendingLabel="Revoking…"
                           confirmMessage={`Revoke the invite for ${inv.email}? The link they were sent will stop working.`}
                         >
@@ -315,7 +315,7 @@ export default async function TeamMembersPage({
                               value={org.id}
                             />
                             <SubmitButton
-                              className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                              className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                               pendingLabel="Leaving…"
                               confirmMessage={`Leave ${org.name}? You'll lose access to the team's inspections until someone invites you again.`}
                             >
@@ -327,7 +327,7 @@ export default async function TeamMembersPage({
                         <form action={removeMember}>
                           <input type="hidden" name="member_id" value={m.id} />
                           <SubmitButton
-                            className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[#a8362b] disabled:opacity-50"
+                            className="rounded px-2 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[#b42318] disabled:opacity-50"
                             pendingLabel="Removing…"
                             confirmMessage={`Remove ${displayName} from ${org.name}? They'll lose access to the team's inspections immediately.`}
                           >
@@ -414,7 +414,7 @@ export default async function TeamMembersPage({
         {/* Danger zone — admins only */}
         {isAdmin ? (
           <section className="mt-2 flex flex-col gap-2">
-            <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: "#a8362b" }}>
+            <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: "#b42318" }}>
               Danger zone
             </h2>
             <div

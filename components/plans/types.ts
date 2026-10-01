@@ -87,8 +87,8 @@ export const PLAN_SELECT =
 
 /** Pin fill colours by kind — one palette for the viewer and the PDF. */
 export const PIN_COLORS: Record<PinKind, string> = {
-  finding: "#a8362b",
+  finding: "#b42318",
   photo: "#1f6f8b",
-  device: "#607a3a",
-  note: "#b8762a",
+  device: "#2f6b2f",
+  note: "#8a5300",
 };

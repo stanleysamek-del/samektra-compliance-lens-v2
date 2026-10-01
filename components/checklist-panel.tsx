@@ -258,7 +258,7 @@ export function ChecklistPanel({ inspectionId, items, readOnly }: Props) {
                 <span className="min-w-0 truncate text-sm font-medium text-[var(--fg)]">
                   {section.code}. {section.title}
                   {flagged > 0 ? (
-                    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                    <span className="ml-2 rounded bg-[#fdecea] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--danger)]">
                       {flagged} No
                     </span>
                   ) : null}
@@ -354,7 +354,7 @@ function ItemRow({
     <div
       className={`rounded border px-3 py-2.5 ${
         item.answer === "no"
-          ? "border-red-300 bg-red-50/50"
+          ? "border-[var(--danger)] bg-[#fdecea]"
           : "border-[var(--border)]"
       }`}
     >
@@ -385,7 +385,13 @@ function ItemRow({
             })()
           ) : null}
         </p>
-        <div className="flex shrink-0 items-center gap-1">
+        {/* Full-width three-way control on phones (big, glove-friendly
+            targets); compact on wider screens. */}
+        <div
+          role="group"
+          aria-label={`Answer for ${item.section_code}.${index}`}
+          className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:shrink-0"
+        >
           {ANSWER_LABELS.map(({ value, label }) => {
             const active = item.answer === value;
             return (
@@ -393,17 +399,19 @@ function ItemRow({
                 key={value}
                 type="button"
                 disabled={readOnly}
+                aria-pressed={active}
                 onClick={() => onAnswer(item, value)}
-                className={`rounded border px-2.5 py-1 text-xs font-medium transition ${
+                className={`min-h-11 rounded border px-3 text-sm font-semibold transition sm:min-w-[56px] ${
                   active
                     ? value === "yes"
-                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      ? "border-[var(--success)] bg-[var(--success)] text-white"
                       : value === "no"
-                        ? "border-red-600 bg-red-600 text-white"
-                        : "border-[var(--fg-muted)] bg-[var(--fg-muted)] text-white"
-                    : "border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--fg-muted)]"
+                        ? "border-[var(--danger)] bg-[var(--danger)] text-white"
+                        : "border-[var(--slate)] bg-[var(--slate)] text-white"
+                    : "border-[var(--rule-strong)] bg-[var(--paper-2)] text-[var(--ink)] hover:bg-[var(--paper-3)]"
                 } ${readOnly ? "cursor-default opacity-60" : ""}`}
               >
+                {active && value === "yes" ? "✓ " : active && value === "no" ? "✕ " : ""}
                 {label}
               </button>
             );

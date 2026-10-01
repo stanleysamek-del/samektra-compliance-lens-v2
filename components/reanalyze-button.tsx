@@ -97,7 +97,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
           style={{
             borderColor: "rgba(168,54,43,0.4)",
             background: "rgba(168,54,43,0.08)",
-            color: "#a8362b",
+            color: "#b42318",
           }}
         >
           {error}

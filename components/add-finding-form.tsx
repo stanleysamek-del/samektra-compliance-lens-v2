@@ -183,15 +183,16 @@ export function AddFindingForm({ inspectionId, photoId, photoUrl }: Props) {
                 className={[
                   "min-h-[40px] rounded-full border px-3 py-1 text-xs font-semibold transition sm:min-h-0",
                   selected
-                    ? "text-white"
-                    : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/5",
+                    ? ""
+                    : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04]",
                 ].join(" ")}
                 style={
                   selected
-                    ? { background: sev.fg, borderColor: sev.fg }
+                    ? { background: sev.solid, borderColor: sev.solid, color: sev.onSolid }
                     : undefined
                 }
               >
+                <span aria-hidden className="mr-1">{sev.glyph}</span>
                 {s}
               </button>
             );

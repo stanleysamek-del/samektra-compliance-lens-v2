@@ -1,8 +1,8 @@
 import { Card } from "@/components/card";
 import { HelpTip } from "@/components/help-tip";
 import { formatDateShort, formatDateTime } from "@/lib/format-date";
-import { severityColor } from "@/lib/severity";
 
+import { SeverityBadge } from "@/components/severity-badge";
 type SeverityBreakdown = {
   high: number;
   medium: number;
@@ -108,7 +108,7 @@ export function InspectionSummary({
             punchTotal === 0 ? (
               <span className="text-[var(--fg-subtle)]">Nothing flagged</span>
             ) : punchList.open === 0 ? (
-              <span style={{ color: "#607a3a" }}>All clear ✓</span>
+              <span style={{ color: "#2f6b2f" }}>All clear ✓</span>
             ) : (
               <span>
                 {punchClosedPct}% done
@@ -137,7 +137,7 @@ export function InspectionSummary({
             ) : (
               <span className="flex gap-2">
                 <span style={{ color: "#b8902f" }}>👍 {ratings.thumbsUp}</span>
-                <span style={{ color: "#a8362b" }}>👎 {ratings.thumbsDown}</span>
+                <span style={{ color: "#b42318" }}>👎 {ratings.thumbsDown}</span>
               </span>
             )
           }
@@ -202,14 +202,10 @@ function SevPill({
   children: React.ReactNode;
   tone: "High" | "Medium" | "Low";
 }) {
-  const styles = severityColor(tone);
   return (
-    <span
-      className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-      style={{ background: styles.bg, color: styles.fg }}
-    >
+    <SeverityBadge severity={tone} size="sm">
       {children}
-    </span>
+    </SeverityBadge>
   );
 }
 
@@ -227,7 +223,7 @@ function TimelineItem({
       ? "var(--fg-subtle)"
       : dot === "updated"
         ? "var(--primary)"
-        : "#607a3a";
+        : "#2f6b2f";
   return (
     <span className="inline-flex items-center gap-1.5" title={full}>
       <span

@@ -66,14 +66,21 @@ export function HelpTip({
         }}
         aria-label={ariaLabel}
         aria-expanded={open}
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold leading-none transition"
-        style={{
-          borderColor: open ? "var(--gold)" : "var(--rule-paper)",
-          color: open ? "var(--gold-soft)" : "var(--slate)",
-          background: open ? "rgba(200,155,60,0.10)" : "transparent",
-        }}
+        // 44px hit area around an 18px glyph; negative margins keep it from
+        // pushing the surrounding text apart.
+        className="-mx-3 -my-3.5 flex h-11 w-11 shrink-0 items-center justify-center transition"
       >
-        ?
+        <span
+          aria-hidden
+          className="flex h-[18px] w-[18px] items-center justify-center rounded-full border text-[11px] font-semibold leading-none"
+          style={{
+            borderColor: open ? "var(--ink)" : "var(--slate)",
+            color: open ? "var(--ink)" : "var(--slate)",
+            background: open ? "rgba(200,155,60,0.18)" : "transparent",
+          }}
+        >
+          ?
+        </span>
       </button>
       {open ? (
         <span

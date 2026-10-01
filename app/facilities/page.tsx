@@ -80,7 +80,7 @@ export default async function FacilitiesPage() {
 
         {facErr ? (
           <Card>
-            <p className="text-sm" style={{ color: "#a8362b" }}>
+            <p className="text-sm" style={{ color: "#b42318" }}>
               Facilities couldn&apos;t be loaded.
             </p>
             <p className="mt-1 text-xs text-[var(--fg-subtle)]">
@@ -123,7 +123,7 @@ export default async function FacilitiesPage() {
                         {f.occupancy ? ` · ${f.occupancy as string}` : ""}
                       </p>
                       {plans === 0 ? (
-                        <p className="mt-2 text-xs font-medium" style={{ color: "#b8762a" }}>
+                        <p className="mt-2 text-xs font-medium" style={{ color: "#8a5300" }}>
                           No plan uploaded yet →
                         </p>
                       ) : null}

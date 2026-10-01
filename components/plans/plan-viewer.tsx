@@ -673,14 +673,14 @@ export function PlanViewer({
                   disabled={busy}
                   onClick={() => void remove()}
                   className="min-h-[44px] rounded px-3 text-xs font-medium"
-                  style={{ color: "#a8362b", border: "1px solid rgba(168,54,43,0.4)" }}
+                  style={{ color: "#b42318", border: "1px solid rgba(168,54,43,0.4)" }}
                 >
                   Delete
                 </button>
               ) : null}
             </div>
             {notice ? (
-              <p className="mt-2 text-xs" style={{ color: "#a8362b" }}>
+              <p className="mt-2 text-xs" style={{ color: "#b42318" }}>
                 {notice}
               </p>
             ) : null}

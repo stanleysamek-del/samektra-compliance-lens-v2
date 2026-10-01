@@ -29,7 +29,7 @@ export function HelpDrawer() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)]"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--rule-strong)] bg-[var(--bg-elevated)] text-[var(--fg-muted)] transition hover:border-[var(--primary)] hover:text-[var(--fg)]"
         aria-label="Help"
         title="Help · what each section does"
       >
@@ -57,7 +57,7 @@ export function HelpDrawer() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+                className="rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
               >
                 Esc · Close
               </button>

@@ -55,15 +55,87 @@
   --radius-sm:     0;
   --radius-lg:    0;
 
+  /* Keyboard focus ring. Ink on the marketing pages; the app swaps in a
+   * blue that stands apart from its ink borders. */
+  --focus:         var(--ink);
+
   color-scheme: light;
 }
 
-/* Landing — visible keyboard focus on the gold accent */
+/* =====================================================================
+ *  Field tokens — the signed-in app (AppShell adds .cl-app).
+ *
+ *  Same brand (ink, warm paper, gold mark, serif titles), tuned for use
+ *  outdoors on a phone: lighter paper with white cards for glare
+ *  headroom, every text color ≥ 4.5:1, gold reserved for fills and the
+ *  mark (gold TEXT is the darker --gold-text), solid high-contrast
+ *  severity colors. The landing and auth pages keep the :root palette.
+ *
+ *  Aliases are re-declared here on purpose: a custom property that
+ *  references another is resolved where it's declared, so overriding
+ *  --paper alone would not move --bg.
+ * ===================================================================== */
+.cl-app {
+  --paper:         #faf8f2;
+  --paper-2:       #ffffff;
+  --paper-3:       #efebe0;
+  --rule-paper:    #d9d3c0;  /* dividers only — decorative */
+  --rule-strong:   #7d7663;  /* non-text UI boundaries, 4.3:1 */
+  --slate:         #4a545a;  /* 7.3:1 on paper */
+  --slate-2:       #636b70;  /* 5.1:1 on paper */
+  --gold-text:     #7a5710;  /* 6.2:1 — gold as text */
+  --focus:         #1d4ed8;
+
+  --severity-high: #b42318;
+  --severity-med:  #8a5300;
+  --severity-low:  #2f6b2f;
+
+  --bg:            var(--paper);
+  --bg-elevated:   var(--paper-2);
+  --bg-raised:     var(--paper);
+  --bg-input:      var(--paper-2);
+  --border:        var(--rule-paper);
+  --fg-muted:      var(--slate);
+  --fg-subtle:     var(--slate-2);
+  --primary-fg:    var(--paper);
+  --accent:        #86630f;  /* accent text/borders, 5.2:1 */
+  --accent-hover:  #6f520c;
+  --success:       #2f6b2f;
+  --warning:       #8a5300;
+  --danger:        #b42318;
+
+  /* One radius rule: structure (cards, tables) stays square via
+   * .cl-card; every rounded-* utility and control gets 4px; pills and
+   * avatars keep rounded-full. */
+  --radius-xs: 4px;
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Visible keyboard focus everywhere — 2px ring that never relies on a
+ * faint glow. */
 a:focus-visible,
-button:focus-visible {
-  outline: 2px solid #c89b3c;
-  outline-offset: 3px;
-  border-radius: 1px;
+button:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* App pages: plain light paper, no grain (it reads as noise in glare). */
+body:has(.cl-app) {
+  background: #faf8f2;
+}
+body:has(.cl-app)::before {
+  display: none;
 }
 
 @theme inline {
@@ -112,6 +184,26 @@ h1, h2 {
 h1 em, h2 em {
   font-style: italic;
   color: var(--gold-soft);
+}
+
+/* In the app, the serif is reserved for page titles (h1). Section
+ * headings use the UI sans so dense screens scan quickly. */
+.cl-app h2 {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+.cl-app h1 em,
+.cl-app h2 em {
+  color: var(--gold-text);
+}
+
+/* Nothing below 12px in the app. Catches the hundreds of arbitrary
+ * text-[9px]/[10px]/[11px] utilities in one place (unlayered CSS beats
+ * Tailwind's utilities layer). */
+.cl-app .text-\[9px\],
+.cl-app .text-\[10px\],
+.cl-app .text-\[11px\] {
+  font-size: 12px;
 }
 
 ::selection {
@@ -239,11 +331,32 @@ button, [role="button"], a.btn {
     font-size: 14px;
   }
 }
-.cl-input::placeholder { color: var(--rule-paper); }
+.cl-input::placeholder { color: var(--slate); opacity: 0.85; }
 .cl-input:focus {
-  outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.25);
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.cl-app .cl-input::placeholder { color: var(--slate-2); opacity: 1; }
+
+/* App controls: 4px corners (see the radius rule on .cl-app) and 48px
+ * tall on phones — glove- and stairwell-friendly. */
+.cl-app .cl-btn-primary,
+.cl-app .cl-btn-outline,
+.cl-app .cl-btn-accent,
+.cl-app .cl-input {
+  border-radius: 4px;
+}
+@media (max-width: 639px) {
+  .cl-app .cl-btn-primary,
+  .cl-app .cl-btn-outline,
+  .cl-app .cl-btn-accent,
+  .cl-app input.cl-input,
+  .cl-app select.cl-input {
+    min-height: 48px;
+  }
+}
+.cl-app .cl-btn-outline:hover {
+  background: var(--paper-3);
 }
 .cl-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -265,6 +378,11 @@ textarea.cl-input {
   letter-spacing: 0.18em;
   color: var(--slate);
   margin-bottom: 6px;
+}
+/* App field labels: readable at arm's length — 12px, light tracking. */
+.cl-app .cl-label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
 }
 
 /* =====================================================================

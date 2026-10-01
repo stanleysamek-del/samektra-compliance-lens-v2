@@ -87,7 +87,7 @@ export function TeamTipBanner() {
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-white/[0.05] hover:text-[var(--fg)]"
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-[var(--fg-subtle)] transition hover:bg-black/[0.04] hover:text-[var(--fg)]"
         >
           Dismiss
         </button>

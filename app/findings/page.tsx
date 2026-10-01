@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 
+import { SeverityBadge } from "@/components/severity-badge";
 type Severity = "High" | "Medium" | "Low";
 const SEVERITIES: Severity[] = ["High", "Medium", "Low"];
 
@@ -242,7 +243,7 @@ export default async function FindingsDashboardPage({
                   ({pct(thumbsUp, totalCount)})
                 </span>
               </span>
-              <span style={{ color: "#a8362b" }}>
+              <span style={{ color: "#b42318" }}>
                 👎 {thumbsDown}{" "}
                 <span className="text-[var(--fg-subtle)]">
                   ({pct(thumbsDown, totalCount)})
@@ -297,7 +298,7 @@ export default async function FindingsDashboardPage({
                         <div
                           style={{
                             height: `${Math.max(pctM, 2)}%`,
-                            background: "#b8762a",
+                            background: "#8a5300",
                           }}
                         />
                       ) : null}
@@ -333,7 +334,7 @@ export default async function FindingsDashboardPage({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-[var(--fg-subtle)]">
               <Legend color="#ef4444" label="High" />
-              <Legend color="#b8762a" label="Medium" />
+              <Legend color="#8a5300" label="Medium" />
               <Legend color="var(--slate)" label="Low" />
               <span className="ml-auto">
                 Total in window:{" "}
@@ -475,7 +476,7 @@ export default async function FindingsDashboardPage({
                       {r.user_rating === 1 ? (
                         <span style={{ color: "#b8902f", fontSize: 11 }}>👍</span>
                       ) : r.user_rating === -1 ? (
-                        <span style={{ color: "#a8362b", fontSize: 11 }}>👎</span>
+                        <span style={{ color: "#b42318", fontSize: 11 }}>👎</span>
                       ) : null}
                       <span className="ml-auto text-[10px] text-[var(--fg-subtle)]">
                         {new Date(r.created_at).toLocaleDateString(undefined, {
@@ -566,9 +567,9 @@ function SummaryTile({
 }) {
   const valueColor =
     tone === "high"
-      ? "#a8362b"
+      ? "#b42318"
       : tone === "medium"
-        ? "#b8762a"
+        ? "#8a5300"
         : tone === "low"
           ? "var(--slate)"
           : "var(--fg)";
@@ -614,7 +615,7 @@ function FilterGroup({
               "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition",
               selected
                 ? "border-[var(--primary)] bg-[var(--primary)] text-[#0a0d12]"
-                : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]",
+                : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-black/[0.04] hover:text-[var(--fg)]",
             ].join(" ")}
           >
             {opt.label}
@@ -626,18 +627,5 @@ function FilterGroup({
 }
 
 function SeverityPill({ severity }: { severity: Severity }) {
-  const styles =
-    severity === "High"
-      ? { bg: "rgba(168,54,43,0.10)", fg: "#a8362b" }
-      : severity === "Medium"
-        ? { bg: "rgba(184,118,42,0.10)", fg: "#b8762a" }
-        : { bg: "rgba(148,163,184,0.12)", fg: "var(--slate)" };
-  return (
-    <span
-      className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-      style={{ background: styles.bg, color: styles.fg }}
-    >
-      {severity}
-    </span>
-  );
+  return <SeverityBadge severity={severity} size="sm" />;
 }

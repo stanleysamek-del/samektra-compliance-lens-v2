@@ -238,7 +238,7 @@ export default async function InspectionsPage() {
             style={{
               borderColor: "rgba(184,118,42,0.4)",
               background: "rgba(184,118,42,0.08)",
-              color: "#b8762a",
+              color: "#8a5300",
             }}
           >
             <span aria-hidden>⚠</span>
@@ -302,7 +302,7 @@ export default async function InspectionsPage() {
               value={String(weeklyHighFindings ?? 0)}
               sub={
                 (weeklyHighFindings ?? 0) === 0 ? (
-                  <span style={{ color: "#607a3a" }}>None open this week</span>
+                  <span style={{ color: "#2f6b2f" }}>None open this week</span>
                 ) : (
                   "still open · last 7 days"
                 )
@@ -562,8 +562,8 @@ function HomeStat({
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; fg: string }> = {
-    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#b8762a" },
-    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#607a3a" },
+    in_progress: { label: "In progress", bg: "rgba(184,118,42,0.10)", fg: "#8a5300" },
+    completed: { label: "Completed", bg: "rgba(96,122,58,0.10)", fg: "#2f6b2f" },
     archived: { label: "Archived", bg: "rgba(15,21,24,0.06)", fg: "var(--slate)" },
   };
   const m = map[status] ?? map.archived;
