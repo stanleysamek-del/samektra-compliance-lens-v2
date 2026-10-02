@@ -133,26 +133,13 @@ export default async function WelcomePage() {
             Cheat sheet
           </h2>
           <ul className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-            <CheatItem label="Home" body="Dashboard: in-progress inspections, recent activity, this week's numbers." />
-            <CheatItem label="History" body="Every inspection you can access, grouped by Folder when you're in a team." />
-            <CheatItem
-              label="Upload"
-              body="The gold button — the fastest way to start a new inspection."
-            />
-            <CheatItem label="Findings" body="Every finding across every inspection: filter by severity, category, rating; export CSV." />
-            <CheatItem
-              label="Actions"
-              body="The corrective-action board — what's open, who owns it, what's waiting on you to verify."
-            />
-            <CheatItem
-              label="Templates"
-              body="Reusable checklist question sets. Pick one when creating an inspection; edit or build your own."
-            />
-            <CheatItem
-              label="Team"
-              body="Members, invites, folders, and Chip's team rules. On a phone, reach it from Profile."
-            />
-            <CheatItem label="Profile" body="Your name, organization, links to Team and Templates, sign out." />
+            <CheatItem label="Start inspection" body="The gold button (center of the phone tab bar, top of the sidebar) — pick a facility and inspection type, then walk." />
+            <CheatItem label="Home" body="In-progress inspections, recent activity, this week's numbers." />
+            <CheatItem label="Inspections" body="History of every inspection, plus Schedules (repeat rounds) and Templates (checklist question sets)." />
+            <CheatItem label="Actions" body="The corrective-action board — what's open, who owns it, what's overdue — and the Findings list with CSV export." />
+            <CheatItem label="Assets" body="Facilities with their life-safety plans, and the equipment register with barcode checks." />
+            <CheatItem label="Analytics" body="The campus dashboard: deficiencies by checklist group, trends, CSV export." />
+            <CheatItem label="Settings" body="Your profile, your team (members, invites, Chip's rules) and the AI plan. On a phone: More." />
           </ul>
         </Card>
 

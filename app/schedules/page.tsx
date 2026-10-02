@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -33,10 +32,7 @@ export default async function SchedulesPage({
         ),
       }}
     >
-      <div className="mx-auto max-w-4xl space-y-6 p-5 py-10">
-        <Link href="/inspections" className="underline">
-          Back to inspections
-        </Link>
+      <div className="space-y-6">
         <h1 className="text-3xl font-semibold">Inspection schedule</h1>
         <p>
           Repeat a walkthrough using its questions and sections. Each occurrence

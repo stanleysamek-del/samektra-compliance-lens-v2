@@ -320,7 +320,7 @@ export default async function TeamDashboardPage({
                 {org.name}
               </p>
               <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--fg)]">
-                Dashboard
+                Team overview
               </h1>
               <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
                 {memberCount} {memberCount === 1 ? "member" : "members"} · you

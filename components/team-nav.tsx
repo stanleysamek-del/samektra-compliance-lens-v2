@@ -11,7 +11,7 @@ import { usePathname } from "next/navigation";
 export function TeamNav() {
   const pathname = usePathname();
   const tabs = [
-    { href: "/team", label: "Dashboard" },
+    { href: "/team", label: "Overview" },
     { href: "/team/members", label: "Members" },
     { href: "/team/rules", label: "Chip's rules" },
   ];

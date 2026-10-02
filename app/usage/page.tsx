@@ -27,10 +27,7 @@ export default async function UsagePage() {
         ),
       }}
     >
-      <div className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-        <Link href="/inspections" className="underline">
-          Back to inspections
-        </Link>
+      <div className="space-y-6">
         <h1 className="text-3xl font-semibold">AI plan and usage</h1>
         <p>{org ? org.name : "Personal workspace"}</p>
         <section className="space-y-3 rounded-xl border p-5">

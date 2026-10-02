@@ -53,10 +53,7 @@ export default async function AssetsPage({
         ),
       }}
     >
-      <div className="mx-auto max-w-4xl space-y-6 p-5 py-10">
-        <Link href="/inspections" className="underline">
-          Back to inspections
-        </Link>
+      <div className="space-y-6">
         <h1 className="text-3xl font-semibold">Equipment register</h1>
         <p>
           Track equipment by facility and barcode. Keep dated check records and

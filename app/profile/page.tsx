@@ -66,42 +66,6 @@ export default async function ProfilePage() {
           </div>
         </Card>
 
-        {/* Workspace links — the phone tab bar can't reach these, so the
-            profile is where they live on mobile. */}
-        <Card>
-          <CardTitle>Workspace</CardTitle>
-          <CardDescription className="mt-1.5">
-            Teams, templates, and the other screens that aren&apos;t on the
-            tab bar.
-          </CardDescription>
-          <ul className="mt-3 divide-y divide-[var(--border)]">
-            <WorkspaceLink
-              href="/team"
-              title="Team"
-              description="Share inspections with coworkers, manage members, and teach Chip house rules."
-            />
-            <WorkspaceLink
-              href="/facilities"
-              title="Facilities"
-              description="Buildings you inspect, with their life safety plans — pin findings on the plan."
-            />
-            <WorkspaceLink
-              href="/templates"
-              title="Checklist templates"
-              description="The question sets an inspection follows. Duplicate a built-in or write your own."
-            />
-            <WorkspaceLink
-              href="/actions"
-              title="Actions"
-              description="Every corrective action across every inspection — overdue first."
-            />
-            <WorkspaceLink
-              href="/findings"
-              title="Findings"
-              description="Every finding across every inspection, with CSV export."
-            />
-          </ul>
-        </Card>
 
         {profile.is_admin ? (
           <Card variant="tinted-orange">
@@ -131,36 +95,6 @@ export default async function ProfilePage() {
   );
 }
 
-function WorkspaceLink({
-  href,
-  title,
-  description,
-}: {
-  href: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <li>
-      <Link
-        href={href}
-        className="flex min-h-[44px] items-center justify-between gap-3 py-2.5 transition hover:text-[var(--primary)]"
-      >
-        <span className="min-w-0">
-          <span className="block text-sm font-medium text-[var(--fg)]">
-            {title}
-          </span>
-          <span className="block text-xs text-[var(--fg-muted)]">
-            {description}
-          </span>
-        </span>
-        <span aria-hidden className="shrink-0 text-[var(--fg-subtle)]">
-          →
-        </span>
-      </Link>
-    </li>
-  );
-}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (

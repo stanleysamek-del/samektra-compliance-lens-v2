@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { PropsWithChildren, ReactNode } from "react";
+import type { PropsWithChildren } from "react";
 import { ScrollToTop } from "@/components/scroll-to-top";
 import { SessionGuard } from "@/components/session-guard";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { HelpDrawer } from "@/components/help-drawer";
 import { Toaster } from "@/components/toaster";
 import { ConfirmHost } from "@/components/ui/confirm-dialog";
+import { SectionTabs } from "@/components/section-tabs";
+import { MoreSheet } from "@/components/more-sheet";
+import { NAV_SECTIONS, START_INSPECTION_HREF, sectionFor, type NavSection } from "@/lib/nav";
 
 /* =====================================================================
  * AppShell
@@ -18,57 +21,6 @@ import { ConfirmHost } from "@/components/ui/confirm-dialog";
  * desktop (≥ lg, 1024px) a left sidebar appears alongside, the bottom
  * tab bar hides, and content is constrained to a comfortable column.
  * ===================================================================== */
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: ReactNode;
-  /** Renders the centered raised orange button on mobile / accented in sidebar. */
-  accent?: boolean;
-};
-
-const NAV: NavItem[] = [
-  { href: "/inspections", label: "Home", icon: <HomeIcon /> },
-  { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
-  {
-    href: "/inspections/new",
-    label: "Inspect",
-    icon: <UploadIcon />,
-    accent: true,
-  },
-  { href: "/facilities", label: "Facilities", icon: <FacilitiesIcon /> },
-  { href: "/dashboard", label: "Dashboard", icon: <FindingsIcon /> },
-  { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
-  { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
-  { href: "/schedules", label: "Schedules", icon: <HistoryIcon /> },
-  { href: "/assets", label: "Equipment", icon: <FacilitiesIcon /> },
-  { href: "/usage", label: "AI plan", icon: <ProfileIcon /> },
-  { href: "/templates", label: "Templates", icon: <TemplatesIcon /> },
-  { href: "/team", label: "Team", icon: <TeamIcon /> },
-  { href: "/profile", label: "Profile", icon: <ProfileIcon /> },
-];
-
-/**
- * Mobile tab bar shows 5 items max, with Upload in the center as the
- * raised gold button. Profile is reached through the header avatar (a
- * link to /profile); Team and Templates are reachable from Profile on
- * mobile — the tab bar carries the day-to-day loop only. Desktop sidebar
- * still shows everything via NAV.
- * Order matters: the .accent item MUST be at index 2 (the middle slot)
- * for the raised-button styling to position correctly.
- */
-const MOBILE_NAV: NavItem[] = [
-  { href: "/inspections", label: "Home", icon: <HomeIcon /> },
-  { href: "/inspections/history", label: "History", icon: <HistoryIcon /> },
-  {
-    href: "/inspections/new",
-    label: "Inspect",
-    icon: <UploadIcon />,
-    accent: true,
-  },
-  { href: "/findings", label: "Findings", icon: <FindingsIcon /> },
-  { href: "/actions", label: "Actions", icon: <ActionsIcon /> },
-];
 
 type Props = PropsWithChildren<{
   user: {
@@ -138,22 +90,6 @@ export function AppShell({ user, children }: Props) {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Persistent primary action — always one click away. */}
-            <Link
-              href="/inspections/new"
-              className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded px-3 text-sm font-semibold transition"
-              style={{
-                background: "var(--gold)",
-                color: "var(--ink)",
-                border: "1px solid var(--gold)",
-                fontFamily: "var(--font-geist-sans)",
-              }}
-              title="Start a new inspection"
-              aria-label="New inspection"
-            >
-              <PlusGlyph />
-              <span className="hidden sm:inline">New</span>
-            </Link>
             <OrgSwitcher />
             <HelpDrawer />
             <div className="hidden flex-col items-end leading-tight sm:flex">
@@ -175,12 +111,6 @@ export function AppShell({ user, children }: Props) {
           </div>
         </div>
       </header>
-      <details className="border-b px-4 py-3 lg:hidden">
-        <summary className="cursor-pointer text-sm font-medium">Equipment, schedules &amp; more</summary>
-        <nav aria-label="Workspace tools" className="mt-3 flex flex-wrap gap-2">
-          {NAV.filter(item=>!MOBILE_NAV.some(m=>m.href===item.href)).map(item=><Link key={item.href} href={item.href} className="cl-btn-outline">{item.label}</Link>)}
-        </nav>
-      </details>
 
       <div className="mx-auto flex max-w-screen-2xl">
         {/* ===== Sidebar (desktop only) ===== */}
@@ -219,7 +149,10 @@ export function AppShell({ user, children }: Props) {
 
         {/* ===== Main content ===== */}
         <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:pb-10 lg:pl-8">
-          <div className="mx-auto w-full max-w-3xl">{children}</div>
+          <div className="mx-auto w-full max-w-3xl">
+            <SectionTabs />
+            {children}
+          </div>
         </main>
       </div>
 
@@ -241,46 +174,38 @@ export function AppShell({ user, children }: Props) {
 
 function SidebarNav() {
   const pathname = usePathname();
+  const current = sectionFor(pathname);
   return (
-    <nav className="flex flex-col gap-0.5">
-      {NAV.map((item) => {
-        const active =
-          pathname === item.href ||
-          (item.href !== "/inspections" && pathname.startsWith(item.href));
+    <nav aria-label="Main" className="flex flex-col gap-0.5">
+      {/* The primary action, above the sections. */}
+      <Link
+        href={START_INSPECTION_HREF}
+        className="mb-4 flex min-h-11 items-center justify-center gap-2 rounded px-3 text-sm font-semibold transition hover:brightness-95"
+        style={{ background: "var(--gold)", color: "var(--ink)", border: "1px solid var(--gold-soft)" }}
+      >
+        <PlusGlyph />
+        Start inspection
+      </Link>
+      {NAV_SECTIONS.map((section) => {
+        const active = current?.key === section.key && pathname !== START_INSPECTION_HREF;
         return (
           <Link
-            key={item.href}
-            href={item.href}
+            key={section.key}
+            href={section.href}
             aria-current={active ? "page" : undefined}
-            className="group flex items-center gap-3 px-3 py-2.5 transition"
+            className="group flex min-h-11 items-center gap-3 px-3 transition hover:bg-[var(--paper-3)]"
             style={{
-              background: active ? "rgba(15, 21, 24, 0.04)" : "transparent",
-              color: active
-                ? "var(--ink)"
-                : item.accent
-                  ? "var(--gold-text)"
-                  : "var(--slate)",
-              borderLeft: active
-                ? "3px solid var(--ink)"
-                : "3px solid transparent",
+              background: active ? "var(--paper-3)" : undefined,
+              color: active ? "var(--ink)" : "var(--slate)",
+              borderLeft: active ? "3px solid var(--ink)" : "3px solid transparent",
               fontFamily: "var(--font-geist-sans)",
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: active ? 600 : 500,
               textDecoration: "none",
             }}
           >
-            <span
-              style={{
-                color: item.accent
-                  ? "var(--gold-text)"
-                  : active
-                    ? "var(--ink)"
-                    : "var(--slate)",
-              }}
-            >
-              {item.icon}
-            </span>
-            <span>{item.label}</span>
+            <SectionIcon section={section.key} />
+            <span>{section.label}</span>
           </Link>
         );
       })}
@@ -288,8 +213,41 @@ function SidebarNav() {
   );
 }
 
+/**
+ * Phone/tablet tab bar: the daily loop — Home · Inspections · [Start] ·
+ * Actions · More. "More" opens a sheet with Assets, Analytics and
+ * Settings (and sign out), so nothing needs a permanent strip on screen.
+ */
 function BottomTabBar() {
   const pathname = usePathname();
+  const current = sectionFor(pathname);
+  const daily = ["home", "inspections", "actions"];
+  const primary = NAV_SECTIONS.filter((s) => daily.includes(s.key));
+  const more = NAV_SECTIONS.filter((s) => !daily.includes(s.key));
+  const moreActive = more.some((s) => s.key === current?.key);
+
+  const tab = (section: NavSection) => {
+    const active = current?.key === section.key && pathname !== START_INSPECTION_HREF;
+    return (
+      <Link
+        key={section.key}
+        href={section.href}
+        aria-current={active ? "page" : undefined}
+        className="flex h-14 flex-col items-center justify-center gap-1 text-[11px] transition"
+        style={{
+          color: active ? "var(--ink)" : "var(--slate)",
+          fontFamily: "var(--font-geist-sans)",
+          fontWeight: active ? 700 : 500,
+          // Non-color active cue: a bar along the top edge.
+          borderTop: active ? "3px solid var(--ink)" : "3px solid transparent",
+        }}
+      >
+        <SectionIcon section={section.key} />
+        <span>{section.label}</span>
+      </Link>
+    );
+  };
+
   return (
     <nav
       aria-label="Primary"
@@ -303,52 +261,27 @@ function BottomTabBar() {
       }}
     >
       <div className="mx-auto grid max-w-screen-sm grid-cols-5">
-        {MOBILE_NAV.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/inspections" && pathname.startsWith(item.href));
-
-          if (item.accent) {
-            // Raised gold Upload button — middle slot, square-edged.
-            return (
-              <div key={item.href} className="flex justify-center">
-                <Link
-                  href={item.href}
-                  aria-label={item.label}
-                  className="-mt-5 flex h-14 w-14 items-center justify-center transition active:translate-y-px"
-                  style={{
-                    background: "var(--gold)",
-                    color: "var(--ink)",
-                    border: "1px solid var(--gold-soft)",
-                    boxShadow:
-                      "0 12px 24px -10px rgba(200, 155, 60, 0.55)",
-                  }}
-                >
-                  {item.icon}
-                </Link>
-              </div>
-            );
-          }
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className="flex h-14 flex-col items-center justify-center gap-1 text-[11px] transition"
-              style={{
-                color: active ? "var(--ink)" : "var(--slate)",
-                fontFamily: "var(--font-geist-sans)",
-                fontWeight: active ? 700 : 500,
-                // Non-color active cue: a bar along the top edge.
-                borderTop: active ? "3px solid var(--ink)" : "3px solid transparent",
-              }}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+        {tab(primary[0])}
+        {tab(primary[1])}
+        <div className="flex justify-center">
+          <Link
+            href={START_INSPECTION_HREF}
+            aria-label="Start inspection"
+            className="-mt-5 flex h-14 w-14 items-center justify-center rounded transition active:translate-y-px"
+            style={{
+              background: "var(--gold)",
+              color: "var(--ink)",
+              border: "1px solid var(--gold-soft)",
+              boxShadow: "0 12px 24px -10px rgba(200, 155, 60, 0.55)",
+            }}
+          >
+            <PlusGlyph size={24} />
+          </Link>
+        </div>
+        {tab(primary[2])}
+        <MoreSheet sections={more} active={moreActive} icons={Object.fromEntries(more.map((s) => [s.key, <SectionIcon key={s.key} section={s.key} />]))}>
+          <MoreIcon />
+        </MoreSheet>
       </div>
     </nav>
   );
@@ -386,78 +319,82 @@ function UserAvatar({ name }: { name: string }) {
   );
 }
 
-/* ===== Icons (inline SVG, 22px) ===== */
+/* ===== Icons (inline SVG, 22px) — one distinct glyph per section ===== */
 
-function HomeIcon() {
+function SectionIcon({ section }: { section: NavSection["key"] }) {
+  const common = {
+    width: 22,
+    height: 22,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (section) {
+    case "home":
+      return (
+        <svg {...common}>
+          <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-8.5Z" />
+        </svg>
+      );
+    case "inspections":
+      // Clipboard with a check
+      return (
+        <svg {...common}>
+          <rect x="5" y="4.5" width="14" height="16.5" rx="1.5" />
+          <path d="M9 4.5V3h6v1.5M8.5 13l2.5 2.5L16 10.5" />
+        </svg>
+      );
+    case "actions":
+      // Flag
+      return (
+        <svg {...common}>
+          <path d="M5 21V4m0 0h11l-2 4 2 4H5" />
+        </svg>
+      );
+    case "assets":
+      // Building
+      return (
+        <svg {...common}>
+          <path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 10h4a1 1 0 0 1 1 1v10M3 21h18M8 8h3M8 12h3M8 16h3" />
+        </svg>
+      );
+    case "analytics":
+      // Bar chart
+      return (
+        <svg {...common}>
+          <path d="M4 20h16M7 16v-5M12 16V7M17 16v-8" />
+        </svg>
+      );
+    case "settings":
+      // Gear
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" />
+        </svg>
+      );
+  }
+}
+
+function MoreIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-8.5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
     </svg>
   );
 }
-function HistoryIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 7v5l3 2"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-function UploadIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 16V4m0 0L7 9m5-5 5 5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-function ProfileIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M4.5 20a7.5 7.5 0 0 1 15 0"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-function PlusGlyph() {
+
+function PlusGlyph({ size = 14 }: { size?: number }) {
   return (
     <svg
-      width="12"
-      height="12"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -469,128 +406,11 @@ function PlusGlyph() {
     </svg>
   );
 }
-function TeamIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="17" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M3 19a6 6 0 0 1 12 0M14 19a4 4 0 0 1 7 0"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-function FindingsIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 5h16v14H4z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M4 9h16M9 5v14"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="m11 13 1.5 1.5L16 11"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-function FacilitiesIcon() {
-  // Simple building — the facility that owns the life-safety plans.
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 10h4a1 1 0 0 1 1 1v10M3 21h18"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 8h2M10.5 8h2M7.5 11.5h2M10.5 11.5h2M7.5 15h2M10.5 15h2M17.5 14h1M17.5 17h1M9 21v-3h2v3"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-function TemplatesIcon() {
-  // Clipboard with checklist lines — the question sets inspections start from.
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M8 5h8v3H8z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16 6h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8.5 12.5l1 1 2-2M13.5 12.5H16M8.5 16.5l1 1 2-2M13.5 16.5H16"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
-function ActionsIcon() {
-  // Clipboard with an arrow — "the finding goes to somebody to fix".
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M8 5h8v3H8z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16 6h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9 14h6m0 0-2.2-2.2M15 14l-2.2 2.2"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 function SignOutIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       <path
         d="m15 8 4 4-4 4M19 12H9"
         stroke="currentColor"
