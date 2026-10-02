@@ -6,9 +6,10 @@ import {
   confirmAiAnswer,
   saveChecklistNote,
   setChecklistAnswer,
+  setChecklistValue,
 } from "@/app/actions/checklist";
 import type { ChecklistItemRow } from "@/lib/checklists/engine";
-import { scoreItems } from "@/lib/checklists/engine";
+import { isItemAnswered, scoreItems, visibleItems } from "@/lib/checklists/engine";
 import { HelpTip } from "@/components/help-tip";
 import {
   ChecklistItemRowView,
@@ -79,7 +80,12 @@ export function ChecklistPanel({
     else pending.current.delete(itemId);
   }
 
-  const sections = useMemo(() => {
+  // Show-if questions appear only while their condition holds; numbering
+  // stays fixed (A1.3 is always A1.3) whether or not earlier ones show.
+  const { sections, numberById } = useMemo(() => {
+    const visible = new Set(visibleItems(local).map((i) => i.id));
+    const numbers = new Map<string, number>();
+    const perSection = new Map<string, number>();
     const map = new Map<string, { code: string; title: string; rows: ChecklistItemRow[] }>();
     for (const item of local) {
       const key = item.section_code;
@@ -90,12 +96,15 @@ export function ChecklistPanel({
           rows: [],
         });
       }
-      map.get(key)!.rows.push(item);
+      const n = (perSection.get(key) ?? 0) + 1;
+      perSection.set(key, n);
+      numbers.set(item.id, n);
+      if (visible.has(item.id)) map.get(key)!.rows.push(item);
     }
-    return Array.from(map.values());
+    return { sections: Array.from(map.values()).filter((s) => s.rows.length > 0), numberById: numbers };
   }, [local]);
 
-  const nextUnanswered = sections.find(section => section.rows.some(row => row.answer === null));
+  const nextUnanswered = sections.find((section) => section.rows.some((row) => !isItemAnswered(row)));
   const overall = scoreItems(local);
   const aiPending = local.filter((i) => i.answered_by_ai && !i.ai_confirmed).length;
   const templateName = local[0]?.template_name ?? "Checklist";
@@ -169,6 +178,33 @@ export function ChecklistPanel({
     });
   }
 
+  /** Text / number answers: optimistic, rolled back if the save fails. */
+  async function saveValue(item: ChecklistItemRow, value: string): Promise<boolean> {
+    const raw = value.trim();
+    const type = item.response_type ?? "yesno";
+    const optimistic =
+      type === "number"
+        ? { value_number: raw === "" ? null : Number(raw.replace(/,/g, "")) }
+        : { value_text: raw === "" ? null : raw };
+    patchLocal(item.id, optimistic);
+    track(item.id, 1);
+    try {
+      const res = await setChecklistValue({ itemId: item.id, inspectionId, value });
+      if (!res.ok) {
+        patchLocal(item.id, { value_text: item.value_text, value_number: item.value_number });
+        setError(res.error ?? "Couldn't save the answer.");
+        return false;
+      }
+      return true;
+    } catch {
+      patchLocal(item.id, { value_text: item.value_text, value_number: item.value_number });
+      setError("Couldn't save the answer — check your connection and try again.");
+      return false;
+    } finally {
+      track(item.id, -1);
+    }
+  }
+
   async function saveNote(item: ChecklistItemRow, note: string): Promise<boolean> {
     const trimmed = note.trim();
     patchLocal(item.id, { note: trimmed.length > 0 ? trimmed : null });
@@ -213,7 +249,7 @@ export function ChecklistPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const firstUnanswered = local.find((i) => i.answer === null) ?? null;
+  const firstUnanswered = sections.flatMap((s) => s.rows).find((i) => !isItemAnswered(i)) ?? null;
 
   function toggleSection(code: string, currentlyOpen: boolean) {
     setToggled((prev) => {
@@ -278,7 +314,8 @@ export function ChecklistPanel({
 
       <div>
         {sections.map((section) => {
-          const s = scoreItems(section.rows);
+          // Rows are already filtered to the visible ones.
+          const s = scoreItems(section.rows.map((r) => ({ ...r, show_if: null })));
           const flagged = section.rows.filter((r) => r.answer === "no").length;
           const unconfirmedAi = section.rows.filter(
             (r) => r.answered_by_ai && !r.ai_confirmed,
@@ -324,11 +361,11 @@ export function ChecklistPanel({
 
               {open ? (
                 <div className="flex flex-col gap-3 px-5 pb-4 sm:px-6">
-                  {section.rows.map((item, idx) => (
+                  {section.rows.map((item) => (
                     <ChecklistItemRowView
                       key={item.id}
                       item={item}
-                      index={idx + 1}
+                      index={numberById.get(item.id) ?? 0}
                       inspectionId={inspectionId}
                       readOnly={readOnly}
                       photoUrl={item.photo_id ? (photoUrls[item.photo_id] ?? null) : null}
@@ -337,6 +374,7 @@ export function ChecklistPanel({
                       onAnswer={answer}
                       onConfirm={confirm}
                       onSaveNote={(note) => saveNote(item, note)}
+                      onSaveValue={(value) => saveValue(item, value)}
                       onPatch={(patch) => patchLocal(item.id, patch)}
                     />
                   ))}

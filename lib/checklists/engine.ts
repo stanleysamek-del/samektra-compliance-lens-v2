@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getBuiltinTemplate,
   type ChecklistTemplate,
+  type ResponseType,
+  type YesNoAnswer,
 } from "@/lib/checklists/builtin-templates";
 
 /**
@@ -29,7 +31,30 @@ export type ChecklistItemRow = {
   photo_id: string | null;
   finding_id: string | null;
   answered_at: string | null;
+  // Migration 0034 — absent on older databases, so all optional; absent
+  // means yes/no, not required, always shown.
+  item_key?: string | null;
+  response_type?: ResponseType | null;
+  unit?: string | null;
+  required?: boolean | null;
+  show_if?: { item: string; equals: YesNoAnswer } | null;
+  value_text?: string | null;
+  value_number?: number | string | null;
 };
+
+/** Columns every checklist read selects; 0034's come in CHECKLIST_COLS_0034. */
+export const CHECKLIST_COLS =
+  "id, inspection_id, template_ref, template_name, section_code, section_title, sort, question, code_ref, match_terms, answer, note, answered_by, answered_by_ai, ai_confirmed, photo_id, finding_id, answered_at";
+export const CHECKLIST_COLS_0034 =
+  "item_key, response_type, unit, required, show_if, value_text, value_number";
+
+/** True when a query failed because 0034's columns don't exist yet. */
+export function isMissing0034(err: { message?: string } | null | undefined): boolean {
+  return Boolean(
+    err?.message &&
+      /item_key|response_type|show_if|value_text|value_number/i.test(err.message),
+  );
+}
 
 /** Resolve a picker value to a template: "builtin:<slug>" or a DB uuid. */
 export async function resolveTemplate(
@@ -64,8 +89,11 @@ export async function attachTemplate(
 ): Promise<{ error: string | null; sectionTitles: string[] }> {
   const rows: Array<Record<string, unknown>> = [];
   let sort = 0;
+  let usesNewFields = false;
   for (const section of template.sections) {
-    for (const item of section.items) {
+    section.items.forEach((item, idx) => {
+      const type = item.type ?? "yesno";
+      if (type !== "yesno" || item.required || item.showIf) usesNewFields = true;
       rows.push({
         inspection_id: inspectionId,
         template_ref: template.id,
@@ -75,15 +103,35 @@ export async function attachTemplate(
         sort: sort++,
         question: item.q,
         code_ref: item.ref ?? null,
-        match_terms: item.match ?? [],
+        // Only yes/no questions take AI pre-fill.
+        match_terms: type === "yesno" ? (item.match ?? []) : [],
+        item_key: item.id ?? `${section.code}-${idx + 1}`,
+        response_type: type,
+        unit: type === "number" ? (item.unit ?? null) : null,
+        required: Boolean(item.required),
+        show_if: item.showIf ?? null,
       });
-    }
+    });
   }
   if (rows.length === 0) return { error: "Template has no questions", sectionTitles: [] };
 
-  const { error } = await supabase
-    .from("inspection_checklist_items")
-    .insert(rows);
+  let { error } = await supabase.from("inspection_checklist_items").insert(rows);
+  // Database without migration 0034: a plain yes/no template still
+  // attaches (drop the new columns); one that relies on the new question
+  // types can't be represented, so say so instead of silently degrading.
+  if (error && isMissing0034(error)) {
+    if (usesNewFields) {
+      return {
+        error: "This template uses text/number, required or conditional questions, which need a database update (migration 0034).",
+        sectionTitles: [],
+      };
+    }
+    const NEW_COLS = ["item_key", "response_type", "unit", "required", "show_if"];
+    const legacy = rows.map((r) =>
+      Object.fromEntries(Object.entries(r).filter(([k]) => !NEW_COLS.includes(k))),
+    );
+    ({ error } = await supabase.from("inspection_checklist_items").insert(legacy));
+  }
   return {
     error: error ? error.message : null,
     sectionTitles: template.sections.map((s) => `${s.code}. ${s.title}`),
@@ -151,15 +199,18 @@ export async function prefillChecklistFromFindings(
 
   const { data: items } = await supabase
     .from("inspection_checklist_items")
-    .select(
-      "id, answer, answered_by_ai, ai_confirmed, match_terms, note, finding_id",
-    )
+    // "*" so the 0034 columns come along when they exist, without failing
+    // on databases that don't have them yet.
+    .select("*")
     .eq("inspection_id", inspectionId);
   if (!items || items.length === 0) return 0;
 
   // Open = unanswered, or an unconfirmed AI answer we're allowed to refine.
+  // Only yes/no questions take a pre-filled "no".
   const open = items.filter(
-    (i) => i.answer === null || (i.answered_by_ai && !i.ai_confirmed),
+    (i) =>
+      (i.response_type ?? "yesno") === "yesno" &&
+      (i.answer === null || (i.answered_by_ai && !i.ai_confirmed)),
   );
   if (open.length === 0) return 0;
 
@@ -214,18 +265,51 @@ export type ChecklistScore = {
   pct: number | null; // yes / (yes + no), null when nothing scored
 };
 
-export function scoreItems(
-  items: Array<Pick<ChecklistItemRow, "answer">>,
-): ChecklistScore {
+type ScoreInput = Pick<ChecklistItemRow, "answer"> &
+  Partial<Pick<ChecklistItemRow, "item_key" | "response_type" | "show_if" | "value_text" | "value_number">>;
+
+/**
+ * Does this question apply? A show-if question applies only while its
+ * target (an earlier yes/no question, itself visible) has the expected
+ * answer. Rows without show_if always apply.
+ */
+export function isItemVisible<T extends ScoreInput>(item: T, all: T[], depth = 0): boolean {
+  const cond = item.show_if;
+  if (!cond) return true;
+  if (depth > 20) return false; // defensive: a cycle never shows
+  const target = all.find((i) => i.item_key === cond.item);
+  if (!target || (target.response_type ?? "yesno") !== "yesno") return false;
+  return target.answer === cond.equals && isItemVisible(target, all, depth + 1);
+}
+
+export function visibleItems<T extends ScoreInput>(items: T[]): T[] {
+  return items.filter((i) => isItemVisible(i, items));
+}
+
+/** Answered = has a value for its type. */
+export function isItemAnswered(item: ScoreInput): boolean {
+  const type = item.response_type ?? "yesno";
+  if (type === "text") return Boolean(item.value_text && String(item.value_text).trim());
+  if (type === "number") return item.value_number !== null && item.value_number !== undefined && item.value_number !== "";
+  return item.answer !== null && item.answer !== undefined;
+}
+
+/**
+ * Score = Yes ÷ (Yes + No) over the questions that apply; N.A. and
+ * text/number answers don't count toward it. `unanswered` counts every
+ * applicable question without an answer, of any type.
+ */
+export function scoreItems(items: ScoreInput[]): ChecklistScore {
   let yes = 0,
     no = 0,
     na = 0,
     unanswered = 0;
-  for (const i of items) {
-    if (i.answer === "yes") yes++;
+  for (const i of visibleItems(items)) {
+    if (!isItemAnswered(i)) unanswered++;
+    else if ((i.response_type ?? "yesno") !== "yesno") continue;
+    else if (i.answer === "yes") yes++;
     else if (i.answer === "no") no++;
     else if (i.answer === "na") na++;
-    else unanswered++;
   }
   const scored = yes + no;
   return {

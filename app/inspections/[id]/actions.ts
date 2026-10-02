@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isItemAnswered, visibleItems, type ChecklistItemRow } from "@/lib/checklists/engine";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -70,6 +71,21 @@ export async function finalizeInspection(formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Required questions (migration 0034) must be answered — while they
+  // apply — before finalizing. "*" works with or without the 0034 columns.
+  if (status === "completed") {
+    const { data: items } = await supabase
+      .from("inspection_checklist_items")
+      .select("*")
+      .eq("inspection_id", inspectionId);
+    const rows = (items ?? []) as ChecklistItemRow[];
+    const missing = visibleItems(rows).filter((i) => i.required && !isItemAnswered(i));
+    if (missing.length > 0) {
+      const message = `Answer the ${missing.length} required question${missing.length === 1 ? "" : "s"} first.`;
+      redirect(`/inspections/${inspectionId}?step=review&error=${encodeURIComponent(message)}`);
+    }
+  }
 
   const { error } = await supabase.rpc("set_inspection_status_checked", {
     _inspection_id: inspectionId, _status: status,

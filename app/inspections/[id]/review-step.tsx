@@ -15,7 +15,7 @@ import { finalizeInspection } from "./actions";
  * question is a gap, not a pass. Then sign-off and Finalize (or Reopen).
  */
 
-export type ReviewQuestion = { id: string; label: string; question: string };
+export type ReviewQuestion = { id: string; label: string; question: string; required?: boolean };
 export type ReviewFinding = {
   id: string;
   title: string;
@@ -56,6 +56,8 @@ export function ReviewStep({
   userId: string;
 }) {
   const openPunch = notVisibleItems.filter((n) => !n.resolved && !n.skipped).length;
+  const requiredMissing = unanswered.filter((q) => q.required);
+  const optionalMissing = unanswered.filter((q) => !q.required);
   const allClear =
     unanswered.length === 0 && aiToConfirm.length === 0 && ownerless.length === 0 && openPunch === 0;
 
@@ -70,9 +72,16 @@ export function ReviewStep({
 
       <QuestionList
         inspectionId={inspectionId}
+        title="Required questions"
+        help="These must be answered before the inspection can be finalized."
+        items={requiredMissing}
+        urgent
+      />
+      <QuestionList
+        inspectionId={inspectionId}
         title="Unanswered questions"
         help="An unanswered question shows as a gap on the report — it isn't counted as a pass."
-        items={unanswered}
+        items={optionalMissing}
       />
       <QuestionList
         inspectionId={inspectionId}
@@ -195,6 +204,7 @@ export function ReviewStep({
               inspectionId={inspectionId}
               checklist={{
                 total: checklistTotal,
+                requiredMissing: requiredMissing.length,
                 unanswered: unanswered.length,
                 unconfirmedAi: aiToConfirm.length,
               }}
@@ -218,16 +228,21 @@ function QuestionList({
   title,
   help,
   items,
+  urgent = false,
 }: {
   inspectionId: string;
   title: string;
   help: string;
   items: ReviewQuestion[];
+  /** Blocking items: red heading badge. */
+  urgent?: boolean;
 }) {
   if (items.length === 0) return null;
   return (
     <Card>
-      <ListHeading count={items.length}>{title}</ListHeading>
+      <ListHeading count={items.length} urgent={urgent}>
+        {title}
+      </ListHeading>
       <p className="mt-1 text-sm text-[var(--fg-muted)]">{help}</p>
       <ul className="mt-3 flex flex-col divide-y divide-[var(--rule-paper)]">
         {items.slice(0, 50).map((q) => (
@@ -255,11 +270,23 @@ function QuestionList({
   );
 }
 
-function ListHeading({ count, children }: { count: number; children: React.ReactNode }) {
+function ListHeading({
+  count,
+  urgent = false,
+  children,
+}: {
+  count: number;
+  urgent?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--ink)]">
       {children}
-      <span className="rounded-full bg-[#fdf3dc] px-2 py-0.5 text-xs font-semibold tabular-nums text-[#8a5300]">
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+          urgent ? "bg-[#fdecea] text-[#b42318]" : "bg-[#fdf3dc] text-[#8a5300]"
+        }`}
+      >
         {count}
       </span>
     </h2>

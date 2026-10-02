@@ -21,6 +21,8 @@ type Props = {
   inspectionId: string;
   analysis: { queued: number; analyzing: number; failed: number };
   checklist: {
+    /** Required questions still unanswered — these BLOCK finalize. */
+    requiredMissing?: number;
     /** Total questions on the checklist. 0 = no checklist on this inspection. */
     total: number;
     unanswered: number;
@@ -50,6 +52,13 @@ export function FinalizePreflight({
     detail: unfinished ? "Wait for queued photos; retry or remove failed photos before finalizing." : undefined,
   }];
 
+  const requiredMissing = checklist.requiredMissing ?? 0;
+  if (requiredMissing > 0) {
+    checks.push({
+      ok: false,
+      label: `${requiredMissing} required question${requiredMissing === 1 ? "" : "s"} unanswered — answer ${requiredMissing === 1 ? "it" : "them"} to finalize`,
+    });
+  }
   if (checklist.total > 0) {
     checks.push({
       ok: checklist.unanswered === 0,
@@ -126,6 +135,7 @@ export function FinalizePreflight({
           <input type="hidden" name="status" value="completed" />
           <SubmitButton
             className="cl-btn-primary"
+            disabled={requiredMissing > 0}
             pendingLabel="Finalizing…"
             confirmTitle={confirmMessage ? "Finalize with open items?" : undefined}
             confirmMessage={confirmMessage}

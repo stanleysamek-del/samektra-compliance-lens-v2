@@ -65,6 +65,7 @@ export function ChecklistItemRowView({
   onConfirm,
   onSaveNote,
   onPatch,
+  onSaveValue,
 }: {
   item: ChecklistItemRow;
   index: number;
@@ -78,6 +79,8 @@ export function ChecklistItemRowView({
   onSaveNote: (note: string) => Promise<boolean>;
   /** Optimistic local patch (photo/finding links) until the refresh lands. */
   onPatch: (patch: Partial<ChecklistItemRow>) => void;
+  /** Text / number answer (migration 0034 question types). */
+  onSaveValue: (value: string) => Promise<boolean>;
 }) {
   const router = useRouter();
   const [editingNote, setEditingNote] = useState(false);
@@ -94,7 +97,8 @@ export function ChecklistItemRowView({
 
   const label = `${item.section_code}.${index}`;
   const aiPending = item.answered_by_ai && !item.ai_confirmed;
-  const isNo = item.answer === "no";
+  const type = item.response_type ?? "yesno";
+  const isNo = type === "yesno" && item.answer === "no";
   const hasNote = Boolean(item.note && item.note.trim());
   const hasPhoto = Boolean(item.photo_id || localPreview);
   const hasAction = Boolean(item.finding_id);
@@ -209,8 +213,16 @@ export function ChecklistItemRowView({
         <p className="min-w-0 flex-1 text-sm text-[var(--fg)]">
           <span className="mr-1.5 text-xs tabular-nums text-[var(--fg-subtle)]">{label}</span>
           {item.question}
+          {item.required ? (
+            <span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-[var(--danger)]">
+              <span aria-hidden>* </span>Required
+            </span>
+          ) : null}
           {item.code_ref ? <CodeRef codeRef={item.code_ref} /> : null}
         </p>
+        {type !== "yesno" ? (
+          <ValueAnswer item={item} label={label} readOnly={readOnly} onSave={onSaveValue} />
+        ) : (
         <div
           role="group"
           aria-label={`Answer for ${label}`}
@@ -241,6 +253,7 @@ export function ChecklistItemRowView({
             );
           })}
         </div>
+        )}
       </div>
 
       {aiPending ? (
@@ -457,6 +470,101 @@ export function ChecklistItemRowView({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Text / number answer. Saves when the field loses focus (or Enter on a
+ * number), with a visible saving / saved / not-saved state.
+ */
+function ValueAnswer({
+  item,
+  label,
+  readOnly,
+  onSave,
+}: {
+  item: ChecklistItemRow;
+  label: string;
+  readOnly: boolean;
+  onSave: (value: string) => Promise<boolean>;
+}) {
+  const isNumber = item.response_type === "number";
+  const saved =
+    isNumber
+      ? item.value_number === null || item.value_number === undefined
+        ? ""
+        : String(item.value_number)
+      : (item.value_text ?? "");
+  const [draft, setDraft] = useState(saved);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [, start] = useTransition();
+  // Adopt a server value that changed underneath (another device, refresh).
+  const [lastSaved, setLastSaved] = useState(saved);
+  if (saved !== lastSaved) {
+    setLastSaved(saved);
+    if (status !== "saving") setDraft(saved);
+  }
+
+  function commit() {
+    if (readOnly || draft.trim() === saved.trim()) return;
+    setStatus("saving");
+    const value = draft;
+    start(async () => {
+      const ok = await onSave(value);
+      setStatus(ok ? "saved" : "failed");
+    });
+  }
+
+  const id = `value-${item.id}`;
+  return (
+    <div className="flex w-full flex-col gap-1 sm:max-w-sm">
+      <label htmlFor={id} className="sr-only">
+        Answer for {label}
+      </label>
+      {isNumber ? (
+        <div className="flex items-center gap-2">
+          <input
+            id={id}
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            disabled={readOnly}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+            }}
+            className="cl-input w-40"
+            placeholder="0"
+          />
+          {item.unit ? <span className="text-sm text-[var(--fg-muted)]">{item.unit}</span> : null}
+        </div>
+      ) : (
+        <textarea
+          id={id}
+          value={draft}
+          disabled={readOnly}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          rows={2}
+          maxLength={4000}
+          className="cl-input text-sm"
+          placeholder="Type the answer"
+        />
+      )}
+      <span aria-live="polite" className="min-h-4 text-xs">
+        {status === "saving" ? (
+          <span className="text-[var(--fg-subtle)]">Saving…</span>
+        ) : status === "saved" ? (
+          <span className="text-[var(--success)]">Saved</span>
+        ) : status === "failed" ? (
+          <span className="text-[var(--danger)]">Not saved — change it and try again.</span>
+        ) : null}
+      </span>
     </div>
   );
 }

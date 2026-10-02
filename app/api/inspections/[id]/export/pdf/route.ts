@@ -9,6 +9,7 @@ import {
   type AuditSection,
 } from "@/lib/exports/audit-sections";
 import { lswLinksForCitation } from "@/lib/lsw-links";
+import { isItemAnswered, visibleItems } from "@/lib/checklists/engine";
 import type { Annotation } from "@/app/inspections/[id]/photos/[photoId]/actions";
 import { numberFindings } from "@/components/plans/pin-numbering";
 import {
@@ -200,16 +201,25 @@ export async function GET(
       answered_by_ai: boolean;
       ai_confirmed: boolean;
       template_name: string | null;
+      // Migration 0034 (absent on older databases).
+      item_key?: string | null;
+      response_type?: "yesno" | "text" | "number" | null;
+      unit?: string | null;
+      required?: boolean | null;
+      show_if?: { item: string; equals: "yes" | "no" | "na" } | null;
+      value_text?: string | null;
+      value_number?: number | string | null;
     }> = [];
     try {
+      // "*" picks up 0034's question-type columns when they exist.
       const { data: clData } = await supabase
         .from("inspection_checklist_items")
-        .select(
-          "section_code, section_title, question, code_ref, answer, note, answered_by_ai, ai_confirmed, template_name",
-        )
+        .select("*")
         .eq("inspection_id", inspectionId)
         .order("sort", { ascending: true });
-      checklistItems = (clData as typeof checklistItems) ?? [];
+      // Questions whose show-if condition didn't hold don't apply — they
+      // aren't part of this inspection's record.
+      checklistItems = visibleItems((clData as typeof checklistItems) ?? []);
     } catch {
       // Pre-migration or transient error — fall back to the proxy score.
     }
@@ -658,7 +668,7 @@ export async function GET(
       );
       cy -= 18;
       const clNa = checklistItems.filter((i) => i.answer === "na").length;
-      const clOpen = checklistItems.filter((i) => i.answer === null).length;
+      const clOpen = checklistItems.filter((i) => !isItemAnswered(i)).length;
       clPage.drawText(
         safeText(
           `Score ${clYes}/${clYes + clNo} (${scorePct.toFixed(2)}%) · ${clNa} N.A. · ${clOpen} unanswered`,
@@ -688,8 +698,18 @@ export async function GET(
         cy -= 16;
 
         for (const row of rows) {
-          const answerLabel =
-            row.answer === "yes"
+          const isValue = (row.response_type ?? "yesno") !== "yesno";
+          const valueText =
+            row.response_type === "number"
+              ? row.value_number === null || row.value_number === undefined
+                ? null
+                : `${row.value_number}${row.unit ? ` ${row.unit}` : ""}`
+              : (row.value_text ?? null);
+          const answerLabel = isValue
+            ? valueText
+              ? "Ans."
+              : "—"
+            : row.answer === "yes"
               ? "Yes"
               : row.answer === "no"
                 ? "No"
@@ -707,7 +727,7 @@ export async function GET(
           });
           cy = drawWrapped(
             clPage,
-            `${row.question}${row.code_ref ? `  (${row.code_ref})` : ""}${
+            `${row.question}${row.required ? " *" : ""}${isValue && valueText ? `: ${valueText}` : ""}${row.code_ref ? `  (${row.code_ref})` : ""}${
               row.answered_by_ai
                 ? row.ai_confirmed
                   ? "  [AI-flagged, inspector confirmed]"

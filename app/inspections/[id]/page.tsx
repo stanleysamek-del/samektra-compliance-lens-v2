@@ -14,7 +14,14 @@ import type { OrgMember, ActionFields } from "@/components/action-strip";
 import type { ActionStatus, ActionPriority } from "@/app/actions/workflow";
 import { AttachChecklistCard, type TemplateOption } from "@/components/attach-checklist-card";
 import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
-import type { ChecklistItemRow } from "@/lib/checklists/engine";
+import {
+  CHECKLIST_COLS,
+  CHECKLIST_COLS_0034,
+  isItemAnswered,
+  isMissing0034,
+  visibleItems,
+  type ChecklistItemRow,
+} from "@/lib/checklists/engine";
 import type { NotVisibleItem } from "@/components/not-visible-checklist";
 import { InspectionSummary } from "@/components/inspection-summary";
 import { HelpTip } from "@/components/help-tip";
@@ -187,14 +194,22 @@ export default async function InspectionDetailPage({
     // Checklist items (migration 0022). Errors degrade to "no checklist".
     let checklistItems: ChecklistItemRow[] = [];
     try {
-      const { data: clData } = await supabase
+      // With 0034's question types when available; older databases fall
+      // back to the original columns (everything yes/no, optional).
+      let { data: clData, error: clErr } = await supabase
         .from("inspection_checklist_items")
-        .select(
-          "id, inspection_id, template_ref, template_name, section_code, section_title, sort, question, code_ref, match_terms, answer, note, answered_by, answered_by_ai, ai_confirmed, photo_id, finding_id, answered_at",
-        )
+        .select(`${CHECKLIST_COLS}, ${CHECKLIST_COLS_0034}`)
         .eq("inspection_id", id)
         .order("sort", { ascending: true });
-      checklistItems = (clData as ChecklistItemRow[]) ?? [];
+      if (clErr && isMissing0034(clErr)) {
+        ({ data: clData, error: clErr } = (await supabase
+          .from("inspection_checklist_items")
+          .select(CHECKLIST_COLS)
+          .eq("inspection_id", id)
+          .order("sort", { ascending: true })) as unknown as { data: typeof clData; error: typeof clErr });
+      }
+      if (clErr) console.error("[inspection] checklist load", clErr.message);
+      checklistItems = (clData as unknown as ChecklistItemRow[]) ?? [];
     } catch (err) {
       console.error("[inspection] checklist load", err);
     }
@@ -360,9 +375,15 @@ export default async function InspectionDetailPage({
         };
       });
 
-    const unanswered: ReviewQuestion[] = checklistItems
-      .filter((i) => i.answer === null)
-      .map((i) => ({ id: i.id, label: labelByItem.get(i.id) ?? "", question: i.question }));
+    const applicable = visibleItems(checklistItems);
+    const unanswered: ReviewQuestion[] = applicable
+      .filter((i) => !isItemAnswered(i))
+      .map((i) => ({
+        id: i.id,
+        label: labelByItem.get(i.id) ?? "",
+        question: i.question,
+        required: Boolean(i.required),
+      }));
     const aiToConfirm: ReviewQuestion[] = checklistItems
       .filter((i) => i.answered_by_ai && !i.ai_confirmed)
       .map((i) => ({ id: i.id, label: labelByItem.get(i.id) ?? "", question: i.question }));

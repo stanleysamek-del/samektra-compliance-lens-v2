@@ -19,12 +19,25 @@
  * (process/people questions) deliberately carry no terms.
  */
 
+export type ResponseType = "yesno" | "text" | "number";
+export type YesNoAnswer = "yes" | "no" | "na";
+
 export type TemplateItem = {
   q: string;
   /** Code reference shown next to the question (e.g. "NFPA 80 §5.2"). */
   ref?: string;
   /** Lower-case substrings the AI-prefill matcher scores against finding text. */
   match?: string[];
+  /** Stable key other questions' `showIf` refer to. Defaults to "<section>-<n>". */
+  id?: string;
+  /** Answer type. Default "yesno" (Yes/No/N.A.) — the only type that's scored. */
+  type?: ResponseType;
+  /** Unit shown after a number answer ("psi", "in"). */
+  unit?: string;
+  /** Must be answered (while it applies) before the inspection can be finalized. */
+  required?: boolean;
+  /** Only ask this question when an earlier yes/no question has this answer. */
+  showIf?: { item: string; equals: YesNoAnswer };
 };
 
 export type TemplateSection = {

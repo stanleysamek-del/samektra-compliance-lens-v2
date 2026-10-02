@@ -8,7 +8,7 @@ import {
   deleteChecklistTemplate,
   saveChecklistTemplate,
 } from "@/app/actions/checklist";
-import type { TemplateSection } from "@/lib/checklists/builtin-templates";
+import type { TemplateItem, TemplateSection } from "@/lib/checklists/builtin-templates";
 
 import { confirmDialog } from "@/components/ui/confirm-dialog";
 /**
@@ -35,17 +35,50 @@ type Props = {
 };
 
 const EMPTY_SECTIONS: TemplateSection[] = [
-  { code: "A1", title: "", items: [{ q: "" }] },
+  { code: "A1", title: "", items: [{ q: "", id: "k1" }] },
 ];
+
+/** Next free "k<n>" question id — ids let show-if rules point at a question. */
+function nextKey(sections: TemplateSection[]): string {
+  let max = 0;
+  for (const s of sections) for (const i of s.items) {
+    const m = /^k(\d+)$/.exec(i.id ?? "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `k${max + 1}`;
+}
+
+/** Give every question an id (older templates were saved without them). */
+function withIds(sections: TemplateSection[]): TemplateSection[] {
+  let n = 0;
+  const used = new Set(sections.flatMap((s) => s.items.map((i) => i.id).filter(Boolean)));
+  return sections.map((s) => ({
+    ...s,
+    items: s.items.map((i) => {
+      if (i.id) return i;
+      let id: string;
+      do id = `k${++n}`; while (used.has(id));
+      used.add(id);
+      return { ...i, id };
+    }),
+  }));
+}
+
+const TYPE_LABEL: Record<NonNullable<TemplateItem["type"]>, string> = {
+  yesno: "Yes / No / N.A.",
+  text: "Text",
+  number: "Number",
+};
 
 export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [occupancy, setOccupancy] = useState(initial.occupancy);
-  const [sections, setSections] = useState<TemplateSection[]>(
-    initial.sections.length > 0 ? initial.sections : EMPTY_SECTIONS,
+  const [startSections] = useState(() =>
+    withIds(initial.sections.length > 0 ? initial.sections : EMPTY_SECTIONS),
   );
+  const [sections, setSections] = useState<TemplateSection[]>(startSections);
   const [shareWithOrg, setShareWithOrg] = useState(Boolean(orgId));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -58,7 +91,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
       name: initial.name,
       description: initial.description,
       occupancy: initial.occupancy,
-      sections: initial.sections.length > 0 ? initial.sections : EMPTY_SECTIONS,
+      sections: startSections,
       shareWithOrg: Boolean(orgId),
     }),
   );
@@ -116,6 +149,20 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
         };
       }),
     );
+    if (patch.type && patch.type !== "yesno") {
+      const id = sections[sIdx].items[iIdx].id;
+      if (id) dropRulesTo(id);
+    }
+  }
+
+  /** Remove "only ask if" rules that refer to this question. */
+  function dropRulesTo(id: string) {
+    setSections((prev) =>
+      prev.map((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.showIf?.item === id ? { ...i, showIf: undefined } : i)),
+      })),
+    );
   }
 
   async function removeSection(sIdx: number) {
@@ -150,6 +197,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
     patchSection(sIdx, {
       items: sections[sIdx].items.filter((_, j) => j !== iIdx),
     });
+    if (item.id) dropRulesTo(item.id);
   }
 
   function save() {
@@ -317,7 +365,13 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
                     onChange={(e) => patchItem(sIdx, iIdx, { q: e.target.value })}
                     rows={2}
                     className="cl-input flex-1 text-sm"
-                    placeholder="Question — phrased so 'Yes' means compliant"
+                    placeholder={
+                      (item.type ?? "yesno") === "yesno"
+                        ? "Question — phrased so 'Yes' means compliant"
+                        : item.type === "number"
+                          ? "What to measure — e.g. Extinguisher gauge pressure"
+                          : "What to record — e.g. Panel ID"
+                    }
                     aria-label={`Question ${section.code || "?"}.${iIdx + 1}`}
                   />
                   <button
@@ -341,6 +395,8 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
                     placeholder="Code ref (optional) — NFPA 80 §5.2"
                     aria-label="Code reference"
                   />
+                  {/* AI pre-fill only answers Yes / No questions. */}
+                  {(item.type ?? "yesno") === "yesno" ? (
                   <div className="flex items-center gap-1">
                     <input
                       defaultValue={(item.match ?? []).join(", ")}
@@ -359,13 +415,30 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
                       a records review.
                     </HelpTip>
                   </div>
+                  ) : null}
                 </div>
+                <QuestionOptions
+                  item={item}
+                  earlier={sections
+                    .flatMap((sec, si) =>
+                      sec.items.map((it, ii) => ({ it, label: `${sec.code || "?"}.${ii + 1}`, si, ii })),
+                    )
+                    .filter(
+                      (x) =>
+                        (x.si < sIdx || (x.si === sIdx && x.ii < iIdx)) &&
+                        (x.it.type ?? "yesno") === "yesno" &&
+                        x.it.q.trim() &&
+                        x.it.id,
+                    )
+                    .map((x) => ({ id: x.it.id!, label: `${x.label} ${x.it.q.trim().slice(0, 60)}` }))}
+                  onChange={(patch) => patchItem(sIdx, iIdx, patch)}
+                />
               </div>
             ))}
             <button
               type="button"
               onClick={() =>
-                patchSection(sIdx, { items: [...section.items, { q: "" }] })
+                patchSection(sIdx, { items: [...section.items, { q: "", id: nextKey(sections) }] })
               }
               className="cl-btn-outline self-start px-3 py-1.5 text-xs"
             >
@@ -380,7 +453,7 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
         onClick={() =>
           setSections((prev) => [
             ...prev,
-            { code: `A${prev.length + 1}`, title: "", items: [{ q: "" }] },
+            { code: `A${prev.length + 1}`, title: "", items: [{ q: "", id: nextKey(prev) }] },
           ])
         }
         className="cl-btn-outline self-start"
@@ -434,6 +507,115 @@ export function TemplateEditor({ templateId, initial, orgId, orgName }: Props) {
             </span>
           ) : null}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Answer type, unit, Required, and "only ask if" for one question.
+ * Conditions can only point at an EARLIER Yes/No question, so a template
+ * can never loop.
+ */
+function QuestionOptions({
+  item,
+  earlier,
+  onChange,
+}: {
+  item: TemplateItem;
+  earlier: Array<{ id: string; label: string }>;
+  onChange: (patch: Partial<TemplateItem>) => void;
+}) {
+  const type = item.type ?? "yesno";
+  return (
+    <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2 border-t border-[var(--rule-paper)] pt-2">
+      <label className="flex flex-col text-xs text-[var(--fg-muted)]">
+        Answer
+        <select
+          className="cl-input mt-1 w-auto text-sm"
+          value={type}
+          onChange={(e) => {
+            const next = e.target.value as NonNullable<TemplateItem["type"]>;
+            onChange({
+              type: next === "yesno" ? undefined : next,
+              unit: next === "number" ? item.unit : undefined,
+            });
+          }}
+        >
+          {(Object.keys(TYPE_LABEL) as Array<keyof typeof TYPE_LABEL>).map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {type === "number" ? (
+        <label className="flex flex-col text-xs text-[var(--fg-muted)]">
+          Unit
+          <input
+            className="cl-input mt-1 w-24 text-sm"
+            value={item.unit ?? ""}
+            maxLength={20}
+            placeholder="psi"
+            onChange={(e) => onChange({ unit: e.target.value.trim() || undefined })}
+          />
+        </label>
+      ) : null}
+      <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--ink)]">
+        <input
+          type="checkbox"
+          checked={Boolean(item.required)}
+          onChange={(e) => onChange({ required: e.target.checked || undefined })}
+        />
+        Required
+      </label>
+      <div className="flex flex-col text-xs text-[var(--fg-muted)]">
+        <span className="flex items-center gap-1">
+          Only ask if
+          <HelpTip title="Only ask if" side="bottom">
+            Show this question only when an earlier Yes / No question has a
+            given answer — e.g. ask &ldquo;Describe the damage&rdquo; only when
+            &ldquo;Door in good condition?&rdquo; is No. Questions that
+            don&apos;t apply are skipped on the inspection and the report.
+          </HelpTip>
+        </span>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <select
+            aria-label="Only ask if this question"
+            className="cl-input w-auto max-w-[16rem] text-sm"
+            value={item.showIf?.item ?? ""}
+            onChange={(e) =>
+              onChange({
+                showIf: e.target.value
+                  ? { item: e.target.value, equals: item.showIf?.equals ?? "no" }
+                  : undefined,
+              })
+            }
+          >
+            <option value="">Always ask</option>
+            {earlier.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.label}
+              </option>
+            ))}
+          </select>
+          {item.showIf ? (
+            <select
+              aria-label="has the answer"
+              className="cl-input w-auto text-sm"
+              value={item.showIf.equals}
+              onChange={(e) =>
+                onChange({
+                  showIf: { item: item.showIf!.item, equals: e.target.value as "yes" | "no" | "na" },
+                })
+              }
+            >
+              <option value="no">is No</option>
+              <option value="yes">is Yes</option>
+              <option value="na">is N.A.</option>
+            </select>
+          ) : null}
+        </div>
       </div>
     </div>
   );

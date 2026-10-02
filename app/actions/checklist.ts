@@ -75,11 +75,15 @@ export async function setChecklistAnswer(input: {
   const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
   if (locked) return { ok: false, error: locked };
 
+  // "*": includes 0034's response_type when the column exists.
   const { data: current } = await supabase
     .from("inspection_checklist_items")
-    .select("answered_by_ai, ai_confirmed, note")
+    .select("*")
     .eq("id", input.itemId)
     .maybeSingle();
+  if (current && (current.response_type ?? "yesno") !== "yesno") {
+    return { ok: false, error: "This question takes a written or numeric answer." };
+  }
 
   const patch: Record<string, unknown> = {
     answer: input.answer,
@@ -144,6 +148,58 @@ export async function saveChecklistNote(input: {
     .from("inspection_checklist_items")
     .update({ note: trimmed.length > 0 ? trimmed : null })
     .eq("id", input.itemId);
+  if (error) return { ok: false, error: error.message };
+  revalidateInspection(input.inspectionId);
+  return { ok: true };
+}
+
+/**
+ * Answer a text or number question (migration 0034). An empty value
+ * clears the answer. Numbers must parse to a finite value.
+ */
+export async function setChecklistValue(input: {
+  itemId: string;
+  inspectionId: string;
+  value: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const locked = await checkEditable(supabase, input.itemId, input.inspectionId);
+  if (locked) return { ok: false, error: locked };
+
+  const { data: item } = await supabase
+    .from("inspection_checklist_items")
+    .select("*")
+    .eq("id", input.itemId)
+    .maybeSingle();
+  const type = (item?.response_type as string | undefined) ?? "yesno";
+  if (type !== "text" && type !== "number") {
+    return { ok: false, error: "This question takes a Yes / No / N.A. answer." };
+  }
+
+  const raw = input.value.trim();
+  const patch: Record<string, unknown> = {
+    answered_by: raw ? user.id : null,
+    answered_at: raw ? new Date().toISOString() : null,
+  };
+  if (type === "text") {
+    if (raw.length > 4000) return { ok: false, error: "Keep the answer under 4,000 characters." };
+    patch.value_text = raw || null;
+  } else {
+    if (!raw) {
+      patch.value_number = null;
+    } else {
+      const n = Number(raw.replace(/,/g, ""));
+      if (!Number.isFinite(n)) return { ok: false, error: "Enter a number, e.g. 175 or 0.25." };
+      patch.value_number = n;
+    }
+  }
+
+  const { error } = await supabase.from("inspection_checklist_items").update(patch).eq("id", input.itemId);
   if (error) return { ok: false, error: error.message };
   revalidateInspection(input.inspectionId);
   return { ok: true };
@@ -315,9 +371,38 @@ function validSections(sections: unknown): sections is TemplateSection[] {
     for (const item of s.items) {
       if (typeof item?.q !== "string" || item.q.trim().length === 0) return false;
       if (item.match !== undefined && !Array.isArray(item.match)) return false;
+      if (item.type !== undefined && !["yesno", "text", "number"].includes(item.type)) return false;
+      if (item.required !== undefined && typeof item.required !== "boolean") return false;
+      if (item.unit !== undefined && (typeof item.unit !== "string" || item.unit.length > 20)) return false;
+      if (item.id !== undefined && (typeof item.id !== "string" || item.id.length > 60)) return false;
     }
   }
   return true;
+}
+
+/**
+ * Show-if rules must point at an EARLIER yes/no question of the same
+ * template (so they can't loop), with a Yes/No/N.A. value.
+ */
+function showIfProblem(sections: TemplateSection[]): string | null {
+  const earlier = new Map<string, string>(); // id -> type
+  const ids = new Set<string>();
+  for (const s of sections) {
+    for (const item of s.items) {
+      if (item.id) {
+        if (ids.has(item.id)) return "Two questions share the same id.";
+        ids.add(item.id);
+      }
+      if (item.showIf) {
+        const target = earlier.get(item.showIf.item);
+        if (!target) return `"${item.q.slice(0, 60)}" depends on a question that isn't earlier in the template.`;
+        if (target !== "yesno") return `"${item.q.slice(0, 60)}" can only depend on a Yes / No / N.A. question.`;
+        if (!["yes", "no", "na"].includes(item.showIf.equals)) return "A condition needs Yes, No or N.A.";
+      }
+      if (item.id) earlier.set(item.id, item.type ?? "yesno");
+    }
+  }
+  return null;
 }
 
 export async function saveChecklistTemplate(input: {
@@ -342,6 +427,8 @@ export async function saveChecklistTemplate(input: {
       error: "Every section needs a code, a title, and at least one question.",
     };
   }
+  const logicProblem = showIfProblem(input.sections);
+  if (logicProblem) return { ok: false, error: logicProblem };
   const totalItems = input.sections.reduce((n, s) => n + s.items.length, 0);
   if (totalItems > 300) {
     return { ok: false, error: "Templates are capped at 300 questions." };
