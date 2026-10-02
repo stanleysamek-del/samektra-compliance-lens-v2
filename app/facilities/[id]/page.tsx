@@ -216,9 +216,14 @@ export default async function FacilityPage({
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--fg-muted)]">
               Inspections here · {(inspections ?? []).length}
             </h2>
-            <Link href="/inspections/new" className="text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline">
-              New inspection →
-            </Link>
+            {canWrite ? (
+              <Link
+                href={`/inspections/new?facility=${encodeURIComponent(facility.id)}`}
+                className="text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                New inspection here →
+              </Link>
+            ) : null}
           </div>
           {inspections && inspections.length > 0 ? (
             <Card padded={false}>

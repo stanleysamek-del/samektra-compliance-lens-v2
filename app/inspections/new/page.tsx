@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { createClient } from "@/lib/supabase/server";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
+import { EmptyState } from "@/components/ui/empty-state";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { createInspection } from "./actions";
@@ -29,6 +31,28 @@ export default async function NewInspectionPage({
 
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
+
+  const currentOrg = await getCurrentOrg();
+  if (!canCreateIn(currentOrg)) {
+    return (
+      <AppShell
+        user={{ fullName: profile.full_name, organization: profile.organization, email: user.email ?? null }}
+      >
+        <EmptyState
+          title="View-only access"
+          action={
+            <Link href="/inspections" className="cl-btn-outline">
+              Back to Home
+            </Link>
+          }
+        >
+          You&apos;re a viewer in {currentOrg?.name ?? "this workspace"}, so you can open and
+          read inspections but not start them. Ask a team admin for member access, or switch
+          to your personal workspace.
+        </EmptyState>
+      </AppShell>
+    );
+  }
 
   // Checklist templates: built-ins from code + this user's/org's customs.
   const { data: customTemplates } = await supabase

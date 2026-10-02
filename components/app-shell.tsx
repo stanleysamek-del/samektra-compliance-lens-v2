@@ -12,6 +12,7 @@ import { ConfirmHost } from "@/components/ui/confirm-dialog";
 import { SectionTabs } from "@/components/section-tabs";
 import { MoreSheet } from "@/components/more-sheet";
 import { NAV_SECTIONS, START_INSPECTION_HREF, sectionFor, type NavSection } from "@/lib/nav";
+import { useCanCreate } from "@/lib/org/workspace-client";
 
 /* =====================================================================
  * AppShell
@@ -175,9 +176,11 @@ export function AppShell({ user, children }: Props) {
 function SidebarNav() {
   const pathname = usePathname();
   const current = sectionFor(pathname);
+  const canCreate = useCanCreate();
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5">
-      {/* The primary action, above the sections. */}
+      {/* The primary action, above the sections (not for viewers). */}
+      {canCreate ? (
       <Link
         href={START_INSPECTION_HREF}
         className="mb-4 flex min-h-11 items-center justify-center gap-2 rounded px-3 text-sm font-semibold transition hover:brightness-95"
@@ -186,6 +189,7 @@ function SidebarNav() {
         <PlusGlyph />
         Start inspection
       </Link>
+      ) : null}
       {NAV_SECTIONS.map((section) => {
         const active = current?.key === section.key && pathname !== START_INSPECTION_HREF;
         return (
@@ -225,6 +229,7 @@ function BottomTabBar() {
   const primary = NAV_SECTIONS.filter((s) => daily.includes(s.key));
   const more = NAV_SECTIONS.filter((s) => !daily.includes(s.key));
   const moreActive = more.some((s) => s.key === current?.key);
+  const canCreate = useCanCreate();
 
   const tab = (section: NavSection) => {
     const active = current?.key === section.key && pathname !== START_INSPECTION_HREF;
@@ -264,6 +269,8 @@ function BottomTabBar() {
         {tab(primary[0])}
         {tab(primary[1])}
         <div className="flex justify-center">
+          {/* Viewers: an empty slot keeps the other tabs where thumbs expect them. */}
+          {canCreate ? (
           <Link
             href={START_INSPECTION_HREF}
             aria-label="Start inspection"
@@ -277,6 +284,7 @@ function BottomTabBar() {
           >
             <PlusGlyph size={24} />
           </Link>
+          ) : null}
         </div>
         {tab(primary[2])}
         <MoreSheet sections={more} active={moreActive} icons={Object.fromEntries(more.map((s) => [s.key, <SectionIcon key={s.key} section={s.key} />]))}>

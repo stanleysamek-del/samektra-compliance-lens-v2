@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardTitle } from "@/components/card";
 import { BUILTIN_TEMPLATES } from "@/lib/checklists/builtin-templates";
@@ -17,6 +18,7 @@ export default async function TemplatesPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/templates");
+  const canCreate = canCreateIn(await getCurrentOrg());
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -60,9 +62,11 @@ export default async function TemplatesPage() {
               files findings under the matching questions as photos come in.
             </p>
           </div>
-          <Link href="/templates/new" className="cl-btn-accent">
-            + New template
-          </Link>
+          {canCreate ? (
+            <Link href="/templates/new" className="cl-btn-accent">
+              + New template
+            </Link>
+          ) : null}
         </div>
 
         <section className="flex flex-col gap-3">
@@ -85,12 +89,14 @@ export default async function TemplatesPage() {
                   {t.sections.length} sections ·{" "}
                   {t.sections.reduce((n, s) => n + s.items.length, 0)} questions
                 </p>
-                <Link
-                  href={`/templates/new?from=${encodeURIComponent(t.id)}`}
-                  className="cl-btn-outline mt-3 inline-block text-sm"
-                >
-                  Duplicate & customize
-                </Link>
+                {canCreate ? (
+                  <Link
+                    href={`/templates/new?from=${encodeURIComponent(t.id)}`}
+                    className="cl-btn-outline mt-3 inline-block text-sm"
+                  >
+                    Duplicate & customize
+                  </Link>
+                ) : null}
               </Card>
             ))}
           </div>

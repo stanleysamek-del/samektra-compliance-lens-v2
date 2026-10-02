@@ -34,6 +34,11 @@ export async function createInspection(formData: FormData) {
   // If the user is currently acting inside a team, scope the new inspection
   // to that org so every team member sees it. Personal workspace = null.
   const currentOrg = await getCurrentOrg();
+  if (currentOrg?.role === "viewer") {
+    redirect(
+      `/inspections/new?error=${encodeURIComponent("You have view-only access in this workspace.")}`,
+    );
+  }
 
   // Facility link (migration 0025). "" → none (legacy behavior), "__new__"
   // → create a facility from the typed name, <uuid> → link + prefill the

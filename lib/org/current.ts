@@ -82,3 +82,14 @@ export async function listMyOrganizations(): Promise<
       r !== null,
     );
 }
+
+/**
+ * Can the user create things (inspections, schedules, equipment,
+ * facilities, templates) in the current workspace? Personal workspace:
+ * yes. Team workspace: members and admins; viewers are read-only.
+ * The database enforces the same rule — this only hides buttons that
+ * would fail.
+ */
+export function canCreateIn(org: CurrentOrg | null): boolean {
+  return !org || org.role !== "viewer";
+}

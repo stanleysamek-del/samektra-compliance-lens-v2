@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { createSchedule, startSchedule, toggleSchedule } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
 export default async function SchedulesPage({
@@ -24,6 +25,8 @@ export default async function SchedulesPage({
     .limit(100);
   const params = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
+  // Viewers can see schedules but not create, start or pause them.
+  const canCreate = canCreateIn(await getCurrentOrg());
   return (
     <AppShell
       user={{
@@ -45,57 +48,63 @@ export default async function SchedulesPage({
               "Schedules couldn't be loaded. Refresh the page — your inspections are unaffected."}
           </p>
         )}
+        {canCreate ? (
+          <>
         <form
-          action={createSchedule}
-          className="grid gap-3 rounded-xl border p-5 sm:grid-cols-2"
-        >
-          <label>
-            Schedule name
-            <input
-              name="name"
-              required
-              maxLength={160}
-              className="cl-input"
-              placeholder="East wing monthly round"
-            />
-          </label>
-          <label>
-            Use questions from
-            <select name="source_inspection_id" required className="cl-input">
-              {(sources ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.facility_name}{s.location ? ` · ${s.location}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Repeat
-            <select name="cadence" className="cl-input">
-              {["daily", "weekly", "monthly", "quarterly", "annual"].map(
-                (c) => (
-                  <option key={c}>{c}</option>
-                ),
-              )}
-            </select>
-          </label>
-          <label>
-            First due date
-            <input
-              name="next_due"
-              type="date"
-              required
-              defaultValue={today}
-              className="cl-input"
-            />
-          </label>
-          <SubmitButton
-            disabled={!!error || !sources?.length}
-            pendingLabel="Saving…"
-          >
-            Create schedule
-          </SubmitButton>
-        </form>
+              action={createSchedule}
+              className="grid gap-3 rounded-xl border p-5 sm:grid-cols-2"
+            >
+              <label>
+                Schedule name
+                <input
+                  name="name"
+                  required
+                  maxLength={160}
+                  className="cl-input"
+                  placeholder="East wing monthly round"
+                />
+              </label>
+              <label>
+                Use questions from
+                <select name="source_inspection_id" required className="cl-input">
+                  {(sources ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.facility_name}{s.location ? ` · ${s.location}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Repeat
+                <select name="cadence" className="cl-input">
+                  {["daily", "weekly", "monthly", "quarterly", "annual"].map(
+                    (c) => (
+                      <option key={c}>{c}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                First due date
+                <input
+                  name="next_due"
+                  type="date"
+                  required
+                  defaultValue={today}
+                  className="cl-input"
+                />
+              </label>
+              <SubmitButton
+                disabled={!!error || !sources?.length}
+                pendingLabel="Saving…"
+              >
+                Create schedule
+              </SubmitButton>
+            </form>
+          </>
+        ) : (
+          <p className="text-sm text-[var(--fg-muted)]">You have view-only access in this workspace — ask a team admin for member access to create.</p>
+        )}
         <p className="text-sm">
           Choose frequencies required for your facility. Dates use UTC. Overdue
           occurrences stay visible until started; the app does not invent
@@ -120,6 +129,7 @@ export default async function SchedulesPage({
                         : "Upcoming"}
                 </p>
               </div>
+              {canCreate ? (
               <div className="flex gap-3">
                 <form action={startSchedule}>
                   <input type="hidden" name="id" value={s.id} />
@@ -141,6 +151,7 @@ export default async function SchedulesPage({
                   <SubmitButton>{s.enabled ? "Pause" : "Resume"}</SubmitButton>
                 </form>
               </div>
+              ) : null}
             </li>
           ))}
         </ul>

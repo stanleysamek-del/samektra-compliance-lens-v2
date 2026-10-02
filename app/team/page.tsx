@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { TeamNav } from "@/components/team-nav";
 import { SubmitButton } from "@/components/submit-button";
-import { getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
+import { canCreateIn, getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import { createOrganization, switchCurrentOrg } from "./actions";
 
 import { SeverityBadge } from "@/components/severity-badge";
@@ -350,9 +350,11 @@ export default async function TeamDashboardPage({
                   </SubmitButton>
                 </form>
               ) : null}
-              <Link href="/inspections/new" className="cl-btn-accent shrink-0">
-                + New
-              </Link>
+              {canCreateIn(org) ? (
+                <Link href="/inspections/new" className="cl-btn-accent shrink-0">
+                  + New
+                </Link>
+              ) : null}
             </div>
           </div>
 

@@ -10,7 +10,7 @@ import { SeverityBadge } from "@/components/severity-badge";
 import { SubmitButton } from "@/components/submit-button";
 import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
-import { getCurrentOrg } from "@/lib/org/current";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { scopeToWorkspace } from "@/lib/org/scope";
 import { startSchedule } from "@/app/schedules/actions";
 
@@ -124,6 +124,8 @@ export default async function InspectionsPage() {
   // matching History and the campus dashboard.
   const currentOrg = await getCurrentOrg();
   const orgId = currentOrg?.id ?? null;
+  // Viewers see everything but get no create/start controls.
+  const canCreate = canCreateIn(currentOrg);
 
   // Fire the rest of the queries in parallel and let any of them fail open.
   const [
@@ -447,11 +449,15 @@ export default async function InspectionsPage() {
                   : ""}
               </p>
             </div>
-            <Link href="/inspections/new" className="cl-btn-accent">
-              + Start inspection
-            </Link>
+            {canCreate ? (
+              <Link href="/inspections/new" className="cl-btn-accent">
+                + Start inspection
+              </Link>
+            ) : (
+              <span className="text-xs text-[var(--fg-muted)]">View-only access</span>
+            )}
           </div>
-          {quickStarts.length > 0 ? (
+          {canCreate && quickStarts.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-[var(--fg-muted)]">Start again</span>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -495,7 +501,7 @@ export default async function InspectionsPage() {
                           <span className={due.overdue ? "font-semibold text-[var(--danger)]" : ""}>{due.text}</span>
                         </p>
                       </div>
-                      {startable ? (
+                      {startable && canCreate ? (
                         <form action={startSchedule}>
                           <input type="hidden" name="id" value={s.id} />
                           <input type="hidden" name="due" value={s.next_due} />
@@ -746,9 +752,11 @@ export default async function InspectionsPage() {
                   <EmptyStep n={3} title="Sign & export" body="Review, sign, finalize. PDF, CAP, LSRA, ILSM — generated for you." />
                 </ol>
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                  <Link href="/inspections/new" className="cl-btn-accent">
-                    + Start your first inspection
-                  </Link>
+                  {canCreate ? (
+                    <Link href="/inspections/new" className="cl-btn-accent">
+                      + Start your first inspection
+                    </Link>
+                  ) : null}
                   <Link href="/welcome" className="cl-btn-outline">
                     Open the guide
                   </Link>

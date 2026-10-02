@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentOrg } from "@/lib/org/current";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardTitle } from "@/components/card";
 import { NewFacilityToggle } from "./new-facility-toggle";
@@ -75,7 +75,7 @@ export default async function FacilitiesPage() {
               plan once; pin findings on every walk.
             </p>
           </div>
-          <NewFacilityToggle orgName={currentOrg?.name ?? null} />
+          {canCreateIn(currentOrg) ? <NewFacilityToggle orgName={currentOrg?.name ?? null} /> : null}
         </div>
 
         {facErr ? (

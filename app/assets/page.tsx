@@ -4,6 +4,7 @@ import { BarcodeScanner } from "@/components/assets/barcode-scanner";
 import { ReportImporter } from "@/components/assets/report-importer";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { ASSET_TYPES, assetTypeLabel } from "@/lib/assets";
 import { createAsset } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
@@ -23,6 +24,8 @@ export default async function AssetsPage({
   } = await db.auth.getUser();
   if (!user) redirect("/login");
   const params = await searchParams;
+  // Viewers can look equipment up but not register or import it.
+  const canCreate = canCreateIn(await getCurrentOrg());
   let query = db
     .from("assets")
     .select(
@@ -69,10 +72,12 @@ export default async function AssetsPage({
           facilities={facilities ?? []}
           initialFacility={params.facility}
         />
-        <ReportImporter
-          facilities={facilities ?? []}
-          initialFacility={params.facility}
-        />
+        {canCreate ? (
+          <ReportImporter
+            facilities={facilities ?? []}
+            initialFacility={params.facility}
+          />
+        ) : null}
         <form className="flex flex-wrap gap-2">
           <select
             name="facility"
@@ -99,6 +104,7 @@ export default async function AssetsPage({
             Clear
           </Link>
         </form>
+        {canCreate ? (
         <details
           open={params.scan === "1" && !assets?.length}
           className="rounded-xl border p-5"
@@ -164,6 +170,7 @@ export default async function AssetsPage({
             </SubmitButton>
           </form>
         </details>
+        ) : null}
         <ul className="space-y-3">
           {(assets ?? []).map((a) => (
             <li key={a.id} className="rounded-xl border p-4">

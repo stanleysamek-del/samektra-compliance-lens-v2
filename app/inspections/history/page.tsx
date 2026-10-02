@@ -6,7 +6,7 @@ import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
 import { FoldersManager, type FolderRow } from "@/components/folders-manager";
 import { InspectionMoveMenu } from "@/components/inspection-move-menu";
-import { getCurrentOrg } from "@/lib/org/current";
+import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { scopeToWorkspace } from "@/lib/org/scope";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -240,9 +240,11 @@ export default async function HistoryPage({
               {totals.all} total · {totals.in_progress} in progress
             </p>
           </div>
-          <Link href="/inspections/new" className="cl-btn-accent">
-            New
-          </Link>
+          {canCreateIn(currentOrg) ? (
+            <Link href="/inspections/new" className="cl-btn-accent">
+              New
+            </Link>
+          ) : null}
         </div>
 
         {/* Search + Sort */}

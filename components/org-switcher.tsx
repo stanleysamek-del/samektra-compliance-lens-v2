@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { switchCurrentOrg } from "@/app/team/actions";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { HelpTip } from "@/components/help-tip";
+import { useWorkspace } from "@/lib/org/workspace-client";
 
 type Role = "admin" | "member" | "viewer";
 type Org = { id: string; name: string; role: Role };
@@ -24,24 +25,10 @@ type Ctx = {
  * dropdown listing every team plus the personal option.
  */
 export function OrgSwitcher() {
-  const [ctx, setCtx] = useState<Ctx | null>(null);
+  const ctx: Ctx | null = useWorkspace();
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/team/context")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled && data) setCtx(data as Ctx);
-      })
-      .catch(() => {
-        /* ignore — switcher just stays hidden on error */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   if (!ctx) return null;
 
