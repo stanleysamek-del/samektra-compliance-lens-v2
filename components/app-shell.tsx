@@ -15,6 +15,7 @@ import { MoreSheet } from "@/components/more-sheet";
 import { NAV_SECTIONS, START_INSPECTION_HREF, sectionFor, type NavSection } from "@/lib/nav";
 import { useCanCreate } from "@/lib/org/workspace-client";
 
+import { Building2, ChartColumn, ClipboardCheck, Ellipsis, Flag, House, LogOut, Plus, Settings } from "lucide-react";
 /* =====================================================================
  * AppShell
  *
@@ -346,105 +347,34 @@ function UserAvatar({ name }: { name: string }) {
   );
 }
 
-/* ===== Icons (inline SVG, 22px) — one distinct glyph per section ===== */
+/* ===== Icons (lucide-react) — one distinct glyph per section ===== */
 
 function SectionIcon({ section }: { section: NavSection["key"] }) {
-  const common = {
-    width: 22,
-    height: 22,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
+  const props = { size: 22, strokeWidth: 1.7, "aria-hidden": true } as const;
   switch (section) {
     case "home":
-      return (
-        <svg {...common}>
-          <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-8.5Z" />
-        </svg>
-      );
+      return <House {...props} />;
     case "inspections":
-      // Clipboard with a check
-      return (
-        <svg {...common}>
-          <rect x="5" y="4.5" width="14" height="16.5" rx="1.5" />
-          <path d="M9 4.5V3h6v1.5M8.5 13l2.5 2.5L16 10.5" />
-        </svg>
-      );
+      return <ClipboardCheck {...props} />;
     case "actions":
-      // Flag
-      return (
-        <svg {...common}>
-          <path d="M5 21V4m0 0h11l-2 4 2 4H5" />
-        </svg>
-      );
+      return <Flag {...props} />;
     case "assets":
-      // Building
-      return (
-        <svg {...common}>
-          <path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 10h4a1 1 0 0 1 1 1v10M3 21h18M8 8h3M8 12h3M8 16h3" />
-        </svg>
-      );
+      return <Building2 {...props} />;
     case "analytics":
-      // Bar chart
-      return (
-        <svg {...common}>
-          <path d="M4 20h16M7 16v-5M12 16V7M17 16v-8" />
-        </svg>
-      );
+      return <ChartColumn {...props} />;
     case "settings":
-      // Gear
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" />
-        </svg>
-      );
+      return <Settings {...props} />;
   }
 }
 
 function MoreIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="5" cy="12" r="1.8" />
-      <circle cx="12" cy="12" r="1.8" />
-      <circle cx="19" cy="12" r="1.8" />
-    </svg>
-  );
+  return <Ellipsis size={22} aria-hidden />;
 }
 
 function PlusGlyph({ size = 14 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
+  return <Plus size={size} strokeWidth={2.5} aria-hidden />;
 }
 
 function SignOutIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path
-        d="m15 8 4 4-4 4M19 12H9"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <LogOut size={20} strokeWidth={1.7} aria-hidden />;
 }

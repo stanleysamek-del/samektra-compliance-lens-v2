@@ -5,6 +5,7 @@ import { deleteInspection } from "@/app/inspections/[id]/actions";
 import { Menu, MenuItem, MenuLink, MenuSeparator } from "@/components/ui/menu";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
 
+import { Ellipsis } from "lucide-react";
 type Props = {
   inspectionId: string;
   facilityName: string;
@@ -35,11 +36,7 @@ export function InspectionRowMenu({ inspectionId, facilityName }: Props) {
         width="w-48"
         triggerClassName="flex h-11 w-11 items-center justify-center rounded text-[var(--fg-muted)] transition hover:bg-[var(--paper-3)] hover:text-[var(--fg)]"
         trigger={
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="5" cy="12" r="1.6" fill="currentColor" />
-            <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-            <circle cx="19" cy="12" r="1.6" fill="currentColor" />
-          </svg>
+          <Ellipsis size={18} aria-hidden />
         }
       >
         <MenuLink href={`/inspections/${inspectionId}`}>Open</MenuLink>

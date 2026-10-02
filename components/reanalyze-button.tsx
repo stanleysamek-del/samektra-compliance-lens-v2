@@ -6,6 +6,7 @@ import { fetchWithRetry } from "@/lib/retry";
 import { showToast } from "@/components/toaster";
 
 import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { Sparkles } from "lucide-react";
 type Props = {
   photoId: string;
   /** Default = Sonnet ('deep'). The button on the photo detail page is the
@@ -109,16 +110,7 @@ export function ReanalyzeButton({ photoId, tier = "deep" }: Props) {
 }
 
 function SparkIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+  return <Sparkles size={16} strokeWidth={1.7} aria-hidden />;
 }
 
 function Spinner() {

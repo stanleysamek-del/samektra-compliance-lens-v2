@@ -6,6 +6,7 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { HelpTip } from "@/components/help-tip";
 import { useWorkspace } from "@/lib/org/workspace-client";
 
+import { ChevronDown, User, Users } from "lucide-react";
 type Role = "admin" | "member" | "viewer";
 type Org = { id: string; name: string; role: Role };
 
@@ -121,26 +122,11 @@ export function OrgSwitcher() {
 }
 
 function TeamGlyph() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-      <circle cx="9" cy="9" r="3" />
-      <circle cx="17" cy="10" r="2.5" />
-      <path d="M3 19a6 6 0 0 1 12 0M14 19a4 4 0 0 1 7 0" />
-    </svg>
-  );
+  return <Users size={13} strokeWidth={1.8} aria-hidden />;
 }
 function PersonGlyph() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-    </svg>
-  );
+  return <User size={13} strokeWidth={1.8} aria-hidden />;
 }
 function CaretIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
+  return <ChevronDown size={12} strokeWidth={2} aria-hidden />;
 }

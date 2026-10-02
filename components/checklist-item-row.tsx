@@ -14,6 +14,7 @@ import { showToast } from "@/components/toaster";
 import { uploadInspectionPhoto } from "@/lib/upload-inspection-photo";
 import { createChecklistFinding, linkChecklistPhoto } from "@/app/actions/checklist";
 
+import { Camera, Flag, Pencil } from "lucide-react";
 /**
  * One checklist question, SafetyCulture-style: the answer, then the
  * evidence for it in the same place — photo, note, and a corrective
@@ -652,24 +653,11 @@ function CodeRef({ codeRef }: { codeRef: string }) {
 }
 
 function CameraGlyph() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
-      <circle cx="12" cy="13.5" r="3.5" />
-    </svg>
-  );
+  return <Camera size={16} strokeWidth={1.8} />;
 }
 function NoteGlyph() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 20h4L19 9l-4-4L4 16v4Z" />
-    </svg>
-  );
+  return <Pencil size={16} strokeWidth={1.8} />;
 }
 function FlagGlyph() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 21V4m0 0h11l-2 4 2 4H5" />
-    </svg>
-  );
+  return <Flag size={16} strokeWidth={1.8} />;
 }

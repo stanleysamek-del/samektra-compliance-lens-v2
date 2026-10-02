@@ -7,6 +7,7 @@ import { HelpTip } from "@/components/help-tip";
 
 import { SeverityBadge } from "@/components/severity-badge";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { Ellipsis } from "lucide-react";
 export type CompactFinding = {
   id: string;
   title: string;
@@ -264,11 +265,7 @@ function FindingRowMenu({
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)]/15 transition hover:bg-[var(--accent)]/30"
         style={{ color: "#ffffff" }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff" aria-hidden>
-          <circle cx="5" cy="12" r="2.5" />
-          <circle cx="12" cy="12" r="2.5" />
-          <circle cx="19" cy="12" r="2.5" />
-        </svg>
+        <Ellipsis size={20} color="#ffffff" strokeWidth={2.5} aria-hidden />
       </button>
 
       {open && pos ? (

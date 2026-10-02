@@ -19,6 +19,7 @@ import { PlaceOnPlanButton } from "@/components/plans/place-on-plan-button";
 
 import { SeverityBadge } from "@/components/severity-badge";
 import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { ThumbsDown, ThumbsUp } from "lucide-react";
 /** Everything "Place on plan" needs; the photo page passes it. */
 export type FindingPlanContext = {
   facilityId: string | null;
@@ -495,39 +496,9 @@ function Field({
 }
 
 function ThumbsUpIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3Z" />
-      <path d="M7 11 11 3a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 17.5 19H7" />
-    </svg>
-  );
+  return <ThumbsUp size={16} strokeWidth={1.7} fill={filled ? "currentColor" : "none"} aria-hidden />;
 }
 
 function ThumbsDownIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M17 13V4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3Z" />
-      <path d="M17 13 13 21a2 2 0 0 1-2-2v-4H5.5a2 2 0 0 1-2-2.3l1-6A2 2 0 0 1 6.5 5H17" />
-    </svg>
-  );
+  return <ThumbsDown size={16} strokeWidth={1.7} fill={filled ? "currentColor" : "none"} aria-hidden />;
 }

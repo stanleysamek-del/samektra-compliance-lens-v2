@@ -8,6 +8,7 @@ import { showToast } from "@/components/toaster";
 import { uploadInspectionPhoto } from "@/lib/upload-inspection-photo";
 import { formatDuration } from "@/lib/format-duration";
 
+import { Camera, Images } from "lucide-react";
 type Props = {
   inspectionId: string;
   /** Workspace has an active AI plan — AI analysis starts switched on. */
@@ -843,21 +844,10 @@ function QueueRow({
 }
 
 function CameraIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-      <circle cx="12" cy="13" r="3.5" stroke="currentColor" strokeWidth="1.6"/>
-    </svg>
-  );
+  return <Camera size={18} strokeWidth={1.7} aria-hidden />;
 }
 function LibraryIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6"/>
-      <path d="m6 16 4-4 3 3 2-2 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-      <circle cx="9" cy="10" r="1.2" fill="currentColor"/>
-    </svg>
-  );
+  return <Images size={18} strokeWidth={1.7} aria-hidden />;
 }
 function Spinner({ small = false, dark = false }: { small?: boolean; dark?: boolean }) {
   const size = small ? 14 : 22;

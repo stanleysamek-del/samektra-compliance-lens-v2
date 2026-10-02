@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { createLearnedRule } from "@/app/team/rules/actions";
 
+import { Brain } from "lucide-react";
 type Props = {
   /** Suggested rule text to pre-fill the textarea. Usually the
    *  inspector's hint that triggered the correction. */
@@ -127,21 +128,5 @@ export function TeachChipButton({
 }
 
 function BrainIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 4a4 4 0 0 0-4 4v.5a3.5 3.5 0 0 0-2 6.25V18a2 2 0 0 0 2 2h2v-3" />
-      <path d="M12 4a4 4 0 0 1 4 4v.5a3.5 3.5 0 0 1 2 6.25V18a2 2 0 0 1-2 2h-2v-3" />
-      <path d="M12 4v12" />
-    </svg>
-  );
+  return <Brain size={12} strokeWidth={1.8} aria-hidden />;
 }

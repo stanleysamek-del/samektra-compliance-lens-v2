@@ -9,6 +9,7 @@ import { canCreateIn, getCurrentOrg, listMyOrganizations } from "@/lib/org/curre
 import { createOrganization, switchCurrentOrg } from "./actions";
 
 import { SeverityBadge } from "@/components/severity-badge";
+import { CircleCheck, ClipboardList, Folder, ListTodo, ShieldCheck } from "lucide-react";
 type Severity = "High" | "Medium" | "Low";
 
 export default async function TeamDashboardPage({
@@ -723,43 +724,19 @@ function SummaryTile({
  * 16px stroke-only line icons that pick up the text color of the
  * surrounding wrapper (so we can tint the wrapper per-tile). */
 function InspectionsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <path d="M8 9h8M8 13h8M8 17h5" />
-    </svg>
-  );
+  return <ClipboardList size={16} strokeWidth={1.7} aria-hidden />;
 }
 function FindingsIconSm() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 3 3 8v6c0 5 4 8 9 9 5-1 9-4 9-9V8l-9-5Z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  );
+  return <ShieldCheck size={16} strokeWidth={1.7} aria-hidden />;
 }
 function PunchListIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="4" y="3" width="16" height="18" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
-    </svg>
-  );
+  return <ListTodo size={16} strokeWidth={1.7} aria-hidden />;
 }
 function CompletionIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <path d="m8 12 3 3 5-6" />
-    </svg>
-  );
+  return <CircleCheck size={16} strokeWidth={1.7} aria-hidden />;
 }
 function FolderIconSm() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-    </svg>
-  );
+  return <Folder size={14} strokeWidth={1.8} aria-hidden />;
 }
 
 function SevPill({

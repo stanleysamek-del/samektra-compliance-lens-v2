@@ -9,6 +9,7 @@ import {
 } from "@/app/inspections/[id]/actions";
 import type { NotVisibleItem } from "@/components/not-visible-checklist";
 
+import { ChevronRight } from "lucide-react";
 type Props = {
   inspectionId: string;
   photoId: string;
@@ -359,22 +360,14 @@ function CompactRow({
 
 function Caret({ expanded }: { expanded: boolean }) {
   return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <ChevronRight
+      size={12}
+      strokeWidth={2.5}
       aria-hidden
       style={{
         transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
         transition: "transform 0.15s ease",
       }}
-    >
-      <path d="m9 6 6 6-6 6" />
-    </svg>
+    />
   );
 }

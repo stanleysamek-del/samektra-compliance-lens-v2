@@ -7,6 +7,7 @@ import { showToast } from "@/components/toaster";
 import { REANALYZE_CONFIRM } from "@/components/reanalyze-button";
 
 import { confirmDialog } from "@/components/ui/confirm-dialog";
+import { Sparkles } from "lucide-react";
 // Centralized retry config for this flow — all three call paths
 // (deep-questions, reanalyze, reanalyze-with-observation) hit the
 // AI which can blip with 502/504 under load.
@@ -337,16 +338,7 @@ export function DeepReanalyzeFlow({ photoId }: Props) {
 }
 
 function SparkIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+  return <Sparkles size={16} strokeWidth={1.7} aria-hidden />;
 }
 
 function Spinner() {

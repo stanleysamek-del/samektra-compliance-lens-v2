@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import { Sun } from "lucide-react";
 /**
  * ☀ High-sun mode: maximum contrast for outdoor glare (tokens in
  * globals.css under [data-contrast="high"]). A per-device preference in
@@ -59,10 +60,7 @@ export function ContrastToggle() {
           : "border-[var(--rule-strong)] bg-[var(--bg-elevated)] text-[var(--fg-muted)] hover:border-[var(--primary)] hover:text-[var(--fg)]"
       }`}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-        <circle cx="12" cy="12" r="4" fill={high ? "currentColor" : "none"} />
-        <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" />
-      </svg>
+      <Sun size={20} strokeWidth={1.8} fill={high ? "currentColor" : "none"} aria-hidden />
     </button>
   );
 }

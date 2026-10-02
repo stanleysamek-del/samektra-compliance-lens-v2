@@ -10,6 +10,7 @@ import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
 import { scopeToWorkspace } from "@/lib/org/scope";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { Search } from "lucide-react";
 type Sort = "newest" | "oldest" | "name" | "facility-date";
 type StatusFilter = "all" | "in_progress" | "completed" | "archived";
 
@@ -257,10 +258,7 @@ export default async function HistoryPage({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative flex-1">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-subtle)]">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.6"/>
-                    <path d="m20 20-3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                  </svg>
+                  <Search size={16} strokeWidth={1.7} aria-hidden />
                 </span>
                 <input
                   name="q"

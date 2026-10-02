@@ -9,6 +9,7 @@ import {
 import { showToast } from "@/components/toaster";
 import { severityColor, type Severity } from "@/lib/severity";
 
+import { Circle, MousePointer2, MoveUpRight, Square, Type, X } from "lucide-react";
 /* =====================================================================
  *  Unified photo viewer + annotation editor.
  *
@@ -696,14 +697,7 @@ export function PhotoEditor({
             aria-label="Close (cancels unsaved changes)"
             className="flex h-9 w-9 items-center justify-center text-white/70 transition hover:bg-white/10 hover:text-white"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="m6 6 12 12M6 18 18 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
+            <X size={22} strokeWidth={2} aria-hidden />
           </button>
         </header>
       ) : null}
@@ -1397,37 +1391,17 @@ function ResizeHandlesOverlay({ s }: { s: EditableShape }) {
 }
 
 function SelectIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="m4 4 6 16 2-6 6-2L4 4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    </svg>
-  );
+  return <MousePointer2 size={16} strokeWidth={1.8} aria-hidden />;
 }
 function RectIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+  return <Square size={16} strokeWidth={1.8} aria-hidden />;
 }
 function CircleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+  return <Circle size={16} strokeWidth={1.8} aria-hidden />;
 }
 function ArrowIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 19 19 5M19 5h-7M19 5v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <MoveUpRight size={16} strokeWidth={1.8} aria-hidden />;
 }
 function TextIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 6h14M12 6v14M9 20h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
+  return <Type size={16} strokeWidth={1.8} aria-hidden />;
 }
