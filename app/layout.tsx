@@ -75,7 +75,18 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      // The script below sets data-contrast before React hydrates.
+      suppressHydrationWarning
     >
+      <head>
+        {/* High-sun mode (☀ in the header) is a per-device setting. Apply it
+            before first paint so the page never flashes the normal theme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var c=localStorage.getItem("cl-contrast");if(c==="high"||c==="normal")document.documentElement.dataset.contrast=c}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <ServiceStatusBanner />
         {children}

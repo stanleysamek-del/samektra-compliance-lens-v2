@@ -7,6 +7,7 @@ import { ScrollToTop } from "@/components/scroll-to-top";
 import { SessionGuard } from "@/components/session-guard";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { HelpDrawer } from "@/components/help-drawer";
+import { ContrastToggle } from "@/components/contrast-toggle";
 import { Toaster } from "@/components/toaster";
 import { ConfirmHost } from "@/components/ui/confirm-dialog";
 import { SectionTabs } from "@/components/section-tabs";
@@ -109,6 +110,7 @@ export function AppShell({ user, children }: Props) {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <OrgSwitcher />
+            <ContrastToggle />
             <HelpDrawer />
             <div className="hidden flex-col items-end leading-tight sm:flex">
               <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>

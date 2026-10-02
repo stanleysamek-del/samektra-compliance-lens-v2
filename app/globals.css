@@ -548,3 +548,106 @@ textarea.cl-input {
   border-radius: 0;
 }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* =====================================================================
+ *  High-sun mode — maximum contrast for outdoor glare.
+ *
+ *  On when <html data-contrast="high"> (the ☀ toggle in the header,
+ *  remembered per device) or when the device asks for more contrast and
+ *  the user hasn't switched it off (data-contrast="normal"). Pure white,
+ *  black text, every text color ≥ 7:1 (WCAG AAA), darker borders, solid
+ *  bars instead of translucent ones, a thicker focus ring.
+ *
+ *  Aliases are re-declared (as on .cl-app) so var() chains resolve to the
+ *  high-contrast values.
+ * ===================================================================== */
+:root[data-contrast="high"] .cl-app {
+  --ink:           #000000;
+  --ink-2:         #1a1a1a;
+  --paper:         #ffffff;
+  --paper-2:       #ffffff;
+  --paper-3:       #e9e6dc;
+  --rule-paper:    #57534a;  /* 7.7:1 — dividers are now visible in glare */
+  --rule-strong:   #000000;
+  --slate:         #1f2629;  /* 15:1 */
+  --slate-2:       #2e363b;  /* 12:1 */
+  --gold-text:     #5c4108;  /* 9.5:1 */
+  --focus:         #0b3bd1;
+
+  --severity-high: #9b1c12;
+  --severity-med:  #6b4000;
+  --severity-low:  #1f5420;
+
+  --bg:            #ffffff;
+  --bg-elevated:   #ffffff;
+  --bg-raised:     #ffffff;
+  --bg-input:      #ffffff;
+  --border:        #57534a;
+  --border-strong: #000000;
+  --fg:            #000000;
+  --fg-muted:      #1f2629;
+  --fg-subtle:     #2e363b;
+  --primary:       #000000;
+  --primary-hover: #1a1a1a;
+  --primary-fg:    #ffffff;
+  --accent:        #5c4108;
+  --accent-hover:  #3f2d05;
+  --success:       #1f5420;
+  --warning:       #6b4000;
+  --danger:        #9b1c12;
+
+  background: #ffffff;
+  color: #000000;
+  font-weight: 500;
+}
+:root[data-contrast="high"] body:has(.cl-app) {
+  background: #ffffff;
+}
+/* Solid header and tab bar — no see-through blur in bright light. */
+:root[data-contrast="high"] .cl-app header.sticky,
+:root[data-contrast="high"] .cl-app nav[aria-label="Primary"] {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: #000000 !important;
+}
+:root[data-contrast="high"] .cl-app .cl-input {
+  border-width: 2px;
+  border-color: #000000;
+}
+:root[data-contrast="high"] .cl-app .cl-input::placeholder {
+  color: #2e363b;
+}
+:root[data-contrast="high"] .cl-app .cl-card,
+:root[data-contrast="high"] .cl-app .cl-card-tinted-orange,
+:root[data-contrast="high"] .cl-app .cl-card-tinted-teal {
+  background: #ffffff;
+  border-width: 2px;
+}
+:root[data-contrast="high"] a:focus-visible,
+:root[data-contrast="high"] button:focus-visible,
+:root[data-contrast="high"] summary:focus-visible,
+:root[data-contrast="high"] [tabindex]:focus-visible,
+:root[data-contrast="high"] [role="button"]:focus-visible {
+  outline-width: 3px;
+}
+
+/* Devices set to "increase contrast" get the same tokens automatically
+ * unless the user turned high-sun off. Kept in step with the block above. */
+@media (prefers-contrast: more) {
+  :root:not([data-contrast="normal"]) .cl-app {
+    --ink: #000000; --ink-2: #1a1a1a; --paper: #ffffff; --paper-2: #ffffff; --paper-3: #e9e6dc;
+    --rule-paper: #57534a; --rule-strong: #000000; --slate: #1f2629; --slate-2: #2e363b;
+    --gold-text: #5c4108; --focus: #0b3bd1;
+    --severity-high: #9b1c12; --severity-med: #6b4000; --severity-low: #1f5420;
+    --bg: #ffffff; --bg-elevated: #ffffff; --bg-raised: #ffffff; --bg-input: #ffffff;
+    --border: #57534a; --border-strong: #000000; --fg: #000000; --fg-muted: #1f2629; --fg-subtle: #2e363b;
+    --primary: #000000; --primary-hover: #1a1a1a; --primary-fg: #ffffff;
+    --accent: #5c4108; --accent-hover: #3f2d05; --success: #1f5420; --warning: #6b4000; --danger: #9b1c12;
+    background: #ffffff;
+    color: #000000;
+  }
+  :root:not([data-contrast="normal"]) body:has(.cl-app) {
+    background: #ffffff;
+  }
+}
