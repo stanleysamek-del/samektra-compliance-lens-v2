@@ -11,7 +11,8 @@ import { FacilityPicker, type FacilityOption } from "./facility-picker";
 export default async function NewInspectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  /** template / facility preselect the form (Home's quick-start chips). */
+  searchParams: Promise<{ error?: string; template?: string; facility?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -71,7 +72,12 @@ export default async function NewInspectionPage({
           <form action={createInspection} className="flex flex-col gap-4">
             {/* Facility select + facility_name input (the picker owns both
                 so choosing a facility prefills the name). */}
-            <FacilityPicker facilities={facilities} />
+            <FacilityPicker
+              facilities={facilities}
+              initialFacilityId={
+                facilities.some((f) => f.id === params.facility) ? params.facility : undefined
+              }
+            />
 
             <div className="flex flex-col">
               <label htmlFor="location" className="cl-label">
@@ -93,7 +99,18 @@ export default async function NewInspectionPage({
               <label htmlFor="template_id" className="cl-label">
                 Inspection type
               </label>
-              <select id="template_id" name="template_id" className="cl-input">
+              <select
+                id="template_id"
+                name="template_id"
+                className="cl-input"
+                defaultValue={
+                  params.template &&
+                  (BUILTIN_TEMPLATES.some((t) => t.id === params.template) ||
+                    (customTemplates ?? []).some((t) => t.id === params.template))
+                    ? params.template
+                    : ""
+                }
+              >
                 <option value="">General — photos only, no checklist</option>
                 <optgroup label="Standard inspection types">
                   {BUILTIN_TEMPLATES.map((t) => (

@@ -21,9 +21,17 @@ export const NEW_FACILITY_VALUE = "__new__";
  *   <uuid>       → link to that facility; name/address prefilled, editable
  *   "__new__"    → the server creates a facility from the typed name
  */
-export function FacilityPicker({ facilities }: { facilities: FacilityOption[] }) {
-  const [choice, setChoice] = useState("");
-  const [name, setName] = useState("");
+export function FacilityPicker({
+  facilities,
+  initialFacilityId,
+}: {
+  facilities: FacilityOption[];
+  /** Preselect (e.g. a quick-start chip on Home); must be in `facilities`. */
+  initialFacilityId?: string;
+}) {
+  const initial = facilities.find((f) => f.id === initialFacilityId) ?? null;
+  const [choice, setChoice] = useState(initial?.id ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
 
   function onChoose(value: string) {
     setChoice(value);
