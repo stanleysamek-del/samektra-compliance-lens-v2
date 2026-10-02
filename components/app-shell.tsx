@@ -31,7 +31,24 @@ type Props = PropsWithChildren<{
   };
 }>;
 
+/**
+ * Content width by page type: review/list pages (tables, dashboards,
+ * boards) get room on desktop; working screens (an inspection, forms,
+ * the template editor) stay at a comfortable reading width.
+ */
+const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
+function contentWidth(path: string): string {
+  if (/^\/templates\/.+/.test(path)) return "max-w-3xl"; // the template editor
+  if (/^\/(assets|facilities)\/[^/]+$/.test(path)) return "max-w-4xl"; // one facility / item
+  if (["/dashboard", "/findings", "/actions", "/inspections/history", "/assets", "/facilities", "/admin", "/team", "/schedules", "/templates"].some((r) => under(path, r))) {
+    return "max-w-6xl"; // boards, lists, dashboards
+  }
+  if (path === "/inspections") return "max-w-4xl"; // Home
+  return "max-w-3xl"; // an inspection, forms
+}
+
 export function AppShell({ user, children }: Props) {
+  const pathname = usePathname();
   return (
     // .cl-app switches on the field-tuned tokens (app/globals.css).
     <div className="cl-app min-h-dvh">
@@ -150,7 +167,7 @@ export function AppShell({ user, children }: Props) {
 
         {/* ===== Main content ===== */}
         <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:pb-10 lg:pl-8">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className={`mx-auto w-full ${contentWidth(pathname)}`}>
             <SectionTabs />
             {children}
           </div>
