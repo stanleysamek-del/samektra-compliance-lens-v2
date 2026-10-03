@@ -4,13 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { InspectionRowMenu } from "@/components/inspection-row-menu";
-import { TeamTipBanner } from "@/components/team-tip-banner";
+import { SetupChecklist, type SetupStep } from "@/components/setup-checklist";
 import { HelpTip } from "@/components/help-tip";
 import { SeverityBadge } from "@/components/severity-badge";
 import { SubmitButton } from "@/components/submit-button";
 import { scoreItems } from "@/lib/checklists/engine";
 import { formatDate } from "@/lib/format-date";
-import { canCreateIn, getCurrentOrg } from "@/lib/org/current";
+import { canCreateIn, getCurrentOrg, listMyOrganizations } from "@/lib/org/current";
 import { scopeToWorkspace } from "@/lib/org/scope";
 import { startSchedule } from "@/app/schedules/actions";
 
@@ -136,6 +136,10 @@ export default async function InspectionsPage() {
     schedulesResult,
     assetsDueResult,
     myActionsResult,
+    facilityCountResult,
+    planCountResult,
+    templateCountResult,
+    myOrgs,
   ] = await Promise.all([
     withQueryTimeout(
       scopeToWorkspace(
@@ -256,6 +260,35 @@ export default async function InspectionsPage() {
       4000,
       "my_actions",
     ),
+    // ---- first-run setup checklist: counts only -------------------------
+    withQueryTimeout(
+      scopeToWorkspace(
+        supabase.from("facilities").select("id", { count: "exact", head: true }),
+        orgId,
+        user.id,
+      ),
+      4000,
+      "setup_facilities",
+    ),
+    withQueryTimeout(
+      scopeToWorkspace(
+        supabase
+          .from("facility_plans")
+          .select("id, facilities!inner(organization_id, created_by)", { count: "exact", head: true }),
+        orgId,
+        user.id,
+        "facilities.",
+      ),
+      4000,
+      "setup_plans",
+    ),
+    // Custom templates visible to the user (built-ins don't count).
+    withQueryTimeout(
+      supabase.from("checklist_templates").select("id", { count: "exact", head: true }),
+      4000,
+      "setup_templates",
+    ),
+    withQueryTimeout(listMyOrganizations(), 4000, "setup_orgs"),
   ]);
 
   const inProgress = inProgressResult?.data ?? null;
@@ -395,6 +428,63 @@ export default async function InspectionsPage() {
   }
 
   const hasAnyInspection = (recent?.length ?? 0) > 0 || (inProgress?.length ?? 0) > 0;
+
+  // First-run setup checklist — only when every query behind it loaded (a
+  // timeout must not make finished steps look undone) and for people who
+  // can create things.
+  const setupLoaded =
+    facilityCountResult !== null &&
+    planCountResult !== null &&
+    templateCountResult !== null &&
+    myOrgs !== null &&
+    recentResult !== null &&
+    inProgressResult !== null;
+  const setupSteps: SetupStep[] = setupLoaded
+    ? [
+        {
+          key: "facility",
+          title: "Add your first facility",
+          hint: "A building or campus. Inspections, plans and equipment hang off it.",
+          href: "/facilities",
+          cta: "Add facility",
+          done: (facilityCountResult?.count ?? 0) > 0,
+        },
+        {
+          key: "plan",
+          title: "Upload a life-safety plan",
+          hint: "A floor plan PDF, so findings and equipment can be pinned where they are.",
+          href: "/facilities",
+          cta: "Upload plan",
+          done: (planCountResult?.count ?? 0) > 0,
+          optional: true,
+        },
+        {
+          key: "template",
+          title: "Pick or customize an inspection type",
+          hint: "The checklist a walk follows. Duplicate a built-in and adjust it to your building.",
+          href: "/templates",
+          cta: "Browse templates",
+          done: (templateCountResult?.count ?? 0) > 0 || templateByInspection.size > 0,
+        },
+        {
+          key: "inspection",
+          title: "Complete your first inspection",
+          hint: "Answer the checklist, add a photo or action where something fails, then sign and finalize.",
+          href: "/inspections/new",
+          cta: "Start inspection",
+          done: (recentAll ?? []).some((r) => r.status === "completed"),
+        },
+        {
+          key: "team",
+          title: "Invite your team",
+          hint: "So coworkers can see inspections, take actions and share templates.",
+          href: "/team",
+          cta: "Open team",
+          done: (myOrgs?.length ?? 0) > 0,
+          optional: true,
+        },
+      ]
+    : [];
   // True when a core section couldn't load — surfaces a banner. (Optional
   // sections — schedules, equipment, my actions — just stay hidden.)
   const anySectionDegraded =
@@ -476,9 +566,9 @@ export default async function InspectionsPage() {
           ) : null}
         </header>
 
-        {/* One-time, dismissible nudge — only shows for users not in a
-            team yet. Renders nothing once dismissed (localStorage). */}
-        <TeamTipBanner />
+        {/* First-run setup: ticks itself off from real data; hides when
+            finished or dismissed. Includes the "invite your team" nudge. */}
+        {canCreate && setupSteps.length > 0 ? <SetupChecklist steps={setupSteps} /> : null}
 
         {/* ============== Needs attention ============== */}
         {schedulesDue.length > 0 || assetsDue.length > 0 ? (
