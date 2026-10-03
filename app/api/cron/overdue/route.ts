@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendActionEmail } from "@/lib/email/send-action-notification";
 import { checkCronAuth } from "@/lib/cron-auth";
+import { shouldNudge } from "@/lib/reminders/logic";
+import { runReminders } from "@/lib/reminders/run";
 
 /**
- * Daily corrective-action digest cron (vercel.json schedules it).
+ * Daily reminder cron (vercel.json schedules it): corrective-action
+ * reminders below, then scheduled-inspection + equipment reminders
+ * (lib/reminders/run.ts). Add ?dry=1 to preview those without sending.
+ *
+ * Corrective-action sweep —
  *
  * Two sweeps over active actions (open / in_progress) with a due date:
  *   - due TOMORROW  → heads-up email to the assignee
@@ -27,14 +33,6 @@ import { checkCronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
-const NUDGE_DAYS = new Set([1, 3, 7, 14, 30]);
-
-function shouldNudge(daysPast: number): boolean {
-  if (daysPast <= 0) return false;
-  if (NUDGE_DAYS.has(daysPast)) return true;
-  return daysPast > 30 && daysPast % 30 === 0;
-}
-
 export async function GET(request: Request) {
   const auth = checkCronAuth(request);
   if (!auth.ok) {
@@ -45,6 +43,14 @@ export async function GET(request: Request) {
   if (!supabase) {
     console.warn("[cron/overdue] SUPABASE_SERVICE_ROLE_KEY not set — skipping.");
     return NextResponse.json({ ok: true, skipped: "no service key" });
+  }
+
+  // ?dry=1 reports what the scheduled-inspection and equipment reminders
+  // WOULD send (addresses masked) and sends nothing — including no action
+  // emails — so the logic can be checked against real data safely.
+  if (new URL(request.url).searchParams.get("dry") === "1") {
+    const reminders = await runReminders(supabase, { dry: true });
+    return NextResponse.json({ ok: true, dryRun: true, reminders });
   }
 
   const today = new Date();
@@ -134,11 +140,17 @@ export async function GET(request: Request) {
     }
   }
 
+  // Scheduled-inspection and equipment reminders ride on the same daily
+  // job. They never throw into the action sweep above (runReminders
+  // catches per section), so a problem here can't block action emails.
+  const reminders = await runReminders(supabase);
+
   return NextResponse.json({
     ok: true,
     scanned: data?.length ?? 0,
     sentDueSoon,
     sentOverdue,
     skippedNoEmail,
+    reminders,
   });
 }
