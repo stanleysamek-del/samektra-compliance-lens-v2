@@ -1,55 +1,39 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { DemoWalkthrough } from "@/components/demo/demo-walkthrough";
+
+export const metadata: Metadata = {
+  title: "Try an inspection",
+  description:
+    "Work a sample hospital corridor inspection in your browser — answer the checklist, record a deficiency, assign an action and see the report. No account needed.",
+};
+
+/**
+ * Public demo — no sign-in, no database, no AI calls. The walkthrough is
+ * one client component holding its own state; the field tokens (.cl-app)
+ * give it the same look as the signed-in app.
+ */
 export default function DemoPage() {
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      <Link href="/" className="underline">
-        Compliance Lens
-      </Link>
-      <h1 className="text-3xl font-semibold">Try an inspection workflow</h1>
-      <p>
-        This guided example is free. It uses a prepared scenario, not a live AI
-        model. No account or payment required.
-      </p>
-      <section className="space-y-3 rounded-xl border p-5">
-        <h2 className="text-xl font-semibold">
-          Scenario: boxes obstruct an exit route
-        </h2>
-        <p>
-          Record the location, capture evidence, assign the correction, and
-          verify that the route is clear.
-        </p>
-        <ol className="list-decimal space-y-3 pl-5">
-          <li>Location: ground floor, east corridor.</li>
-          <li>
-            Finding: stored materials obstruct the exit route. Confirm
-            conditions and the applicable adopted code before issuing the
-            finding.
-          </li>
-          <li>
-            Corrective action: remove stored items and maintain the required
-            clear route.
-          </li>
-          <li>Assign an owner and due date; attach a follow-up photo.</li>
-          <li>
-            Inspector verifies the correction and includes the evidence in the
-            report.
-          </li>
-        </ol>
-      </section>
-      <p>
-        Free accounts can capture photos, complete checklists, manage findings,
-        and export reports. Paid plans add metered AI drafting and coaching;
-        higher plans add advanced review. Inspectors remain responsible for
-        verifying the evidence.
-      </p>
-      <div className="flex gap-4">
-        <Link href="/signup" className="cl-btn-primary">
-          Start a free inspection
-        </Link>
-        <Link href="/#pricing" className="cl-btn-outline">
-          Compare plans
-        </Link>
-      </div>
-    </main>
+    <div className="cl-app min-h-dvh">
+      <header className="border-b border-[var(--ink)]">
+        <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
+          <Link href="/" className="text-lg text-[var(--ink)]" style={{ fontFamily: "var(--font-instrument-serif)" }}>
+            Compliance <em style={{ color: "var(--gold-text)" }}>Lens</em>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/login" className="cl-btn-outline cl-btn-sm">
+              Sign in
+            </Link>
+            <Link href="/signup" className="cl-btn-primary cl-btn-sm">
+              Create account
+            </Link>
+          </div>
+        </div>
+      </header>
+      <main>
+        <DemoWalkthrough />
+      </main>
+    </div>
   );
 }
